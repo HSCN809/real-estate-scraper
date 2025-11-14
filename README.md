@@ -2,7 +2,8 @@
 
 ---
 
-Bu proje, **Thordata**'nın değerli destekleriyle geliştirilmiştir.
-<img src="./images/Thordata-Resim.png" alt="Thordata Tarafından Desteklenmektedir" width="400"/>
+This project is supported by Thordata.
+
+<img src="./images/Thordata-Resim.png" width="400"/>
 
 ---
