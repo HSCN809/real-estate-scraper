@@ -1,5 +1,5 @@
 **Real Estate Scraper**
 ---
-The development of this project was made possible with the valuable support of Thordata.
+This project is supported by Thordata.
 ![Proje Logosu](./images/Thordata-Resim.png)
 ---
