@@ -1,5 +1,8 @@
-**Real Estate Scraper**
+# Real Estate Scraper
+
 ---
-This project is supported by Thordata.
-![Proje Logosu](./images/Thordata-Resim.png)
+
+Bu proje, **Thordata**'nın değerli destekleriyle geliştirilmiştir.
+<img src="./images/Thordata-Resim.png" alt="Thordata Tarafından Desteklenmektedir" width="400"/>
+
 ---
