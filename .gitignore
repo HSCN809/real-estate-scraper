@@ -1,3 +1,5 @@
 env/
 Proje Dosya Yapısı ve Proje Nasıl Geliştirilecek.txt
-Thordata-Resim.png
+__pycache__/
+*.pyc
+.vscode/
