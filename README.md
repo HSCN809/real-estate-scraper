@@ -1,1 +1,1 @@
-![Proje Logosu](./Thordata-Resim.png)
+![Proje Logosu](./images/Thordata-Resim.png)
