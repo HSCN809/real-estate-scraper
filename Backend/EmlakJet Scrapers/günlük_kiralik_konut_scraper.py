@@ -10,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.chrome.options import Options
 
-class IsyeriScraper:
+class GunlukKiralikKonutScraper:
     def __init__(self, driver, base_url, selected_locations=None):
         self.driver = driver
         self.base_url = base_url
@@ -20,7 +20,7 @@ class IsyeriScraper:
         
     def start_scraping(self):
         """Scraping işlemini başlat"""
-        print(f"🚀 İşyeri Scraper başlatılıyor: {self.base_url}")
+        print(f"🚀 Günlük Kiralık Konut Scraper başlatılıyor: {self.base_url}")
         
         try:
             # Kullanıcıdan sayfa sayısını al
@@ -158,7 +158,7 @@ class IsyeriScraper:
         return listings
     
     def extract_listing_data(self, container):
-        """Tek bir ilanın verilerini çıkarır - İŞYERİ ÖZEL"""
+        """Tek bir ilanın verilerini çıkarır - GÜNLÜK KİRALIK KONUT ÖZEL"""
         try:
             # HTML'DE GÖRDÜĞÜMÜZ TEMEL BİLGİLER
             title = self.get_element_text(container, "h3.styles_title__aKEGQ")
@@ -177,8 +177,8 @@ class IsyeriScraper:
             # Badge bilgileri
             badges = self.extract_badges(container)
             
-            # İşyeri özel detayları parse et
-            details = self.parse_isyeri_details(quick_info, title)
+            # Günlük kiralık konut özel detayları parse et
+            details = self.parse_gunluk_kiralik_konut_details(quick_info, title)
             
             listing_data = {
                 'baslik': title,
@@ -188,10 +188,12 @@ class IsyeriScraper:
                 'resim_url': image_url,
                 'one_cikan': 'ÖNE ÇIKAN' in badges,
                 'yeni': 'YENİ' in badges,
-                'isyeri_tipi': details['isyeri_tipi'],
-                'metrekare': details['metrekare'],
-                'kat_bilgisi': details['kat_bilgisi'],
+                'konut_tipi': details['konut_tipi'],
                 'oda_sayisi': details['oda_sayisi'],
+                'kat': details['kat'],
+                'metrekare': details['metrekare'],
+                'kiralik_tipi': 'Günlük Kiralık',
+                'lukus_durumu': details['lukus_durumu'],
                 'tarih': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
@@ -204,62 +206,67 @@ class IsyeriScraper:
         except Exception:
             return None
     
-    def parse_isyeri_details(self, quick_info, title):
-        """İşyeri özel detaylarını parse et"""
+    def parse_gunluk_kiralik_konut_details(self, quick_info, title):
+        """Günlük kiralık konut özel detaylarını parse et"""
         details = {
-            'isyeri_tipi': '',
+            'konut_tipi': '',
+            'oda_sayisi': '',
+            'kat': '',
             'metrekare': '',
-            'kat_bilgisi': '',
-            'oda_sayisi': ''
+            'lukus_durumu': ''
         }
         
-        # Quick info'dan işyeri detayları
+        # Quick info'dan konut detayları
         if quick_info:
             try:
-                # "Dükkan & Mağaza | 140 m² | Düz Giriş (Zemin) | 3 Oda" formatını parse et
+                # "Daire | 1+1 | 1. Kat | 100 m²" formatını parse et
                 parts = [part.strip() for part in quick_info.split('|')]
                 
                 for part in parts:
                     part_lower = part.lower()
                     
-                    # İşyeri tipi
-                    if any(tip in part_lower for tip in ['dükkan', 'mağaza', 'ofis', 'plaza', 'avm', 'iş merkezi', 'showroom', 'depo']):
-                        details['isyeri_tipi'] = part
+                    # Konut tipi
+                    if any(tip in part_lower for tip in ['daire', 'residence', 'villa', 'müstakil', 'apart', 'stüdyo']):
+                        details['konut_tipi'] = part
+                    
+                    # Oda sayısı
+                    elif '+' in part:  # 1+1, 2+1 vb.
+                        details['oda_sayisi'] = part
+                    
+                    # Kat bilgisi
+                    elif 'kat' in part_lower:
+                        details['kat'] = part
                     
                     # Metrekare
                     elif 'm²' in part or 'm2' in part_lower:
                         details['metrekare'] = part
-                    
-                    # Kat bilgisi
-                    elif any(kat in part_lower for kat in ['zemin', 'giriş', 'bodrum', 'asma kat', 'giriş kat', 'bahçe kat']):
-                        details['kat_bilgisi'] = part
-                    elif 'kat' in part_lower:
-                        details['kat_bilgisi'] = part
-                    
-                    # Oda sayısı
-                    elif 'oda' in part_lower:
-                        details['oda_sayisi'] = part
                         
             except:
                 pass
         
-        # Başlıktan ek bilgiler çıkar
+        # Başlıktan lüks durumu ve diğer bilgiler çıkar
         if title:
             title_lower = title.lower()
             
-            # İşyeri tipi başlıkta da olabilir
-            if not details['isyeri_tipi']:
-                if any(tip in title_lower for tip in ['dükkan', 'mağaza', 'ofis', 'plaza', 'avm', 'iş merkezi']):
-                    for tip in ['Dükkan', 'Mağaza', 'Ofis', 'Plaza', 'AVM', 'İş Merkezi']:
+            # Lüks durumu
+            if any(luks in title_lower for luks in ['lüx', 'lux', 'lüks', 'ultra lüx', 'ultra lux', 'premium']):
+                details['lukus_durumu'] = 'Lüks'
+            elif any(ekonomik in title_lower for ekonomik in ['ekonomik', 'uygun', 'ucuz']):
+                details['lukus_durumu'] = 'Ekonomik'
+            
+            # Konut tipi başlıkta da olabilir
+            if not details['konut_tipi']:
+                if any(tip in title_lower for tip in ['daire', 'residence', 'villa', 'müstakil', 'apart', 'stüdyo']):
+                    for tip in ['Daire', 'Residence', 'Villa', 'Müstakil', 'Apart', 'Stüdyo']:
                         if tip.lower() in title_lower:
-                            details['isyeri_tipi'] = tip
+                            details['konut_tipi'] = tip
                             break
             
-            # Kupon dükkanı, devren satış vb.
-            if 'kupon' in title_lower:
-                details['isyeri_tipi'] = 'Kupon Dükkanı'
-            elif 'devren' in title_lower:
-                details['isyeri_tipi'] = details.get('isyeri_tipi', '') + ' (Devren)'
+            # Özel özellikler
+            if 'deniz manzaralı' in title_lower or 'manzaralı' in title_lower:
+                details['lukus_durumu'] = details.get('lukus_durumu', '') + ' Manzaralı'
+            if 'havuzlu' in title_lower:
+                details['lukus_durumu'] = details.get('lukus_durumu', '') + ' Havuzlu'
         
         return details
     
@@ -300,16 +307,16 @@ class IsyeriScraper:
         
         # Klasör oluştur
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        folder_name = f"scraped_isyeri_data_{timestamp}"
+        folder_name = f"scraped_gunluk_kiralik_konut_data_{timestamp}"
         os.makedirs(folder_name, exist_ok=True)
         
         # JSON kaydet
-        json_filename = os.path.join(folder_name, "isyeri_ilanlari.json")
+        json_filename = os.path.join(folder_name, "gunluk_kiralik_konut_ilanlari.json")
         with open(json_filename, 'w', encoding='utf-8') as f:
             json.dump(self.all_listings, f, ensure_ascii=False, indent=2)
         
         # CSV kaydet
-        csv_filename = os.path.join(folder_name, "isyeri_ilanlari.csv")
+        csv_filename = os.path.join(folder_name, "gunluk_kiralik_konut_ilanlari.csv")
         self.save_to_csv(csv_filename)
         
         print(f"💾 Veriler kaydedildi:")
@@ -317,15 +324,15 @@ class IsyeriScraper:
         print(f"   📊 CSV: {csv_filename}")
     
     def save_to_csv(self, filename):
-        """Verileri CSV formatında kaydet - İŞYERİ ÖZEL"""
+        """Verileri CSV formatında kaydet - GÜNLÜK KİRALIK KONUT ÖZEL"""
         if not self.all_listings:
             return
         
-        # İşyeri özel sütunlar
+        # Günlük kiralık konut özel sütunlar
         fieldnames = [
             'baslik', 'lokasyon', 'fiyat', 'ilan_url', 'resim_url',
-            'one_cikan', 'yeni', 'isyeri_tipi', 'metrekare', 'kat_bilgisi', 
-            'oda_sayisi', 'tarih'
+            'one_cikan', 'yeni', 'konut_tipi', 'oda_sayisi', 'kat', 
+            'metrekare', 'kiralik_tipi', 'lukus_durumu', 'tarih'
         ]
         
         with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
@@ -364,9 +371,9 @@ def test_scraper():
     
     try:
         # Test URL'si
-        test_url = "https://www.emlakjet.com/satilik-isyeri"
+        test_url = "https://www.emlakjet.com/gunluk-kiralik-konut"
         
-        scraper = IsyeriScraper(driver, test_url)
+        scraper = GunlukKiralikKonutScraper(driver, test_url)
         scraper.start_scraping()
         
     except Exception as e:
