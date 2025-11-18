@@ -14,22 +14,572 @@ class TuristikTesisScraper:
     def __init__(self, driver, base_url, selected_locations=None):
         self.driver = driver
         self.base_url = base_url
-        self.selected_locations = selected_locations or {}
+        self.selected_locations = selected_locations or {'iller': [], 'ilceler': [], 'mahalleler': []}
         self.all_listings = []
         self.wait = WebDriverWait(self.driver, 10)
+        
+    def get_location_options(self, location_type, current_url):
+        """İl, ilçe veya mahalle seçeneklerini alır - EmlakJet Main'den alındı"""
+        try:
+            print(f"\n🔍 {location_type} seçenekleri taranıyor...")
+            
+            # Sayfayı yenile
+            self.driver.get(current_url)
+            time.sleep(3)
+            
+            location_options = []
+            
+            # Lokasyon linklerini bul
+            location_links = self.driver.find_elements(By.CSS_SELECTOR, "section.styles_section__xzOd3 a.styles_link__7WOOd")
+            
+            for link in location_links:
+                try:
+                    location_name = link.text.strip()
+                    location_url = link.get_attribute("href")
+                    
+                    if location_name and location_url:
+                        location_options.append({
+                            'name': location_name,
+                            'url': location_url
+                        })
+                        print(f"  └── {location_name}")
+                        
+                except Exception as e:
+                    continue
+            
+            return location_options
+            
+        except Exception as e:
+            print(f"{location_type} seçenekleri alınırken hata: {e}")
+            return []
+    
+    def display_selected_locations(self):
+        """Seçilmiş lokasyonları göster"""
+        if any(self.selected_locations.values()):
+            print(f"\n📍 SEÇİLİ LOKASYONLAR:")
+            if self.selected_locations['iller']:
+                print(f"   🏙️  İller: {', '.join([il['name'] for il in self.selected_locations['iller']])}")
+            if self.selected_locations['ilceler']:
+                print(f"   🏘️  İlçeler: {', '.join([ilce['name'] for ilce in self.selected_locations['ilceler']])}")
+            if self.selected_locations['mahalleler']:
+                print(f"   🏡 Mahalleler: {', '.join([mah['name'] for mah in self.selected_locations['mahalleler']])}")
+        else:
+            print(f"\n📍 SEÇİLİ LOKASYONLAR: Henüz lokasyon seçilmedi")
+    
+    def get_user_choice(self, max_option):
+        """Kullanıcıdan seçim al"""
+        try:
+            user_input = input(f"\nSeçiminiz (1-{max_option}): ").strip()
+            
+            # Çoklu seçim için özel kontrol
+            if any(char in user_input for char in [',', ' ', '-']):
+                return None
+                
+            choice = int(user_input)
+            if 1 <= choice <= max_option:
+                return choice
+            else:
+                print(f"❌ Geçersiz seçim! Lütfen 1-{max_option} arasında bir sayı girin.")
+                return None
+        except ValueError:
+            print("❌ Geçersiz giriş! Lütfen bir sayı girin.")
+            return None
+    
+    def multiple_selection_menu(self, items, selected_items, item_type):
+        """Çoklu seçim menüsü"""
+        print(f"\n🎯 ÇOKLU {item_type.upper()} SEÇİMİ")
+        print("Birden fazla seçim yapmak için numaraları virgülle veya boşlukla ayırarak girin.")
+        print("Örnek: 1,3,5 veya 1 3 5 veya 1-5")
+        
+        while True:
+            try:
+                user_input = input(f"\nSeçimlerinizi girin (1-{len(items)}): ").strip()
+                
+                if not user_input:
+                    print("❌ Boş giriş! Lütfen numara girin.")
+                    continue
+                
+                # Farklı formatları destekle
+                selections = set()
+                
+                if ',' in user_input:
+                    parts = user_input.split(',')
+                    for part in parts:
+                        part = part.strip()
+                        if '-' in part:
+                            range_parts = part.split('-')
+                            if len(range_parts) == 2:
+                                start = int(range_parts[0].strip())
+                                end = int(range_parts[1].strip())
+                                selections.update(range(start, end + 1))
+                        else:
+                            if part.isdigit():
+                                selections.add(int(part))
+                
+                elif ' ' in user_input:
+                    parts = user_input.split()
+                    for part in parts:
+                        part = part.strip()
+                        if '-' in part:
+                            range_parts = part.split('-')
+                            if len(range_parts) == 2:
+                                start = int(range_parts[0].strip())
+                                end = int(range_parts[1].strip())
+                                selections.update(range(start, end + 1))
+                        else:
+                            if part.isdigit():
+                                selections.add(int(part))
+                
+                elif '-' in user_input:
+                    range_parts = user_input.split('-')
+                    if len(range_parts) == 2:
+                        start = int(range_parts[0].strip())
+                        end = int(range_parts[1].strip())
+                        selections.update(range(start, end + 1))
+                
+                else:
+                    if user_input.isdigit():
+                        selections.add(int(user_input))
+                
+                # Seçimleri kontrol et ve uygula
+                valid_selections = []
+                invalid_selections = []
+                
+                for selection in selections:
+                    if 1 <= selection <= len(items):
+                        valid_selections.append(selection)
+                    else:
+                        invalid_selections.append(selection)
+                
+                if invalid_selections:
+                    print(f"❌ Geçersiz numaralar: {invalid_selections}")
+                
+                if valid_selections:
+                    selected_items.clear()
+                    for selection in valid_selections:
+                        selected_item = items[selection - 1]
+                        selected_items.append(selected_item)
+                    
+                    print(f"✅ {len(valid_selections)} {item_type} seçildi:")
+                    for selection in valid_selections:
+                        print(f"   - {items[selection - 1]['name']}")
+                    
+                    return
+                else:
+                    print("❌ Geçerli seçim bulunamadı!")
+                    
+            except ValueError:
+                print("❌ Geçersiz giriş! Lütfen numara girin.")
+            except Exception as e:
+                print(f"❌ Hata: {e}")
+    
+    def add_province_selection(self, base_url):
+        """İl ekleme menüsü - ÇOKLU SEÇİM"""
+        print(f"\n🏙️  İL EKLEME - ÇOKLU SEÇİM")
+        provinces = self.get_location_options("İller", base_url)
+        if not provinces:
+            print("❌ İl bulunamadı!")
+            return
+        
+        selected_provinces = self.selected_locations['iller'].copy()
+        
+        while True:
+            print(f"\n" + "="*50)
+            print("🎯 İL SEÇİMİ - ÇOKLU SEÇİM")
+            print("="*50)
+            print("📋 Mevcut Seçimler:")
+            if selected_provinces:
+                for i, province in enumerate(selected_provinces, 1):
+                    print(f"   {i}. {province['name']}")
+            else:
+                print("   Henüz il seçilmedi")
+            
+            print(f"\n📝 Seçenekler:")
+            for i, province in enumerate(provinces, 1):
+                is_selected = any(p['name'] == province['name'] for p in selected_provinces)
+                status = "✅" if is_selected else "  "
+                print(f"{i}. {status} {province['name']}")
+            
+            print(f"\n{len(provinces) + 1}. ➕ Tümünü Seç")
+            print(f"{len(provinces) + 2}. ➖ Tümünü Kaldır")
+            print(f"{len(provinces) + 3}. 🔢 ÇOKLU SEÇİM (numara aralığı)")
+            print(f"{len(provinces) + 4}. ✅ Seçimleri Tamamla")
+            print(f"{len(provinces) + 5}. ↩️  Üst Menüye Dön")
+            
+            max_option = len(provinces) + 5
+            choice = self.get_user_choice(max_option)
+            
+            if choice is None:
+                continue
+                
+            if choice == len(provinces) + 1:  # Tümünü seç
+                selected_provinces = provinces.copy()
+                print("✅ Tüm iller seçildi!")
+                
+            elif choice == len(provinces) + 2:  # Tümünü kaldır
+                selected_provinces = []
+                print("✅ Tüm iller kaldırıldı!")
+                
+            elif choice == len(provinces) + 3:  # Çoklu seçim
+                self.multiple_selection_menu(provinces, selected_provinces, "il")
+                
+            elif choice == len(provinces) + 4:  # Seçimleri tamamla
+                self.selected_locations['iller'] = selected_provinces
+                print("✅ İl seçimleri kaydedildi!")
+                return
+                
+            elif choice == len(provinces) + 5:  # Üst menüye dön
+                return
+                
+            elif 1 <= choice <= len(provinces):
+                selected_province = provinces[choice - 1]
+                
+                if any(p['name'] == selected_province['name'] for p in selected_provinces):
+                    selected_provinces = [p for p in selected_provinces if p['name'] != selected_province['name']]
+                    print(f"❌ {selected_province['name']} kaldırıldı")
+                else:
+                    selected_provinces.append(selected_province)
+                    print(f"✅ {selected_province['name']} eklendi")
+            else:
+                print("❌ Geçersiz seçim!")
+    
+    def add_district_selection(self, base_url):
+        """İlçe ekleme menüsü - ÇOKLU SEÇİM"""
+        print(f"\n🏘️  İLÇE EKLEME - ÇOKLU SEÇİM")
+        
+        if not self.selected_locations['iller']:
+            print("❌ Önce il seçmelisiniz!")
+            return
+        
+        # Tüm seçili illerin ilçelerini topla
+        all_districts = []
+        for il in self.selected_locations['iller']:
+            print(f"🔍 {il['name']} ilçeleri taranıyor...")
+            districts = self.get_location_options("İlçeler", il['url'])
+            for district in districts:
+                district['il'] = il['name']
+                all_districts.append(district)
+        
+        if not all_districts:
+            print("❌ İlçe bulunamadı!")
+            return
+        
+        selected_districts = self.selected_locations['ilceler'].copy()
+        
+        while True:
+            print(f"\n" + "="*50)
+            print("🎯 İLÇE SEÇİMİ - ÇOKLU SEÇİM")
+            print("="*50)
+            print("📋 Mevcut Seçimler:")
+            if selected_districts:
+                for i, district in enumerate(selected_districts, 1):
+                    print(f"   {i}. {district['il']} - {district['name']}")
+            else:
+                print("   Henüz ilçe seçilmedi")
+            
+            print(f"\n📝 Seçenekler:")
+            for i, district in enumerate(all_districts, 1):
+                is_selected = any(d['name'] == district['name'] and d['il'] == district['il'] for d in selected_districts)
+                status = "✅" if is_selected else "  "
+                print(f"{i}. {status} {district['il']} - {district['name']}")
+            
+            print(f"\n{len(all_districts) + 1}. ➕ Tümünü Seç")
+            print(f"{len(all_districts) + 2}. ➖ Tümünü Kaldır")
+            print(f"{len(all_districts) + 3}. 🔢 ÇOKLU SEÇİM (numara aralığı)")
+            print(f"{len(all_districts) + 4}. ✅ Seçimleri Tamamla")
+            print(f"{len(all_districts) + 5}. ↩️  Üst Menüye Dön")
+            
+            max_option = len(all_districts) + 5
+            choice = self.get_user_choice(max_option)
+            
+            if choice is None:
+                continue
+                
+            if choice == len(all_districts) + 1:  # Tümünü seç
+                selected_districts = all_districts.copy()
+                print("✅ Tüm ilçeler seçildi!")
+                
+            elif choice == len(all_districts) + 2:  # Tümünü kaldır
+                selected_districts = []
+                print("✅ Tüm ilçeler kaldırıldı!")
+                
+            elif choice == len(all_districts) + 3:  # Çoklu seçim
+                self.multiple_selection_menu(all_districts, selected_districts, "ilçe")
+                
+            elif choice == len(all_districts) + 4:  # Seçimleri tamamla
+                self.selected_locations['ilceler'] = selected_districts
+                print("✅ İlçe seçimleri kaydedildi!")
+                return
+                
+            elif choice == len(all_districts) + 5:  # Üst menüye dön
+                return
+                
+            elif 1 <= choice <= len(all_districts):
+                selected_district = all_districts[choice - 1]
+                
+                if any(d['name'] == selected_district['name'] and d['il'] == selected_district['il'] for d in selected_districts):
+                    selected_districts = [d for d in selected_districts if not (d['name'] == selected_district['name'] and d['il'] == selected_district['il'])]
+                    print(f"❌ {selected_district['il']} - {selected_district['name']} kaldırıldı")
+                else:
+                    selected_districts.append(selected_district)
+                    print(f"✅ {selected_district['il']} - {selected_district['name']} eklendi")
+            else:
+                print("❌ Geçersiz seçim!")
+    
+    def add_neighborhood_selection(self, base_url):
+        """Mahalle ekleme menüsü - ÇOKLU SEÇİM"""
+        print(f"\n🏡 MAHALLE EKLEME - ÇOKLU SEÇİM")
+        
+        if not self.selected_locations['ilceler']:
+            print("❌ Önce ilçe seçmelisiniz!")
+            return
+        
+        # Tüm seçili ilçelerin mahallelerini topla
+        all_neighborhoods = []
+        for ilce in self.selected_locations['ilceler']:
+            print(f"🔍 {ilce['il']} - {ilce['name']} mahalleleri taranıyor...")
+            neighborhoods = self.get_location_options("Mahalleler", ilce['url'])
+            for neighborhood in neighborhoods:
+                neighborhood['il'] = ilce['il']
+                neighborhood['ilce'] = ilce['name']
+                all_neighborhoods.append(neighborhood)
+        
+        if not all_neighborhoods:
+            print("❌ Mahalle bulunamadı!")
+            return
+        
+        selected_neighborhoods = self.selected_locations['mahalleler'].copy()
+        
+        while True:
+            print(f"\n" + "="*50)
+            print("🎯 MAHALLE SEÇİMİ - ÇOKLU SEÇİM")
+            print("="*50)
+            print("📋 Mevcut Seçimler:")
+            if selected_neighborhoods:
+                for i, neighborhood in enumerate(selected_neighborhoods, 1):
+                    print(f"   {i}. {neighborhood['il']} - {neighborhood['ilce']} - {neighborhood['name']}")
+            else:
+                print("   Henüz mahalle seçilmedi")
+            
+            print(f"\n📝 Seçenekler:")
+            for i, neighborhood in enumerate(all_neighborhoods, 1):
+                is_selected = any(n['name'] == neighborhood['name'] and n['ilce'] == neighborhood['ilce'] for n in selected_neighborhoods)
+                status = "✅" if is_selected else "  "
+                print(f"{i}. {status} {neighborhood['il']} - {neighborhood['ilce']} - {neighborhood['name']}")
+            
+            print(f"\n{len(all_neighborhoods) + 1}. ➕ Tümünü Seç")
+            print(f"{len(all_neighborhoods) + 2}. ➖ Tümünü Kaldır")
+            print(f"{len(all_neighborhoods) + 3}. 🔢 ÇOKLU SEÇİM (numara aralığı)")
+            print(f"{len(all_neighborhoods) + 4}. ✅ Seçimleri Tamamla")
+            print(f"{len(all_neighborhoods) + 5}. ↩️  Üst Menüye Dön")
+            
+            max_option = len(all_neighborhoods) + 5
+            choice = self.get_user_choice(max_option)
+            
+            if choice is None:
+                continue
+                
+            if choice == len(all_neighborhoods) + 1:  # Tümünü seç
+                selected_neighborhoods = all_neighborhoods.copy()
+                print("✅ Tüm mahalleler seçildi!")
+                
+            elif choice == len(all_neighborhoods) + 2:  # Tümünü kaldır
+                selected_neighborhoods = []
+                print("✅ Tüm mahalleler kaldırıldı!")
+                
+            elif choice == len(all_neighborhoods) + 3:  # Çoklu seçim
+                self.multiple_selection_menu(all_neighborhoods, selected_neighborhoods, "mahalle")
+                
+            elif choice == len(all_neighborhoods) + 4:  # Seçimleri tamamla
+                self.selected_locations['mahalleler'] = selected_neighborhoods
+                print("✅ Mahalle seçimleri kaydedildi!")
+                return
+                
+            elif choice == len(all_neighborhoods) + 5:  # Üst menüye dön
+                return
+                
+            elif 1 <= choice <= len(all_neighborhoods):
+                selected_neighborhood = all_neighborhoods[choice - 1]
+                
+                if any(n['name'] == selected_neighborhood['name'] and n['ilce'] == selected_neighborhood['ilce'] for n in selected_neighborhoods):
+                    selected_neighborhoods = [n for n in selected_neighborhoods if not (n['name'] == selected_neighborhood['name'] and n['ilce'] == selected_neighborhood['ilce'])]
+                    print(f"❌ {selected_neighborhood['il']} - {selected_neighborhood['ilce']} - {selected_neighborhood['name']} kaldırıldı")
+                else:
+                    selected_neighborhoods.append(selected_neighborhood)
+                    print(f"✅ {selected_neighborhood['il']} - {selected_neighborhood['ilce']} - {selected_neighborhood['name']} eklendi")
+            else:
+                print("❌ Geçersiz seçim!")
+    
+    def clear_selected_locations(self):
+        """Seçilmiş lokasyonları temizle"""
+        print(f"\n🗑️  LOKASYONLARI TEMİZLE")
+        print("1. 🏙️  Sadece İlleri Temizle")
+        print("2. 🏘️  Sadece İlçeleri Temizle") 
+        print("3. 🏡 Sadece Mahalleleri Temizle")
+        print("4. 💥 Tümünü Temizle")
+        print("5. ↩️  İptal")
+        
+        choice = self.get_user_choice(5)
+        
+        if choice == 1:
+            self.selected_locations['iller'].clear()
+            print("✅ İller temizlendi!")
+        elif choice == 2:
+            self.selected_locations['ilceler'].clear()
+            print("✅ İlçeler temizlendi!")
+        elif choice == 3:
+            self.selected_locations['mahalleler'].clear()
+            print("✅ Mahalleler temizlendi!")
+        elif choice == 4:
+            self.selected_locations = {'iller': [], 'ilceler': [], 'mahalleler': []}
+            print("✅ Tüm lokasyonlar temizlendi!")
+        elif choice == 5:
+            print("İptal edildi.")
+        else:
+            print("❌ Geçersiz seçim!")
+    
+    def location_selection_menu(self):
+        """İl, ilçe ve mahalle seçim menüsü - ÇOKLU SEÇİM"""
+        base_url = self.base_url
+        
+        while True:
+            print(f"\n🌍 TURİSTİK TESİS LOKASYON SEÇİMİ - ÇOKLU SEÇİM")
+            self.display_selected_locations()
+            
+            print(f"\n" + "="*50)
+            print("🎯 TURİSTİK TESİS LOKASYON SEÇİM MENÜSÜ")
+            print("="*50)
+            print("1. 🏙️  İl Ekle")
+            print("2. 🏘️  İlçe Ekle") 
+            print("3. 🏡 Mahalle Ekle")
+            print("4. 🗑️  Seçilmiş Lokasyonları Temizle")
+            print("5. ✅ Seçimleri Tamamla ve Scraping'e Başla")
+            print("6. ↩️  Lokasyon Seçmeden Scraping'e Başla")
+            print("7. 🚪 Çıkış")
+            
+            choice = self.get_user_choice(7)
+            
+            if choice == 1:
+                self.add_province_selection(base_url)
+            elif choice == 2:
+                self.add_district_selection(base_url)
+            elif choice == 3:
+                self.add_neighborhood_selection(base_url)
+            elif choice == 4:
+                self.clear_selected_locations()
+            elif choice == 5:
+                return self.build_location_queue()
+            elif choice == 6:
+                print("ℹ️  Lokasyon seçimi atlandı, varsayılan URL kullanılacak.")
+                return [{
+                    'type': 'genel',
+                    'label': 'Varsayılan Kategori',
+                    'url': self.base_url
+                }]
+            elif choice == 7:
+                print("👋 Çıkış yapılıyor...")
+                exit()
+            else:
+                print("❌ Geçersiz seçim!")
+    
+    def build_location_queue(self):
+        """Seçilen tüm lokasyonlar için URL kuyruğu oluştur.
+        Öncelik sırası: Mahalle > İlçe > İl (tekrarlayan scrape'leri önlemek için)
+        """
+        targets = []
+        seen_urls = set()
+    
+        def clean_name(name):
+            if not isinstance(name, str):
+                return ''
+            cleaned = name
+            for token in [' Satılık Turistik Tesis', ' Kiralık Turistik Tesis', ' Satılık', ' Kiralık', ' Turistik Tesis']:
+                cleaned = cleaned.replace(token, '')
+            return cleaned.strip()
+    
+        def add_target(url, label, level):
+            if not url or url in seen_urls:
+                return
+            seen_urls.add(url)
+            targets.append({
+                'type': level,
+                'label': label or 'Lokasyon',
+                'url': url
+            })
+    
+        def compose_label(parts):
+            cleaned_parts = [clean_name(part) for part in parts if part]
+            return " / ".join([part for part in cleaned_parts if part]) or 'Lokasyon'
+    
+        # Öncelik sırası: Mahalle > İlçe > İl
+        # Eğer mahalle seçimi varsa, sadece mahalle URL'leri ekle
+        if self.selected_locations.get('mahalleler'):
+            for neighborhood in self.selected_locations['mahalleler']:
+                label = compose_label([neighborhood.get('il'), neighborhood.get('ilce'), neighborhood.get('name')])
+                add_target(neighborhood.get('url'), label, 'mahalle')
+        
+        # Eğer mahalle yok ama ilçe varsa, sadece ilçe URL'leri ekle
+        elif self.selected_locations.get('ilceler'):
+            for district in self.selected_locations['ilceler']:
+                label = compose_label([district.get('il'), district.get('name')])
+                add_target(district.get('url'), label, 'ilçe')
+        
+        # Eğer ilçe ve mahalle yok ama il varsa, sadece il URL'leri ekle
+        elif self.selected_locations.get('iller'):
+            for province in self.selected_locations['iller']:
+                label = compose_label([province.get('name')])
+                add_target(province.get('url'), label, 'il')
+        
+        # Hiçbiri yoksa varsayılan URL
+        if not targets:
+            add_target(self.base_url, 'Varsayılan Kategori', 'genel')
+    
+        print(f"\n✅ {len(targets)} lokasyon kuyruğa eklendi.")
+        for idx, target in enumerate(targets, 1):
+            print(f"   {idx}. {target['label']} -> {target['url']}")
+        return targets
         
     def start_scraping(self):
         """Scraping işlemini başlat"""
         print(f"🚀 Turistik Tesis Scraper başlatılıyor: {self.base_url}")
         
         try:
-            # Kullanıcıdan sayfa sayısını al
-            max_pages = self.get_user_page_count()
-            if max_pages is None:
+            # Önce lokasyon seçim menüsünü göster
+            print(f"\n📍 TURİSTİK TESİS İÇİN LOKASYON SEÇİMİ")
+            location_queue = self.location_selection_menu()
+            if not location_queue:
+                print("❌ Lokasyon kuyruğu oluşturulamadı!")
                 return
+    
+            # Kullanıcıdan bir kere sayfa sayısını al
+            user_max_pages = self.get_user_page_count()
+            if user_max_pages is None:
+                print("❌ Scraping iptal edildi!")
+                return
+    
+            total_locations = len(location_queue)
+            
+            for idx, target in enumerate(location_queue, 1):
+                target_url = target.get('url', self.base_url)
+                target_label = target.get('label', f"Lokasyon {idx}")
+    
+                print("\n" + "="*70)
+                print(f"📍 {idx}/{total_locations} - {target_label}")
+                print(f"🔗 URL: {target_url}")
+                print("="*70)
+    
+                # URL'nin maksimum sayfa sayısını al
+                url_max_pages = self.get_max_pages(target_url)
+                # Kullanıcının girdiği değer ile URL'nin maksimum sayfa sayısının minimumunu al
+                max_pages = min(user_max_pages, url_max_pages)
                 
-            # Sayfaları tara
-            self.scrape_pages(max_pages)
+                print(f"📊 Bu lokasyon için {url_max_pages} sayfa bulunuyor. {max_pages} sayfa taranacak.")
+    
+                # Sayfaları tara
+                should_skip = self.scrape_pages(target_url, max_pages)
+                if should_skip:
+                    print("⏭️  Bu lokasyon atlandı (ilan bulunamadı).")
+                    continue
             
             # Verileri kaydet
             self.save_data()
@@ -40,15 +590,11 @@ class TuristikTesisScraper:
             print(f"❌ Scraping sırasında hata: {e}")
     
     def get_user_page_count(self):
-        """Kullanıcıdan kaç sayfa taranacağını al"""
+        """Kullanıcıdan kaç sayfa taranacağını al (1-50 aralığında)"""
         try:
-            print(f"\n📄 Maksimum sayfa sayısını öğreniliyor...")
-            max_available_pages = self.get_max_pages()
-            print(f"📊 Sitede toplam {max_available_pages} sayfa bulunuyor.")
-            
             while True:
                 try:
-                    user_input = input(f"\n🔢 Kaç sayfa taranacak? (1-{max_available_pages}): ").strip()
+                    user_input = input(f"\n🔢 Kaç sayfa scrape edilecek? (1-50): ").strip()
                     
                     if not user_input:
                         print("❌ Geçersiz giriş! Lütfen bir sayı girin.")
@@ -60,11 +606,11 @@ class TuristikTesisScraper:
                         print("❌ En az 1 sayfa seçmelisiniz!")
                         continue
                     
-                    if page_count > max_available_pages:
-                        print(f"❌ Maksimum {max_available_pages} sayfa seçebilirsiniz!")
+                    if page_count > 50:
+                        print(f"❌ Maksimum 50 sayfa seçebilirsiniz!")
                         continue
                     
-                    print(f"✅ {page_count} sayfa taranacak...")
+                    print(f"✅ {page_count} sayfa scrape edilecek (her lokasyon için maksimum değer olarak kullanılacak).")
                     return page_count
                     
                 except ValueError:
@@ -77,14 +623,20 @@ class TuristikTesisScraper:
             print(f"❌ Sayfa sayısı alınırken hata: {e}")
             return 1
     
-    def scrape_pages(self, max_pages):
-        """Belirtilen sayıda sayfayı tarar"""
+    def scrape_pages(self, target_url, max_pages):
+        """Belirtilen sayıda sayfayı tarar. Eğer ilk sayfada ilan yoksa ve max_pages 1 ise True döndürür (atla)"""
+        first_page_listings = 0
+        
         for current_page in range(1, max_pages + 1):
             print(f"\n🔍 Sayfa {current_page} taranıyor...")
             
             try:
                 # Sayfaya git
-                page_url = f"{self.base_url}?sayfa={current_page}" if current_page > 1 else self.base_url
+                if current_page > 1:
+                    separator = '&' if '?' in target_url else '?'
+                    page_url = f"{target_url}{separator}sayfa={current_page}"
+                else:
+                    page_url = target_url
                 self.driver.get(page_url)
                 time.sleep(2)
                 
@@ -92,16 +644,26 @@ class TuristikTesisScraper:
                 listings = self.scrape_current_page()
                 self.all_listings.extend(listings)
                 
+                # İlk sayfadaki ilan sayısını kaydet
+                if current_page == 1:
+                    first_page_listings = len(listings)
+                
                 print(f"   ✅ Sayfa {current_page}: {len(listings)} ilan bulundu")
                 
             except Exception as e:
                 print(f"   ❌ Sayfa {current_page} taranırken hata: {e}")
                 continue
+        
+        # Eğer ilk sayfada hiç ilan yoksa ve maksimum sayfa 1 ise, bu URL'yi atla
+        if first_page_listings == 0 and max_pages == 1:
+            return True
+        
+        return False
     
-    def get_max_pages(self):
+    def get_max_pages(self, target_url):
         """Maksimum sayfa sayısını bul"""
         try:
-            self.driver.get(self.base_url)
+            self.driver.get(target_url)
             time.sleep(2)
             
             # Sayfalama elementlerini bul

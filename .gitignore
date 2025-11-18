@@ -3,3 +3,5 @@ Proje Dosya Yapısı ve Proje Nasıl Geliştirilecek.txt
 __pycache__/
 *.pyc
 .vscode/
+.cursor/
+scraped_*/
