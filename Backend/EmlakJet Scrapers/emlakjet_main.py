@@ -168,13 +168,31 @@ class EmlakJetCategorySelector:
             print(f"Alt kategoriler alınırken hata: {e}")
             return []
     
-    def display_menu(self, title, items, show_back=True, show_exit=True):
+    def display_menu(self, title, items, show_back=True, show_exit=True, selected_items=None):
         """Menüyü güzel bir şekilde göster"""
         print(f"\n" + "="*50)
         print(f"🎯 {title}")
         print("="*50)
 
+        # Seçili item'ları kontrol etmek için set oluştur
+        selected_items_set = set()
+        if selected_items:
+            for selected in selected_items:
+                if isinstance(selected, dict) and 'name' in selected:
+                    selected_items_set.add(selected['name'])
+                elif isinstance(selected, str):
+                    selected_items_set.add(selected)
+
         for i, item in enumerate(items, 1):
+            # Seçili mi kontrol et
+            is_selected = False
+            if isinstance(item, dict) and 'name' in item:
+                is_selected = item['name'] in selected_items_set
+            elif isinstance(item, str):
+                is_selected = item in selected_items_set
+            
+            checkmark = " ✅" if is_selected else ""
+            
             # Eğer item bir sözlükse (alt kategoriler)
             if isinstance(item, dict) and 'name' in item:
                 # SADECE alt-alt kategorilerde ilan sayısı göster
@@ -182,13 +200,13 @@ class EmlakJetCategorySelector:
                 if 'ad_count' in item and item['ad_count'] != "0" and "ALT KATEGORİLERİ" in title:
                     # Name'deki parantez içindeki sayıyı kaldır
                     clean_name = item['name'].split('(')[0].strip()
-                    print(f"{i}. {clean_name} İlan Sayısı: {item['ad_count']}")
+                    print(f"{i}. {clean_name} İlan Sayısı: {item['ad_count']}{checkmark}")
                 else:
                     # Ana alt kategorilerde sadece isim
-                    print(f"{i}. {item['name']}")
+                    print(f"{i}. {item['name']}{checkmark}")
             # Eğer item string ise (ana kategoriler)
             else:
-                print(f"{i}. {item}")
+                print(f"{i}. {item}{checkmark}")
 
         option_number = len(items) + 1
 
@@ -401,8 +419,105 @@ class EmlakJetCategorySelector:
             else:
                 print("❌ Geçersiz seçim!")
     
+    def display_selected_categories(self, selected_categories):
+        """Seçili alt-alt kategorileri göster"""
+        if selected_categories:
+            print(f"\n📍 SEÇİLİ KATEGORİLER ({len(selected_categories)}):")
+            for i, cat in enumerate(selected_categories, 1):
+                print(f"   {i}. {cat['name']}")
+        else:
+            print(f"\n📍 SEÇİLİ KATEGORİLER: Henüz kategori seçilmedi")
+    
+    def multiple_category_selection_menu(self, sub_sub_categories):
+        """Alt-alt kategoriler için çoklu seçim menüsü"""
+        print(f"\n🎯 ÇOKLU KATEGORİ SEÇİMİ")
+        print("Birden fazla kategori seçmek için numaraları virgülle veya boşlukla ayırarak girin.")
+        print("Örnek: 1,3,5 veya 1 3 5 veya 1-5")
+        
+        while True:
+            try:
+                user_input = input(f"\nSeçimlerinizi girin (1-{len(sub_sub_categories)}): ").strip()
+                
+                if not user_input:
+                    print("❌ Boş giriş! Lütfen numara girin.")
+                    continue
+                
+                # Farklı formatları destekle
+                selections = set()
+                
+                if ',' in user_input:
+                    parts = user_input.split(',')
+                    for part in parts:
+                        part = part.strip()
+                        if '-' in part:
+                            range_parts = part.split('-')
+                            if len(range_parts) == 2:
+                                start = int(range_parts[0].strip())
+                                end = int(range_parts[1].strip())
+                                selections.update(range(start, end + 1))
+                        else:
+                            if part.isdigit():
+                                selections.add(int(part))
+                
+                elif ' ' in user_input:
+                    parts = user_input.split()
+                    for part in parts:
+                        part = part.strip()
+                        if '-' in part:
+                            range_parts = part.split('-')
+                            if len(range_parts) == 2:
+                                start = int(range_parts[0].strip())
+                                end = int(range_parts[1].strip())
+                                selections.update(range(start, end + 1))
+                        else:
+                            if part.isdigit():
+                                selections.add(int(part))
+                
+                elif '-' in user_input:
+                    range_parts = user_input.split('-')
+                    if len(range_parts) == 2:
+                        start = int(range_parts[0].strip())
+                        end = int(range_parts[1].strip())
+                        selections.update(range(start, end + 1))
+                
+                else:
+                    if user_input.isdigit():
+                        selections.add(int(user_input))
+                
+                # Seçimleri kontrol et
+                valid_selections = []
+                invalid_selections = []
+                
+                for selection in selections:
+                    if 1 <= selection <= len(sub_sub_categories):
+                        valid_selections.append(selection)
+                    else:
+                        invalid_selections.append(selection)
+                
+                if invalid_selections:
+                    print(f"❌ Geçersiz numaralar: {invalid_selections}")
+                
+                if valid_selections:
+                    selected_categories = []
+                    for selection in valid_selections:
+                        selected_item = sub_sub_categories[selection - 1]
+                        selected_categories.append(selected_item)
+                    
+                    print(f"✅ {len(valid_selections)} kategori seçildi:")
+                    for selection in valid_selections:
+                        print(f"   - {sub_sub_categories[selection - 1]['name']}")
+                    
+                    return selected_categories
+                else:
+                    print("❌ Geçerli seçim yapılmadı!")
+                    
+            except ValueError:
+                print("❌ Geçersiz giriş! Lütfen numara girin.")
+            except Exception as e:
+                print(f"❌ Hata: {e}")
+    
     def final_category_menu(self, category_url, category_name):
-        """Son kategori seçim menüsünü göster"""
+        """Son kategori seçim menüsünü göster - ÇOKLU SEÇİM DESTEĞİ"""
         # Kategori sayfasına git
         if not self.go_to_selected_category(category_url):
             return
@@ -410,20 +525,51 @@ class EmlakJetCategorySelector:
         # Alt kategorileri al
         sub_sub_categories = self.get_sub_sub_categories(category_url)
         
+        # Seçili kategoriler listesi
+        selected_categories = []
+        
         while True:
             if sub_sub_categories:
-                max_option = self.display_menu(f"{category_name.upper()} ALT KATEGORİLERİ", sub_sub_categories)
+                # Seçili kategorileri göster
+                self.display_selected_categories(selected_categories)
+                
+                print(f"\n" + "="*50)
+                print(f"🎯 {category_name.upper()} KATEGORİLERİ")
+                print("="*50)
+                max_option = self.display_menu(f"{category_name.upper()} ALT KATEGORİLERİ", sub_sub_categories, show_back=False, show_exit=False, selected_items=selected_categories)
+                
+                print(f"{max_option}. ➕ Çoklu Seçim İle Kategori Ekle")
+                max_option += 1
+                
+                if selected_categories:
+                    print(f"{max_option}. 🗑️  Seçili Kategorileri Temizle")
+                    max_option += 1
+                
+                print(f"{max_option}. ✅ Seçimleri Tamamla ve Scraping'e Başla")
+                max_option += 1
+                
+                print(f"{max_option}. ↩️ Üst menüye dön")
+                max_option += 1
+                
+                print(f"{max_option}. 🚪 Çıkış")
                 
                 choice = self.get_user_choice(max_option)
                 if choice is None:
                     continue
                 
-                if choice == max_option - 1:  # Üst menüye dön
-                    return
-                elif choice == max_option:  # Çıkış
-                    print("👋 Çıkış yapılıyor...")
-                    exit()
-                elif 1 <= choice <= len(sub_sub_categories):
+                # Menü seçeneklerini hesapla
+                category_count = len(sub_sub_categories)
+                add_option = category_count + 1
+                clear_option = add_option + 1 if selected_categories else None
+                if clear_option:
+                    complete_option = clear_option + 1
+                else:
+                    complete_option = add_option + 1
+                back_option = complete_option + 1
+                exit_option = back_option + 1
+                
+                if 1 <= choice <= category_count:
+                    # Tek kategori seçildi - direkt seçim
                     selected_final = sub_sub_categories[choice - 1]
                     selected_path = f"{category_name} → {selected_final['name']}"
                     print(f"\n✅ Seçilen: {selected_path}")
@@ -442,15 +588,76 @@ class EmlakJetCategorySelector:
                     
                     final_choice = self.get_user_choice(3)
                     if final_choice == 1:
-                        # Ana alt kategori ismini kullan (alt alt kategori değil)
                         self.start_appropriate_scraper(final_url, category_name, selected_path)
                         input("\n⏎ Devam etmek için Enter'a basın...")
                         return
                     elif final_choice == 2:
-                        return  # Ana menüye dön
+                        return
                     else:
                         print("👋 Çıkış yapılıyor...")
                         exit()
+                
+                elif choice == add_option:
+                    # Çoklu seçim yap
+                    new_selections = self.multiple_category_selection_menu(sub_sub_categories)
+                    if new_selections:
+                        # Seçilen kategorileri ekle (duplikasyon kontrolü)
+                        for new_cat in new_selections:
+                            if new_cat not in selected_categories:
+                                selected_categories.append(new_cat)
+                        print(f"✅ Toplam {len(selected_categories)} kategori seçili")
+                
+                elif clear_option and choice == clear_option:
+                    # Seçili kategorileri temizle
+                    selected_categories.clear()
+                    print("🗑️  Seçili kategoriler temizlendi")
+                
+                elif choice == complete_option:
+                    # Seçimleri tamamla ve scraper başlat
+                    if not selected_categories:
+                        print("❌ Hiç kategori seçilmedi! Önce kategori seçin.")
+                        continue
+                    
+                    print(f"\n✅ {len(selected_categories)} kategori için scraper başlatılıyor...")
+                    for i, selected_cat in enumerate(selected_categories, 1):
+                        selected_path = f"{category_name} → {selected_cat['name']}"
+                        
+                        # Belirgin tasarım ile göster
+                        box_width = max(70, len(selected_path) + 10)
+                        header_text = f"🎯 KATEGORİ {i}/{len(selected_categories)}"
+                        path_text = f"📂 {selected_path}"
+                        
+                        print("\n" + "="*box_width)
+                        print("│" + " "*(box_width-2) + "│")
+                        
+                        # Header
+                        header_spaces = box_width - 4 - len(header_text)
+                        print(f"│  {header_text}" + " "*header_spaces + "│")
+                        print("│  " + "-"*(box_width-6) + "  │")
+                        
+                        # Path
+                        path_spaces = box_width - 4 - len(path_text)
+                        print(f"│  {path_text}" + " "*path_spaces + "│")
+                        
+                        print("│" + " "*(box_width-2) + "│")
+                        print("="*box_width)
+                        
+                        final_url = selected_cat['url']
+                        self.go_to_selected_category(final_url)
+                        self.start_appropriate_scraper(final_url, category_name, selected_path)
+                        
+                        if i < len(selected_categories):
+                            input("\n⏎ Sonraki kategoriye geçmek için Enter'a basın...")
+                    
+                    input("\n⏎ Devam etmek için Enter'a basın...")
+                    return
+                
+                elif choice == back_option:
+                    return
+                
+                elif choice == exit_option:
+                    print("👋 Çıkış yapılıyor...")
+                    exit()
                 else:
                     print("❌ Geçersiz seçim!")
             else:
