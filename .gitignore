@@ -5,3 +5,15 @@ __pycache__/
 .vscode/
 .cursor/
 scraped_*/
+
+# Logs
+logs/
+*.log
+
+# Outputs
+outputs/
+*.xlsx
+*.csv
+
+# IDE
+.idea/
