@@ -22,3 +22,74 @@ ThorData is SOC2, GDPR, and CCPA compliant, trusted by 4,000+ enterprises for se
 👉 Learn more: [ThorData](https://www.thordata.com/?ls=EDBORvrR&lk=wb) | [Get Started](https://www.thordata.com/?ls=EDBORvrR&lk=wb)
 
 ---
+
+## 📁 Proje Yapısı
+
+```
+real-estate-scraper/
+├── Backend/                 # Web scraping modülleri
+│   ├── core/               # Temel bileşenler
+│   ├── scrapers/           # Platform-spesifik scraperlar
+│   ├── utils/              # Yardımcı araçlar
+│   └── main.py             # Ana giriş noktası
+└── Frontend/               # (Eklenecek)
+```
+
+---
+
+## 🔧 Backend
+
+Türkiye'deki emlak sitelerinden veri çekmek için geliştirilmiş modüler scraping sistemi.
+
+### Desteklenen Platformlar
+
+| Platform | Durum | Kategoriler |
+|----------|-------|-------------|
+| EmlakJet | ✅ Aktif | Konut, Arsa, İşyeri, Turistik Tesis |
+| HepsiEmlak | ✅ Aktif | Konut, Arsa, İşyeri, Devremülk, Turistik İşletme |
+| Sahibinden | 🔜 Planlanıyor | - |
+
+### Kurulum
+
+```bash
+cd Backend
+pip install selenium pandas openpyxl
+```
+
+### Kullanım
+
+```bash
+python main.py
+```
+
+**Akış:**
+1. Platform seçin (EmlakJet / HepsiEmlak)
+2. Kategori seçin (Konut, Arsa, vb.)
+3. İl seçin (çoklu seçim: `1,3,5` veya `1-5`)
+4. Her il için ilçe/mahalle belirleyin
+5. Sayfa sayısını girin → Scraping başlar
+
+### Özellikler
+
+- 🏙️ **Hiyerarşik Lokasyon:** İl → İlçe → Mahalle seçimi
+- 📊 **4 Sütunlu Görünüm:** Şehirler 4 sütunda listelenir
+- 💾 **Otomatik Kayıt:** `Outputs/{Platform}/{Kategori}/` klasörüne Excel olarak kaydedilir
+- ⏹️ **Ctrl+C Desteği:** İptal edilse bile mevcut veriler kaydedilir
+- 🔢 **İlan Sayısı:** Her il için toplam ilan sayısı gösterilir
+
+### Çıktı Yapısı
+
+```
+Outputs/
+├── EmlakJet Output/
+│   ├── konut/
+│   └── arsa/
+└── HepsiEmlak Output/
+    └── konut/
+```
+
+---
+
+## 📝 Lisans
+
+MIT License
