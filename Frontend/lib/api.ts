@@ -2,7 +2,7 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-import type { ScrapeRequest, ScrapeResponse, Platform } from '@/types';
+import type { ScrapeRequest, ScrapeResponse, Platform, ScrapeResult } from '@/types';
 
 export async function startScrape(platform: Platform, data: ScrapeRequest): Promise<ScrapeResponse> {
     const response = await fetch(`${API_BASE_URL}/scrape/${platform}`, {
@@ -27,4 +27,21 @@ export async function healthCheck(): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+
+export async function getStats() {
+    const response = await fetch(`${API_BASE_URL}/stats`);
+    if (!response.ok) {
+        throw new Error('İstatistikler alınamadı');
+    }
+    return response.json();
+}
+
+export async function getResults(): Promise<ScrapeResult[]> {
+    const response = await fetch(`${API_BASE_URL}/results`);
+    if (!response.ok) {
+        throw new Error('Sonuçlar alınamadı');
+    }
+    return response.json();
 }

@@ -24,6 +24,20 @@ export interface Category {
   name: string;
 }
 
+export interface ScrapeResult {
+  id: string;
+  platform: string;
+  category: string;
+  date: string;
+  count: number;
+  status: string;
+  files: {
+    type: 'excel' | 'json';
+    name: string;
+    path: string;
+  }[];
+}
+
 export const CATEGORIES: Record<Platform, Record<ListingType, Category[]>> = {
   emlakjet: {
     satilik: [

@@ -2,28 +2,15 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { GlassCard } from '@/components/ui/GlassCard';
+import { ArtCard } from '@/components/ui/ArtCard';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, Loader2, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
+import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X } from 'lucide-react';
 import Link from 'next/link';
 import { startScrape } from '@/lib/api';
 import { CATEGORIES, TURKISH_CITIES, type Platform, type ListingType } from '@/types';
-
-const container = {
-    hidden: { opacity: 0 },
-    show: {
-        opacity: 1,
-        transition: { staggerChildren: 0.1 },
-    },
-};
-
-const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
-};
 
 export default function PlatformScraperPage() {
     const params = useParams();
@@ -38,7 +25,8 @@ export default function PlatformScraperPage() {
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const platformIcon = platform === 'emlakjet' ? '🔵' : '🟢';
-    const platformGradient = platform === 'emlakjet' ? 'from-blue-500 to-cyan-500' : 'from-green-500 to-emerald-500';
+    const platformGradient = platform === 'emlakjet' ? 'gradient-art-blue' : 'gradient-art-pink';
+    const platformColor = platform === 'emlakjet' ? 'blue' : 'pink';
 
     const categories = CATEGORIES[platform]?.[listingType] || [];
 
@@ -78,178 +66,154 @@ export default function PlatformScraperPage() {
     };
 
     return (
-        <motion.div
-            className="space-y-6 max-w-3xl"
-            variants={container}
-            initial="hidden"
-            animate="show"
-        >
+        <div className="space-y-8 max-w-4xl relative z-10">
             {/* Header */}
-            <motion.div variants={item}>
+            <div>
                 <Link href="/scraper">
-                    <Button variant="ghost" className="mb-4 text-gray-300 hover:text-white">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Geri
-                    </Button>
+                    <div className="text-gray-400 hover:text-white mb-4 inline-flex items-center gap-2 transition-colors">
+                        ← Geri Dön
+                    </div>
                 </Link>
-                <div className="flex items-center gap-4 mb-2">
-                    <span className="text-5xl">{platformIcon}</span>
-                    <h1 className="text-4xl font-bold gradient-text-neon">
+                <div className="flex items-center gap-4 mb-3">
+                    <span className="text-7xl">{platformIcon}</span>
+                    <h1 className={`art-title ${platformGradient}`}>
                         {platformName}
                     </h1>
                 </div>
-                <p className="text-gray-300 text-lg">
+                <p className="text-xl text-gray-300">
                     🎯 Tarama parametrelerini ayarlayın
                 </p>
-            </motion.div>
+            </div>
 
-            {/* Form Card */}
-            <motion.div variants={item}>
-                <GlassCard variant="strong" neonBorder="purple" glow>
-                    <div className={`h-1 w-full bg-gradient-to-r ${platformGradient} rounded-t-2xl -mt-6 -mx-6 mb-6`} />
+            {/* Configuration Form */}
+            <ArtCard glowColor={platformColor}>
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                    <Sparkles className="w-6 h-6" />
+                    Konfigürasyon
+                </h2>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Listing Type & Category */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Select
-                                label="İlan Tipi"
-                                value={listingType}
-                                onChange={(e) => setListingType(e.target.value as ListingType)}
-                                options={[
-                                    { value: 'satilik', label: '💰 Satılık' },
-                                    { value: 'kiralik', label: '🔑 Kiralık' },
-                                ]}
-                            />
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Listing Type & Category */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Select
+                            label="İlan Tipi"
+                            value={listingType}
+                            onChange={(e) => setListingType(e.target.value as ListingType)}
+                            options={[
+                                { value: 'satilik', label: '💰 Satılık' },
+                                { value: 'kiralik', label: '🔑 Kiralık' },
+                            ]}
+                        />
 
-                            <Select
-                                label="Kategori"
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                options={categories.map((c) => ({ value: c.id, label: `🏠 ${c.name}` }))}
-                            />
-                        </div>
+                        <Select
+                            label="Kategori"
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            options={categories.map((c) => ({ value: c.id, label: `🏠 ${c.name}` }))}
+                        />
+                    </div>
 
-                        {/* Cities */}
-                        <GlassCard variant="dark" className="p-4">
-                            <label className="text-sm font-medium text-gray-300 mb-2 block">
-                                🌍 Şehirler
-                            </label>
-                            <Select
-                                value=""
-                                onChange={handleCityChange}
-                                options={[
-                                    { value: '', label: 'Şehir ekle...' },
-                                    ...TURKISH_CITIES.map((city) => ({ value: city, label: city })),
-                                ]}
-                            />
-                            {selectedCities.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-3">
-                                    {selectedCities.map((city) => (
-                                        <motion.span
-                                            key={city}
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            exit={{ scale: 0 }}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-full glass neon-border-blue text-white"
+                    {/* Cities */}
+                    <div>
+                        <label className="text-sm font-medium text-gray-300 mb-2 block">
+                            🌍 Şehirler
+                        </label>
+                        <Select
+                            value=""
+                            onChange={handleCityChange}
+                            options={[
+                                { value: '', label: 'Şehir ekle...' },
+                                ...TURKISH_CITIES.map((city) => ({ value: city, label: city })),
+                            ]}
+                        />
+                        {selectedCities.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                {selectedCities.map((city) => (
+                                    <motion.span
+                                        key={city}
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${platform === 'emlakjet' ? 'from-blue-500/20 to-cyan-500/20 border-blue-500/30' : 'from-pink-500/20 to-purple-500/20 border-pink-500/30'
+                                            } border text-white font-semibold`}
+                                    >
+                                        {city}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeCity(city)}
+                                            className="hover:scale-125 transition-transform"
                                         >
-                                            {city}
-                                            <button
-                                                type="button"
-                                                onClick={() => removeCity(city)}
-                                                className="ml-1 hover:text-red-400 transition-colors"
-                                            >
-                                                ×
-                                            </button>
-                                        </motion.span>
-                                    ))}
-                                </div>
-                            )}
-                            <p className="text-xs text-gray-500 mt-2">
-                                Boş bırakılırsa tüm şehirler taranır
-                            </p>
-                        </GlassCard>
-
-                        {/* Max Pages */}
-                        <div>
-                            <Input
-                                label="📄 Maksimum Sayfa"
-                                type="number"
-                                min={1}
-                                max={50}
-                                value={maxPages}
-                                onChange={(e) => setMaxPages(parseInt(e.target.value) || 1)}
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Sayfa başına ~20 ilan
-                            </p>
-                        </div>
-
-                        {/* Submit Button */}
-                        <Button
-                            type="submit"
-                            className={`w-full bg-gradient-to-r ${platformGradient} hover:shadow-lg hover:shadow-purple-500/50 transition-all group relative overflow-hidden`}
-                            disabled={isLoading}
-                        >
-                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            <span className="relative flex items-center justify-center">
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                        Tarama Başlatılıyor...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Play className="w-5 h-5 mr-2" />
-                                        Taramayı Başlat
-                                    </>
-                                )}
-                            </span>
-                        </Button>
-
-                        {/* Result */}
-                        {result && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                            >
-                                <GlassCard
-                                    variant="dark"
-                                    className={`border-2 ${result.type === 'success'
-                                            ? 'border-green-500/50 bg-green-500/10'
-                                            : 'border-red-500/50 bg-red-500/10'
-                                        }`}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        {result.type === 'success' ? (
-                                            <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
-                                        ) : (
-                                            <XCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
-                                        )}
-                                        <div>
-                                            <p className={`font-semibold ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
-                                                {result.type === 'success' ? 'Başarılı!' : 'Hata!'}
-                                            </p>
-                                            <p className="text-sm text-gray-300 mt-1">{result.message}</p>
-                                        </div>
-                                    </div>
-                                </GlassCard>
-                            </motion.div>
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </motion.span>
+                                ))}
+                            </div>
                         )}
-                    </form>
-                </GlassCard>
-            </motion.div>
-
-            {/* Tip Card */}
-            <motion.div variants={item}>
-                <GlassCard variant="dark" className="border border-cyan-500/30">
-                    <div className="flex items-start gap-3">
-                        <Sparkles className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-1" />
-                        <p className="text-sm text-gray-300">
-                            <span className="font-semibold text-white">İpucu:</span> Tarama arka planda çalışır. Sonuçları <code className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">outputs/</code> klasöründe bulabilirsiniz.
+                        <p className="text-xs text-gray-500 mt-2">
+                            Boş bırakılırsa tüm şehirler taranır
                         </p>
                     </div>
-                </GlassCard>
-            </motion.div>
-        </motion.div>
+
+                    {/* Max Pages */}
+                    <Input
+                        label="📄 Maksimum Sayfa"
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={maxPages}
+                        onChange={(e) => setMaxPages(parseInt(e.target.value) || 1)}
+                    />
+
+                    {/* Submit Button */}
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                            }`}
+                    >
+                        {isLoading ? (
+                            <span className="flex items-center justify-center gap-3">
+                                <Loader2 className="w-6 h-6 animate-spin" />
+                                Tarama Başlatılıyor...
+                            </span>
+                        ) : (
+                            <span className="flex items-center justify-center gap-3">
+                                <Play className="w-6 h-6" />
+                                Taramayı Başlat
+                            </span>
+                        )}
+                    </button>
+
+                    {/* Result */}
+                    {result && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                        >
+                            <ArtCard
+                                glowColor={result.type === 'success' ? 'blue' : 'pink'}
+                                className={`border-2 ${result.type === 'success'
+                                        ? 'border-green-500/50 bg-green-500/10'
+                                        : 'border-red-500/50 bg-red-500/10'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    {result.type === 'success' ? (
+                                        <CheckCircle2 className="w-8 h-8 text-green-400 flex-shrink-0" />
+                                    ) : (
+                                        <XCircle className="w-8 h-8 text-red-400 flex-shrink-0" />
+                                    )}
+                                    <div>
+                                        <p className={`font-bold text-lg ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
+                                            {result.type === 'success' ? '✅ Başarılı!' : '❌ Hata!'}
+                                        </p>
+                                        <p className="text-gray-300 mt-1">{result.message}</p>
+                                    </div>
+                                </div>
+                            </ArtCard>
+                        </motion.div>
+                    )}
+                </form>
+            </ArtCard>
+        </div>
     );
 }

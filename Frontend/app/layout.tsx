@@ -2,14 +2,13 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/layout/Providers';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { Navbar } from '@/components/layout/Navbar';
+import { ClientLayout } from '@/components/layout/ClientLayout';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Emlak Scraper - Real Estate Data Collection',
-  description: 'Modern real estate scraping dashboard for EmlakJet and HepsiEmlak',
+  title: 'Emlak Scraper - Data Art Dashboard',
+  description: 'Artistic data visualization for real estate scraping',
 };
 
 export default function RootLayout({
@@ -19,17 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr" suppressHydrationWarning>
-      <body className={`${inter.className} bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100`}>
+      <body className={`${inter.className} pattern-overlay`}>
         <Providers>
-          <div className="min-h-screen">
-            <Sidebar />
-            <div className="lg:pl-64">
-              <Navbar />
-              <main className="p-4 lg:p-6">
-                {children}
-              </main>
-            </div>
-          </div>
+          <ClientLayout>{children}</ClientLayout>
         </Providers>
       </body>
     </html>

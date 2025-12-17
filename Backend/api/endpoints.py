@@ -95,3 +95,97 @@ async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: Background
         data_count=0,
         output_files=[]
     )
+
+@router.get("/results")
+async def get_results():
+    import os
+    import glob
+    from datetime import datetime
+    
+    output_dir = "outputs"
+    final_results = []
+    
+    if not os.path.exists(output_dir):
+        return final_results
+
+    # Recursive search for excel and json files
+    files = []
+    for ext in ['*.xlsx', '*.json']:
+        files.extend(glob.glob(os.path.join(output_dir, '**', ext), recursive=True))
+
+    # Group files by timestamp/session if possible, or just list them
+    # For now, let's list individual files as results
+    for file_path in files:
+        stats = os.stat(file_path)
+        filename = os.path.basename(file_path)
+        platform = "emlakjet" if "emlakjet" in filename.lower() else "hepsiemlak" if "hepsiemlak" in filename.lower() else "Unknown"
+        
+        # Try to extract category from path or filename
+        category = "Genel"
+        if "konut" in filename.lower(): category = "Konut"
+        elif "arsa" in filename.lower(): category = "Arsa"
+        elif "isyeri" in filename.lower(): category = "İşyeri"
+        
+        final_results.append({
+            "id": filename,
+            "platform": platform.capitalize(),
+            "category": category,
+            "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
+            "count": 0, # Cannot easily determine count without opening file
+            "status": "completed",
+            "files": [{
+                "type": "excel" if filename.endswith('.xlsx') else "json",
+                "name": filename,
+                "path": file_path
+            }]
+        })
+        
+    # Sort by date descending
+    final_results.sort(key=lambda x: x['date'], reverse=True)
+    return final_results
+
+@router.get("/stats")
+async def get_stats():
+    import os
+    import glob
+    from datetime import datetime, timedelta
+    
+    output_dir = "outputs"
+    total_scrapes = 0
+    total_listings = 0 # Placeholder, would need to read files to be accurate
+    recent_activity = []
+    
+    this_week_count = 0
+    this_month_count = 0
+    last_scrape_date = "-"
+    
+    if os.path.exists(output_dir):
+        files = []
+        for ext in ['*.xlsx', '*.json']:
+            files.extend(glob.glob(os.path.join(output_dir, '**', ext), recursive=True))
+            
+        total_scrapes = len(files)
+        # Sort files by time for recent activity
+        files.sort(key=os.path.getmtime, reverse=True)
+        
+        if files:
+            last_scrape_ts = os.path.getmtime(files[0])
+            last_scrape_date = datetime.fromtimestamp(last_scrape_ts).strftime('%d.%m.%Y %H:%M')
+
+        now = datetime.now()
+        for f in files:
+            mtime = datetime.fromtimestamp(os.path.getmtime(f))
+            if now - mtime < timedelta(days=7):
+                this_week_count += 1
+            if now - mtime < timedelta(days=30):
+                this_month_count += 1
+                
+    return {
+        "total_scrapes": total_scrapes,
+        "total_listings": 0, # We'd need to parse files for this
+        "this_week": this_week_count,
+        "this_month": this_month_count,
+        "last_scrape": last_scrape_date
+    }
+
+

@@ -1,18 +1,15 @@
 'use client';
 
-import { GlassCard } from '@/components/ui/GlassCard';
+import { ArtCard } from '@/components/ui/ArtCard';
 import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles, Zap, ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { Sparkles, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 const container = {
     hidden: { opacity: 0 },
     show: {
         opacity: 1,
-        transition: {
-            staggerChildren: 0.15,
-        },
+        transition: { staggerChildren: 0.2 },
     },
 };
 
@@ -25,114 +22,95 @@ const platforms = [
     {
         id: 'emlakjet',
         name: 'EmlakJet',
-        description: 'Türkiye\'nin önde gelen emlak platformu',
-        features: ['Konut', 'Arsa', 'İşyeri', 'Turistik Tesis'],
-        gradient: 'from-blue-500 to-cyan-500',
-        neon: 'blue' as const,
         icon: '🔵',
+        gradient: 'from-blue-500 to-cyan-500',
+        glowColor: 'blue' as const,
+        features: ['Konut', 'Arsa', 'İşyeri', 'Turistik Tesis'],
+        tagline: 'Profesyonel veri toplama aracı',
+        Icon: Sparkles,
     },
     {
         id: 'hepsiemlak',
         name: 'HepsiEmlak',
-        description: 'Kapsamlı emlak ilan veritabanı',
-        features: ['Konut', 'Arsa', 'İşyeri', 'Devremülk'],
-        gradient: 'from-green-500 to-emerald-500',
-        neon: 'purple' as const,
         icon: '🟢',
+        gradient: 'from-pink-500 to-purple-500',
+        glowColor: 'pink' as const,
+        features: ['Konut', 'Arsa', 'İşyeri', 'Devremülk'],
+        tagline: 'Kapsamlı veri analiz platformu',
+        Icon: Zap,
     },
 ];
 
 export default function ScraperPage() {
     return (
         <motion.div
-            className="space-y-6"
+            className="space-y-8 relative z-10"
             variants={container}
             initial="hidden"
             animate="show"
         >
             {/* Header */}
-            <motion.div variants={item} className="mb-8">
-                <Link href="/">
-                    <Button variant="ghost" className="mb-4 text-gray-300 hover:text-white">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Dashboard
-                    </Button>
-                </Link>
-                <h1 className="text-4xl font-bold gradient-text-neon mb-2">
-                    Scraper
+            <motion.div variants={item}>
+                <h1 className="art-title gradient-art-blue mb-3">
+                    Platform Seçimi
                 </h1>
-                <p className="text-gray-300 text-lg">
-                    ⚡ Veri toplamak istediğiniz platformu seçin
+                <p className="text-xl text-gray-300">
+                    Veri toplamak istediğiniz platformu seçin ⚡
                 </p>
             </motion.div>
 
-            {/* Platform Cards - Bento Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Platform Cards */}
+            <div className="grid grid-cols-1 gap-8">
                 {platforms.map((platform, index) => (
                     <motion.div key={platform.id} variants={item}>
                         <Link href={`/scraper/${platform.id}`}>
-                            <GlassCard
-                                variant="strong"
-                                neonBorder={platform.neon}
-                                glow
-                                className="h-full group relative overflow-hidden min-h-[300px]"
-                            >
-                                {/* Gradient overlay */}
-                                <div className={`absolute inset-0 bg-gradient-to-br ${platform.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                            <ArtCard glowColor={platform.glowColor} className="group cursor-pointer relative overflow-visible">
+                                {/* Decorative floating element */}
+                                <div className={`absolute -z-10 -inset-4 bg-gradient-to-r ${platform.gradient} opacity-0 group-hover:opacity-20 blur-3xl transition-opacity duration-500 rounded-3xl`} />
 
-                                {/* Floating bg decoration */}
-                                <div className={`absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br ${platform.gradient} rounded-full opacity-20 blur-3xl group-hover:scale-150 transition-transform duration-700`} />
-
-                                <div className="relative h-full flex flex-col">
-                                    {/* Header */}
-                                    <div className="flex items-start justify-between mb-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-6xl group-hover:scale-110 transition-transform">
-                                                {platform.icon}
-                                            </div>
-                                            <div>
-                                                <h2 className="text-3xl font-bold text-white mb-1 group-hover:gradient-text-neon transition-all">
-                                                    {platform.name}
-                                                </h2>
-                                                <p className="text-gray-400 text-sm">
-                                                    {platform.description}
-                                                </p>
-                                            </div>
+                                <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
+                                    {/* Icon Section */}
+                                    <div className="relative">
+                                        <div className="text-8xl md:text-9xl group-hover:scale-110 transition-transform duration-300">
+                                            {platform.icon}
                                         </div>
-
-                                        {index === 0 ? (
-                                            <Sparkles className="w-6 h-6 text-blue-400 group-hover:rotate-12 transition-transform" />
-                                        ) : (
-                                            <Zap className="w-6 h-6 text-emerald-400 group-hover:rotate-12 transition-transform" />
-                                        )}
+                                        <platform.Icon className={`absolute -top-4 -right-4 w-12 h-12 ${index === 0 ? 'text-blue-400' : 'text-pink-400'
+                                            } group-hover:rotate-12 transition-transform`} />
                                     </div>
 
-                                    {/* Features */}
-                                    <div className="flex-1 mb-6">
-                                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">
-                                            Desteklenen Kategoriler
+                                    {/* Content */}
+                                    <div className="flex-1">
+                                        <h2 className={`text-5xl md:text-6xl font-black mb-3 ${index === 0 ? 'gradient-art-blue' : 'gradient-art-pink'
+                                            }`}>
+                                            {platform.name}
+                                        </h2>
+                                        <p className="text-lg text-gray-400 mb-6">
+                                            {platform.tagline}
                                         </p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {platform.features.map((feature) => (
+
+                                        {/* Features Grid */}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            {platform.features.map((feature, idx) => (
                                                 <div
                                                     key={feature}
-                                                    className="px-3 py-2 rounded-lg glass-dark text-sm text-gray-300 hover:text-white transition-colors"
+                                                    className={`p-3 rounded-xl bg-gradient-to-br ${platform.gradient} bg-opacity-10 border ${index === 0 ? 'border-blue-500/30' : 'border-pink-500/30'
+                                                        } text-center transition-transform hover:scale-105`}
                                                 >
-                                                    {feature}
+                                                    <span className={`font-bold text-sm ${index === 0 ? 'text-blue-300' : 'text-pink-300'
+                                                        }`}>
+                                                        {feature}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Action */}
-                                    <div className="flex items-center justify-between p-4 glass-dark rounded-xl">
-                                        <span className="text-gray-400 text-sm">
-                                            Taramaya Başla
-                                        </span>
-                                        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-white group-hover:translate-x-2 transition-all" />
+                                    {/* Arrow */}
+                                    <div className="text-6xl opacity-50 group-hover:opacity-100 group-hover:translate-x-4 transition-all duration-300">
+                                        →
                                     </div>
                                 </div>
-                            </GlassCard>
+                            </ArtCard>
                         </Link>
                     </motion.div>
                 ))}
@@ -140,18 +118,17 @@ export default function ScraperPage() {
 
             {/* Info Card */}
             <motion.div variants={item}>
-                <GlassCard variant="dark" className="border-2 border-purple-500/30">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20">
-                            <Sparkles className="w-6 h-6 text-purple-400" />
-                        </div>
+                <ArtCard glowColor="purple">
+                    <div className="flex items-start gap-4">
+                        <Sparkles className="w-8 h-8 text-purple-400 flex-shrink-0" />
                         <div>
+                            <h3 className="text-xl font-bold text-white mb-2">💡 İpucu</h3>
                             <p className="text-gray-300">
-                                <span className="font-semibold text-white">Pro Tip:</span> Her platform için özel filtreler ve ayarlar mevcut. Şehir, kategori ve sayfa sayısını özelleştirin.
+                                Her platform için özelleştirilmiş filtreler mevcut. Şehir, kategori ve sayfa sayısını kolayca ayarlayabilirsiniz.
                             </p>
                         </div>
                     </div>
-                </GlassCard>
+                </ArtCard>
             </motion.div>
         </motion.div>
     );
