@@ -150,9 +150,22 @@ class HepsiemlakScraper(BaseScraper):
             
             return cities
             
+            return cities
+            
         except Exception as e:
             logger.error(f"Error getting cities: {e}")
             return []
+            
+    def get_cities_api(self) -> List[str]:
+        """Get cities logic for API (non-interactive)"""
+        # We need to open the dropdown to get the list, similar to get_cities but without printing?
+        # Or just reuse get_cities but suppress print/interaction? 
+        # Actually get_cities interacts with DOM, so it is required.
+        # Let's modify get_cities to be quieter or just use it.
+        # But get_cities prints a lot.
+        
+        # We'll just define this as an alias or use get_cities directly if needed.
+        return self.get_cities()
     
     def select_cities(self, cities: List[str]) -> List[str]:
         """Let user select multiple cities"""
@@ -217,6 +230,34 @@ class HepsiemlakScraper(BaseScraper):
             
             else:
                 print("Geçersiz seçenek!")
+        
+        return selected
+            
+    def select_cities_api(self, all_cities: List[str], target_cities: Optional[List[str]] = None) -> List[str]:
+        """Select cities for API"""
+        if not target_cities:
+            return []
+        
+        selected = []
+        for city in target_cities:
+            # Simple fuzzy match or exact match
+            # "istanbul" -> "İstanbul"
+            # We try to match user input to available cities
+            
+            # Direct match
+            if city in all_cities:
+                selected.append(city)
+                continue
+                
+            # Case insensitive match
+            found = False
+            for ac in all_cities:
+                if ac.lower() == city.lower():
+                    selected.append(ac)
+                    found = True
+                    break
+            if not found:
+                 logger.warning(f"City not found: {city}")
         
         return selected
     
@@ -334,7 +375,7 @@ class HepsiemlakScraper(BaseScraper):
         except:
             return 1
     
-    def scrape_city(self, city: str) -> List[Dict[str, Any]]:
+    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False) -> List[Dict[str, Any]]:
         """Scrape all listings for a single city"""
         print(f"\n{'=' * 60}")
         print(f"{city} İÇİN SCRAPING BAŞLIYOR")
@@ -366,18 +407,24 @@ class HepsiemlakScraper(BaseScraper):
             total_pages = self.get_total_pages()
             print(f"{city} için toplam {total_pages} sayfa mevcut")
             
-            # Get page count from user
-            if total_pages > 1:
-                try:
-                    user_input = input(f"{city} için kaç sayfa taranacak? (1-{total_pages}): ").strip()
-                    pages_to_scrape = min(int(user_input), total_pages)
-                    if pages_to_scrape < 1:
-                        pages_to_scrape = 1
-                except ValueError:
-                    pages_to_scrape = min(3, total_pages)
-                    print(f"Geçersiz giriş, varsayılan {pages_to_scrape} sayfa kullanılıyor.")
+            # Get page count
+            if api_mode:
+                 if max_pages:
+                     pages_to_scrape = min(max_pages, total_pages)
+                 else:
+                     pages_to_scrape = 1 # Default 1 if not specified
             else:
-                pages_to_scrape = 1
+                if total_pages > 1:
+                    try:
+                        user_input = input(f"{city} için kaç sayfa taranacak? (1-{total_pages}): ").strip()
+                        pages_to_scrape = min(int(user_input), total_pages)
+                        if pages_to_scrape < 1:
+                            pages_to_scrape = 1
+                    except ValueError:
+                        pages_to_scrape = min(3, total_pages)
+                        print(f"Geçersiz giriş, varsayılan {pages_to_scrape} sayfa kullanılıyor.")
+                else:
+                    pages_to_scrape = 1
             
             city_listings = []
             
@@ -433,6 +480,52 @@ class HepsiemlakScraper(BaseScraper):
         
         return listings
     
+    def start_scraping_api(self, max_pages: int = 1):
+        """API scraping entry point"""
+        print(f"\n🚀 API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")
+        
+        try:
+            # For HepsiEmlak, current logic requires digging into DOM to get city list to click them.
+            # get_cities() does that.
+            
+            # If self.selected_cities is already populated (from init), we can use that filter.
+            # But we need to VALIDATE if those cities exist and get their clickable elements maybe?
+            # scrape_city() calls select_single_city() which opens dropdown and clicks.
+            # So we just need list of strings.
+            
+            if not self.selected_cities:
+                 logger.error("No cities provided for API scrape")
+                 return
+
+            # Scrape each city
+            all_results = {}
+            for city in self.selected_cities:
+                # We can control max pages via self.scrape_city if we modify it to accept max_pages argument
+                # Currently scrape_city asks for input call: user_input = input(...)
+                
+                # We need to refactor scrape_city to take max_pages arg
+                city_listings = self.scrape_city(city, max_pages=max_pages, api_mode=True)
+                if city_listings:
+                    all_results[city] = city_listings
+                time.sleep(2)
+            
+            # Save data
+            if all_results:
+                self.exporter.save_by_city(
+                    all_results,
+                    prefix=f"hepsiemlak_{self.listing_type}_{self.category}",
+                    format="excel"
+                )
+                
+                total = sum(len(v) for v in all_results.values())
+                print(f"\n🎉 TOPLAM: {len(all_results)} şehir, {total} ilan")
+            else:
+                print("❌ Hiç ilan bulunamadı!")
+                
+        except Exception as e:
+            logger.error(f"API scraping error: {e}")
+            raise e
+
     def start_scraping(self):
         """Main scraping entry point"""
         print(f"\n🚀 HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")

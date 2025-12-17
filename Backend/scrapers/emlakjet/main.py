@@ -181,7 +181,7 @@ class EmlakJetScraper(BaseScraper):
         except:
             return "?"
     
-    def select_provinces(self) -> List[Dict]:
+    def select_provinces(self, api_indices: Optional[List[int]] = None) -> List[Dict]:
         """Select provinces (cities) to scrape"""
         print(f"\n🏙️  İL SEÇİMİ")
         provinces = self.get_location_options("İller", self.base_url)
@@ -189,6 +189,14 @@ class EmlakJetScraper(BaseScraper):
             print("❌ İl bulunamadı!")
             return []
         
+        if api_indices:
+             selected = [provinces[i - 1] for i in api_indices if 0 < i <= len(provinces)]
+             if selected:
+                 print(f"\n✅ API: {len(selected)} il seçildi")
+                 return selected
+             # Fallback if indices invalid
+             return []
+
         print("\n🎯 ÇOKLU İL SEÇİMİ")
         print("Birden fazla seçim için: 1,3,5 veya 1-5")
         
@@ -208,7 +216,7 @@ class EmlakJetScraper(BaseScraper):
             else:
                 print("❌ Geçersiz seçim!")
     
-    def select_districts_for_province(self, province: Dict) -> tuple:
+    def select_districts_for_province(self, province: Dict, api_mode: bool = False, api_districts: Optional[List[str]] = None) -> tuple:
         """
         Select districts for a specific province.
         Returns: (districts, process_neighborhoods) tuple
@@ -220,6 +228,21 @@ class EmlakJetScraper(BaseScraper):
             print(f"❌ {province['name']} için ilçe bulunamadı!")
             return ([province], False)  # Return province itself if no districts
         
+        if api_mode:
+            # In API mode, if specific districts provided by name, match them
+            if api_districts:
+                selected = [d for d in districts if d['name'] in api_districts]
+                if selected:
+                    for d in selected:
+                        d['il'] = province['name']
+                    return (selected, True) # Assume we want neighborhoods if specific districts selected? Or customize further.
+                return ([], False) # Or fallback to all? Let's be strict for now.
+            
+            # If API mode but no districts, traverse ALL
+            for d in districts:
+                d['il'] = province['name']
+            return (districts, True) # Process all districts
+
         print("\n1. Tüm ilçeleri tara (her ilçe için mahalle seç)")
         print("2. Tüm ili direkt tara (ilçe/mahalle seçimi yapma)")
         print("3. Belirli ilçeleri seç")
@@ -251,7 +274,7 @@ class EmlakJetScraper(BaseScraper):
         else:
             return ([province], False)  # Fallback to province
     
-    def select_neighborhoods_for_district(self, district: Dict) -> List[Dict]:
+    def select_neighborhoods_for_district(self, district: Dict, api_mode: bool = False) -> List[Dict]:
         """Select neighborhoods for a specific district"""
         province_name = district.get('il', '')
         district_name = district['name']
@@ -261,6 +284,12 @@ class EmlakJetScraper(BaseScraper):
         
         if not neighborhoods:
             return [district]  # Return district itself if no neighborhoods
+        
+        if api_mode:
+             # In API mode default to ALL neighborhoods for now if district selected
+             # Ideally we could filter by neighborhood list too
+             return [district] # For speed in API mode maybe skip neighborhood drill down or scrape district root?
+             # Let's return district root to scrape all listings in district
         
         print("\n1. Tüm mahalleleri tara")
         print("2. Mahalle seç")
@@ -288,6 +317,107 @@ class EmlakJetScraper(BaseScraper):
         else:
             return [district]  # Fallback to district
     
+    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[List[str]] = None, max_pages: int = 1):
+        """API entry point for scraping without user interaction"""
+        print(f"\n🚀 API: EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
+        
+        try:
+            # Map city names to indices if possible, or search logic?
+            # Existing select_provinces logic is index based on scraping "all cities" list.
+            # We need to find indices matching names.
+            
+            print("Getting province list...")
+            all_provinces = self.get_location_options("İller", self.base_url)
+            
+            api_indices = []
+            if cities:
+                for idx, p in enumerate(all_provinces, 1):
+                     if p['name'] in cities:
+                         api_indices.append(idx)
+            
+            # Step 1: Select provinces
+            provinces = self.select_provinces(api_indices=api_indices if cities else None) 
+            # If no cities provided, maybe scraping all is too much?
+            # For safety, if no cities, return or error? 
+            # In select_provinces logic above, if api_indices is None (but arg passed), it asks user? 
+            # No, we modified it to check `if api_indices:`
+            if not provinces and not cities:
+                 # If cities empty and api call, maybe we shouldn't ask user.
+                 logger.error("No cities provided for API scrape")
+                 return
+            
+            user_max_pages = max_pages
+            
+            # Step 2: Process each province sequentially
+            for prov_idx, province in enumerate(provinces, 1):
+                # Get listing count for this province
+                listing_count = self.get_listing_count(province['url'])
+                
+                print("\n" + "=" * 70)
+                print(f"🏙️  İL {prov_idx}/{len(provinces)}: {province['name']} (Toplam İlan: {listing_count})")
+                print("=" * 70)
+                
+                # Select districts for this province
+                # We pass api_mode=True
+                selected_districts, process_neighborhoods = self.select_districts_for_province(
+                    province, 
+                    api_mode=True, 
+                    api_districts=districts
+                )
+                
+                if not selected_districts:
+                    print(f"⏭️  {province['name']} atlandı.")
+                    continue
+                
+                # Process each district
+                for dist_idx, district in enumerate(selected_districts, 1):
+                    # Check if this is province-level (no district selection)
+                    if district.get('url') == province.get('url'):
+                        # Scrape entire province directly
+                        targets = [{'url': province['url'], 'label': province['name'], 'type': 'il'}]
+                    elif process_neighborhoods:
+                        # Select neighborhoods for this district
+                        # api_mode=True returns just district root usually
+                        print(f"\n📍 İlçe {dist_idx}/{len(selected_districts)}: {district['name']}")
+                        neighborhoods = self.select_neighborhoods_for_district(district, api_mode=True)
+                        if not neighborhoods:
+                            continue
+                        
+                        # Check if district-level or neighborhood-level
+                        if len(neighborhoods) == 1 and neighborhoods[0].get('url') == district.get('url'):
+                            targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
+                        else:
+                            targets = [{'url': n['url'], 'label': f"{n.get('il', '')} / {n.get('ilce', '')} / {n['name']}", 'type': 'mahalle'} for n in neighborhoods]
+                    else:
+                        # Scrape district directly without neighborhood selection
+                        targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
+                    
+                    # Scrape targets
+                    for target in targets:
+                        print(f"\n📍 Taranıyor: {target['label']}")
+                        
+                        url_max_pages = self.get_max_pages(target['url'])
+                        max_pages_to_scrape = min(user_max_pages, url_max_pages)
+                        print(f"📊 {url_max_pages} sayfa mevcut, {max_pages_to_scrape} sayfa taranacak.")
+                        
+                        should_skip = self.scrape_pages(target['url'], max_pages_to_scrape)
+                        if should_skip:
+                            print("⏭️  Bu lokasyon atlandı.")
+            
+            # Save data (only Excel)
+            if self.all_listings:
+                self.exporter.save_excel(
+                    self.all_listings,
+                    prefix=f"emlakjet_{self.category}_ilanlari"
+                )
+                print(f"\n✅ Scraping tamamlandı! Toplam {len(self.all_listings)} ilan bulundu.")
+            else:
+                print("\n❌ Hiç ilan bulunamadı!")
+
+        except Exception as e:
+            logger.error(f"API Scraping error: {e}")
+            raise e
+
     def start_scraping(self):
         """Main scraping entry point - Sequential city processing"""
         print(f"\n🚀 EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
