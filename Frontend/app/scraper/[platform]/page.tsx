@@ -3,14 +3,15 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArtCard } from '@/components/ui/ArtCard';
-import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
 import { motion } from 'framer-motion';
-import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X } from 'lucide-react';
+import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { startScrape } from '@/lib/api';
-import { CATEGORIES, TURKISH_CITIES, type Platform, type ListingType } from '@/types';
+import { CATEGORIES, type Platform, type ListingType } from '@/types';
 
 export default function PlatformScraperPage() {
     const params = useParams();
@@ -20,8 +21,10 @@ export default function PlatformScraperPage() {
     const [category, setCategory] = useState('konut');
     const [selectedCities, setSelectedCities] = useState<string[]>([]);
     const [maxPages, setMaxPages] = useState(1);
+    const [scrapeAllPages, setScrapeAllPages] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const platformIcon = platform === 'emlakjet' ? '🔵' : '🟢';
@@ -32,6 +35,16 @@ export default function PlatformScraperPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Require city selection
+        if (selectedCities.length === 0) {
+            setResult({
+                type: 'error',
+                message: 'Lütfen en az bir şehir seçin. Haritadan şehir seçmek için butona tıklayın.',
+            });
+            return;
+        }
+
         setIsLoading(true);
         setResult(null);
 
@@ -39,8 +52,8 @@ export default function PlatformScraperPage() {
             const response = await startScrape(platform, {
                 category,
                 listing_type: listingType,
-                cities: selectedCities.length > 0 ? selectedCities : undefined,
-                max_pages: maxPages,
+                cities: selectedCities,
+                max_pages: scrapeAllPages ? 9999 : maxPages, // Use high number for all pages
             });
 
             setResult({ type: 'success', message: response.message });
@@ -51,13 +64,6 @@ export default function PlatformScraperPage() {
             });
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const city = e.target.value;
-        if (city && !selectedCities.includes(city)) {
-            setSelectedCities([...selectedCities, city]);
         }
     };
 
@@ -115,53 +121,78 @@ export default function PlatformScraperPage() {
 
                     {/* Cities */}
                     <div>
-                        <label className="text-sm font-medium text-gray-300 mb-2 block">
+                        <label className="text-sm font-medium text-slate-300 mb-2 block">
                             🌍 Şehirler
                         </label>
-                        <Select
-                            value=""
-                            onChange={handleCityChange}
-                            options={[
-                                { value: '', label: 'Şehir ekle...' },
-                                ...TURKISH_CITIES.map((city) => ({ value: city, label: city })),
-                            ]}
-                        />
+                        <button
+                            type="button"
+                            onClick={() => setIsMapModalOpen(true)}
+                            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/50 border border-slate-600 hover:bg-slate-700/50 hover:border-sky-500/50 transition-all text-slate-200 font-medium"
+                        >
+                            <MapPin className="w-5 h-5 text-sky-400" />
+                            {selectedCities.length > 0 ? `${selectedCities.length} Şehir Seçildi` : 'Haritadan Şehir Seç'}
+                        </button>
                         {selectedCities.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-4">
-                                {selectedCities.map((city) => (
+                                {selectedCities.slice(0, 8).map((city) => (
                                     <motion.span
                                         key={city}
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
-                                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${platform === 'emlakjet' ? 'from-blue-500/20 to-cyan-500/20 border-blue-500/30' : 'from-pink-500/20 to-purple-500/20 border-pink-500/30'
-                                            } border text-white font-semibold`}
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm font-medium"
                                     >
                                         {city}
                                         <button
                                             type="button"
                                             onClick={() => removeCity(city)}
-                                            className="hover:scale-125 transition-transform"
+                                            className="hover:text-red-400 transition-colors"
                                         >
-                                            <X className="w-4 h-4" />
+                                            <X className="w-3 h-3" />
                                         </button>
                                     </motion.span>
                                 ))}
+                                {selectedCities.length > 8 && (
+                                    <span className="px-3 py-1.5 rounded-full bg-slate-700 text-slate-300 text-sm">
+                                        +{selectedCities.length - 8} daha
+                                    </span>
+                                )}
                             </div>
                         )}
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-slate-500 mt-2">
                             Boş bırakılırsa tüm şehirler taranır
                         </p>
                     </div>
 
-                    {/* Max Pages */}
-                    <Input
-                        label="📄 Maksimum Sayfa"
-                        type="number"
-                        min={1}
-                        max={50}
-                        value={maxPages}
-                        onChange={(e) => setMaxPages(parseInt(e.target.value) || 1)}
+                    {/* City Selection Modal */}
+                    <CitySelectionModal
+                        isOpen={isMapModalOpen}
+                        onClose={() => setIsMapModalOpen(false)}
+                        selectedCities={selectedCities}
+                        onCitiesChange={setSelectedCities}
                     />
+
+                    {/* Max Pages & Scrape All */}
+                    <div className="flex items-end gap-4">
+                        <div className="flex-1">
+                            <Input
+                                label="📄 Maksimum Sayfa"
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={maxPages}
+                                onChange={(e) => setMaxPages(parseInt(e.target.value) || 1)}
+                                disabled={scrapeAllPages}
+                                className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
+                            />
+                        </div>
+                        <div className="pb-3">
+                            <Checkbox
+                                label="Tüm Sayfaları Tara"
+                                checked={scrapeAllPages}
+                                onChange={setScrapeAllPages}
+                            />
+                        </div>
+                    </div>
 
                     {/* Submit Button */}
                     <button
@@ -192,8 +223,8 @@ export default function PlatformScraperPage() {
                             <ArtCard
                                 glowColor={result.type === 'success' ? 'blue' : 'pink'}
                                 className={`border-2 ${result.type === 'success'
-                                        ? 'border-green-500/50 bg-green-500/10'
-                                        : 'border-red-500/50 bg-red-500/10'
+                                    ? 'border-green-500/50 bg-green-500/10'
+                                    : 'border-red-500/50 bg-red-500/10'
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
