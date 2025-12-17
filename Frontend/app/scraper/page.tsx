@@ -36,7 +36,7 @@ const platforms = [
         gradient: 'from-pink-500 to-purple-500',
         glowColor: 'pink' as const,
         features: ['Konut', 'Arsa', 'İşyeri', 'Devremülk'],
-        tagline: 'Kapsamlı veri analiz platformu',
+        tagline: 'Profesyonel Veri Toplama Aracı',
         Icon: Zap,
     },
 ];

@@ -34,20 +34,18 @@ export function ClientLayout({ children }: { children: ReactNode }) {
             {/* Abstract Decorations - Layer 1 */}
             <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
                 <div className="abstract-circle" style={{
-                    background: 'radial-gradient(circle, #ff006e, transparent)',
+                    background: 'radial-gradient(circle, #38bdf8, transparent)', // Sky Blue
                     top: '10%',
-                    right: '10%'
+                    right: '10%',
+                    opacity: 0.05
                 }} />
                 <div className="abstract-circle" style={{
-                    background: 'radial-gradient(circle, #8338ec, transparent)',
+                    background: 'radial-gradient(circle, #34d399, transparent)', // Emerald Green
                     bottom: '20%',
-                    left: '15%'
+                    left: '15%',
+                    opacity: 0.05
                 }} />
-                <div className="abstract-square" style={{
-                    background: 'linear-gradient(45deg, #3a86ff, #06ffa5)',
-                    top: '40%',
-                    right: '30%'
-                }} />
+                {/* Square removed consistent with corporate theme */}
             </div>
 
             {/* Layout Container */}

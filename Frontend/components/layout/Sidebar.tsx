@@ -23,22 +23,22 @@ export function Sidebar() {
             <aside
                 className={cn(
                     'hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 z-50',
-                    // Visual updates: Glassmorphism + Gradient Border
-                    'border-r border-white/10 backdrop-blur-xl bg-black/40',
+                    // Visual updates: Corporate Glass - Clean Slate borders
+                    'border-r border-slate-700/50 backdrop-blur-xl bg-slate-900/80',
                     isCollapsed ? 'lg:w-20' : 'lg:w-64'
                 )}
             >
                 {/* Logo */}
                 <div className={cn(
-                    'flex items-center h-16 px-6 border-b border-white/10',
+                    'flex items-center h-16 px-6 border-b border-slate-700/50',
                     isCollapsed && 'justify-center px-3'
                 )}>
                     <Link href="/" className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-[0_0_15px_rgba(255,0,110,0.5)]">
+                        <div className="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-sky-500/20">
                             <Home className="w-4 h-4 text-white" />
                         </div>
                         {!isCollapsed && (
-                            <span className="text-lg font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap overflow-hidden">
+                            <span className="text-lg font-bold text-slate-100 whitespace-nowrap overflow-hidden">
                                 Emlak Scraper
                             </span>
                         )}
@@ -56,22 +56,22 @@ export function Sidebar() {
                                 key={item.href}
                                 href={item.href}
                                 className={cn(
-                                    'flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 group',
+                                    'flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group',
                                     isCollapsed && 'justify-center',
                                     isActive
-                                        ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/50 text-white shadow-[0_0_10px_rgba(255,0,110,0.2)]'
-                                        : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                                        ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
                                 )}
                                 title={isCollapsed ? item.label : undefined}
                             >
                                 <Icon className={cn(
                                     'w-5 h-5 flex-shrink-0 transition-colors',
-                                    isActive ? 'text-pink-400' : 'text-gray-500 group-hover:text-pink-300'
+                                    isActive ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'
                                 )} />
                                 {!isCollapsed && (
                                     <span className={cn(
                                         'font-medium whitespace-nowrap',
-                                        isActive ? 'text-pink-100' : ''
+                                        isActive ? 'text-sky-100' : ''
                                     )}>
                                         {item.label}
                                     </span>

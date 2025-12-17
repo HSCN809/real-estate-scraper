@@ -1,137 +1,148 @@
 @import 'tailwindcss';
 
 :root {
-  /* Data Art Color Palette */
-  --art-pink: #ff006e;
-  --art-purple: #8338ec;
-  --art-orange: #fb5607;
-  --art-blue: #3a86ff;
-  --art-cyan: #06ffa5;
-  --art-yellow: #ffbe0b;
-  --art-bg: #0d0221;
-  --art-bg-light: #1a0b3d;
+  /* Corporate Glass Color Palette */
+  --corp-bg: #0f172a;
+  /* Slate 900 - Deep Professional Background */
+  --corp-bg-light: #1e293b;
+  /* Slate 800 - Card Background */
+
+  /* Accents */
+  --corp-primary: #38bdf8;
+  /* Sky 400 - Primary Actions/Links */
+  --corp-success: #34d399;
+  /* Emerald 400 - Success/Data */
+  --corp-accent: #818cf8;
+  /* Indigo 400 - Secondary Accent */
+  --corp-silver: #94a3b8;
+  /* Slate 400 - Text/Borders */
+
+  /* Glass Effects */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.03);
 }
 
-/* Artistic Background */
+/* Professional Background */
 body {
-  background: radial-gradient(circle at 20% 50%, rgba(131, 56, 236, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(255, 0, 110, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 40% 20%, rgba(58, 134, 255, 0.1) 0%, transparent 50%),
-    var(--art-bg);
-  color: white;
+  background-color: var(--corp-bg);
+  background-image:
+    radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(52, 211, 153, 0.05) 0%, transparent 40%);
+  color: #f1f5f9;
+  /* Slate 100 */
   overflow-x: hidden;
 }
 
-/* Gradient Text */
+/* Corporate Gradients - Clean & Subtle */
 .gradient-art-pink {
-  background: linear-gradient(135deg, var(--art-pink) 0%, var(--art-purple) 100%);
+  /* Remapped to Blue/Sky for consistency without changing all class names yet */
+  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .gradient-art-blue {
-  background: linear-gradient(135deg, var(--art-blue) 0%, var(--art-cyan) 100%);
+  /* Remapped to Emerald/Teal */
+  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .gradient-art-warm {
-  background: linear-gradient(135deg, var(--art-orange) 0%, var(--art-yellow) 100%);
+  /* Remapped to Silver/Indigo */
+  background: linear-gradient(135deg, #94a3b8 0%, #818cf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Art Card Styles */
+/* Glass Card Styles - Refined & Professional */
 .art-card {
-  background: linear-gradient(135deg, rgba(131, 56, 236, 0.1) 0%, rgba(255, 0, 110, 0.05) 100%);
-  backdrop-filter: blur(20px);
-  border: 2px solid transparent;
-  border-radius: 24px;
+  background: rgba(30, 41, 59, 0.4);
+  /* Slate 800 with transparency */
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  /* Slightly less rounded than Art theme */
   position: relative;
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .art-card::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 24px;
-  padding: 2px;
-  background: linear-gradient(135deg, var(--art-pink), var(--art-purple), var(--art-blue), var(--art-cyan));
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0.8;
   pointer-events: none;
 }
 
-.art-card:hover::before {
-  animation: rotate-gradient 3s linear infinite;
+/* Hover Effects - Subtle Lift */
+.hover-art:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(56, 189, 248, 0.2);
+  /* Sky Blue Border on hover */
+  transition: all 0.3s ease;
 }
 
-@keyframes rotate-gradient {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
+.hover-art:hover::before {
+  /* No rotating gradient, just subtle static highlight */
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.3), transparent);
 }
 
-/* Neon Glow Effects */
+/* Removed Keyframes for rotation */
+
+/* Neon Glow Mappings -> Subtle Shadows */
 .neon-pink {
-  box-shadow: 0 0 20px rgba(255, 0, 110, 0.5),
-    0 0 40px rgba(255, 0, 110, 0.3);
+  /* Mapped to Blue */
+  /* No harsh glow */
 }
 
 .neon-purple {
-  box-shadow: 0 0 20px rgba(131, 56, 236, 0.5),
-    0 0 40px rgba(131, 56, 236, 0.3);
+  /* Mapped to Indigo */
 }
 
 .neon-blue {
-  box-shadow: 0 0 20px rgba(58, 134, 255, 0.5),
-    0 0 40px rgba(58, 134, 255, 0.3);
+  /* Mapped to Emerald */
 }
 
-/* Abstract Shapes */
+/* Abstract Shapes - Toned Down */
 .abstract-circle {
   width: 400px;
   height: 400px;
   border-radius: 50%;
   position: absolute;
-  filter: blur(80px);
-  opacity: 0.3;
-  animation: float 20s ease-in-out infinite;
+  filter: blur(100px);
+  /* Softer blur */
+  opacity: 0.15;
+  /* Lower opacity */
+  animation: float 30s ease-in-out infinite;
+  /* Slower animation */
 }
 
 .abstract-square {
-  width: 300px;
-  height: 300px;
-  position: absolute;
-  filter: blur(60px);
-  opacity: 0.2;
-  animation: float 15s ease-in-out infinite reverse;
-  transform: rotate(45deg);
+  display: none;
+  /* Removing geometrical clutter for corporate look */
 }
 
 @keyframes float {
 
   0%,
   100% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0);
   }
 
-  33% {
-    transform: translate(100px, -50px) rotate(120deg);
-  }
-
-  66% {
-    transform: translate(-50px, 100px) rotate(240deg);
+  50% {
+    transform: translate(20px, -20px);
   }
 }
 
@@ -144,94 +155,65 @@ body {
   height: 100%;
   pointer-events: none;
   z-index: 0;
+  opacity: 0.3;
+  /* Subtle particles */
 }
 
-/* Animated Data Flow Lines */
-@keyframes flow {
-  0% {
-    stroke-dashoffset: 1000;
-  }
-
-  100% {
-    stroke-dashoffset: 0;
-  }
-}
-
-.data-flow-line {
-  stroke-dasharray: 10 5;
-  animation: flow 2s linear infinite;
-}
-
-/* Bold Typography */
+/* Typography adjustments */
 .art-title {
-  font-size: 3rem;
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  line-height: 1.1;
+  font-size: 2.5rem;
+  /* Slightly smaller */
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  /* Cleaner tracking */
+  line-height: 1.2;
 }
 
-/* Hover Transform */
-.hover-art:hover {
-  transform: translateY(-8px) scale(1.02);
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Custom Scrollbar */
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--art-bg-light);
+  background: var(--corp-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--art-pink), var(--art-purple));
-  border-radius: 10px;
+  background: #475569;
+  /* Slate 600 */
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--art-purple), var(--art-blue));
+  background: #64748b;
+  /* Slate 500 */
 }
 
-/* Selection */
 ::selection {
-  background: var(--art-pink);
+  background: rgba(56, 189, 248, 0.3);
+  /* Sky Blue selection */
   color: white;
 }
 
-/* Artistic Button */
+/* Corporate Button */
 .art-button {
-  background: linear-gradient(135deg, var(--art-pink), var(--art-purple));
-  border: none;
+  background: #0ea5e9;
+  /* Sky 500 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: white;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.025em;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.art-button:hover {
+  background: #0284c7;
+  /* Sky 600 */
 }
 
 .art-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transition: left 0.5s;
-  pointer-events: none;
-}
-
-.art-button:hover::before {
-  left: 100%;
-}
-
-/* Geometric Pattern Overlay */
-.pattern-overlay {
-  background-image:
-    linear-gradient(30deg, transparent 12%, rgba(255, 0, 110, 0.05) 12%, rgba(255, 0, 110, 0.05) 14%, transparent 14%),
-    linear-gradient(150deg, transparent 12%, rgba(131, 56, 236, 0.05) 12%, rgba(131, 56, 236, 0.05) 14%, transparent 14%);
-  background-size: 80px 80px;
+  /* Remove sweep effect */
+  display: none;
 }
