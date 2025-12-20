@@ -124,7 +124,7 @@ async def get_results():
     import glob
     from datetime import datetime
     
-    output_dir = "outputs"
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs")
     final_results = []
     
     if not os.path.exists(output_dir):
@@ -176,7 +176,7 @@ async def get_stats():
     import glob
     from datetime import datetime, timedelta
     
-    output_dir = "outputs"
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs")
     total_scrapes = 0
     total_listings = 0 # Placeholder, would need to read files to be accurate
     recent_activity = []
