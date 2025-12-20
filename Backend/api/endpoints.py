@@ -121,49 +121,68 @@ async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: Background
 @router.get("/results")
 async def get_results():
     import os
-    import glob
     from datetime import datetime
     
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs")
-    final_results = []
+    # Calculate project root robustly
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    # Check for outputs directory (trying both cases just to be safe, though Windows is insensitive)
+    output_dir_name = "outputs"
+    output_dir = os.path.join(project_root, output_dir_name)
     
     if not os.path.exists(output_dir):
-        return final_results
+        # Try capitalized
+        output_dir = os.path.join(project_root, "Outputs")
+        if not os.path.exists(output_dir):
+            logger.warning(f"Output directory not found at {os.path.join(project_root, 'outputs')} or Outputs")
+            return []
 
-    # Recursive search for excel and json files
-    files = []
-    for ext in ['*.xlsx', '*.json']:
-        files.extend(glob.glob(os.path.join(output_dir, '**', ext), recursive=True))
-
-    # Group files by timestamp/session if possible, or just list them
-    # For now, let's list individual files as results
-    for file_path in files:
-        stats = os.stat(file_path)
-        filename = os.path.basename(file_path)
-        platform = "emlakjet" if "emlakjet" in filename.lower() else "hepsiemlak" if "hepsiemlak" in filename.lower() else "Unknown"
-        
-        # Try to extract category from path or filename
-        category = "Genel"
-        if "konut" in filename.lower(): category = "Konut"
-        elif "arsa" in filename.lower(): category = "Arsa"
-        elif "isyeri" in filename.lower(): category = "İşyeri"
-        
-        final_results.append({
-            "id": filename,
-            "platform": platform.capitalize(),
-            "category": category,
-            "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
-            "count": 0, # Cannot easily determine count without opening file
-            "status": "completed",
-            "files": [{
-                "type": "excel" if filename.endswith('.xlsx') else "json",
-                "name": filename,
-                "path": file_path
-            }]
-        })
+    final_results = []
+    
+    print(f"DEBUG: Scanning directory for results: {output_dir}")
+    
+    # Use os.walk for robust directory traversal
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if filename.lower().endswith(('.xlsx', '.json')):
+                file_path = os.path.join(root, filename)
+                try:
+                    stats = os.stat(file_path)
+                    
+                    # Platform detection
+                    platform = "Unknown"
+                    lower_name = filename.lower()
+                    if "emlakjet" in lower_name: 
+                        platform = "Emlakjet" 
+                    elif "hepsiemlak" in lower_name: 
+                        platform = "HepsiEmlak"
+                    
+                    # Category detection
+                    category = "Genel"
+                    if "konut" in lower_name: category = "Konut"
+                    elif "arsa" in lower_name: category = "Arsa"
+                    elif "isyeri" in lower_name: category = "İşyeri"
+                    
+                    final_results.append({
+                        "id": filename,
+                        "platform": platform,
+                        "category": category,
+                        "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
+                        "count": 0, 
+                        "status": "completed",
+                        "files": [{
+                            "type": "excel" if filename.endswith('.xlsx') else "json",
+                            "name": filename,
+                            "path": file_path
+                        }]
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing file {file_path}: {e}")
         
     # Sort by date descending
     final_results.sort(key=lambda x: x['date'], reverse=True)
+    print(f"DEBUG: Found {len(final_results)} results")
     return final_results
 
 @router.get("/status")
@@ -173,13 +192,17 @@ async def get_status():
 @router.get("/stats")
 async def get_stats():
     import os
-    import glob
     from datetime import datetime, timedelta
     
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outputs")
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+
     total_scrapes = 0
-    total_listings = 0 # Placeholder, would need to read files to be accurate
-    recent_activity = []
+    total_listings = 0
     
     this_week_count = 0
     this_month_count = 0
@@ -187,10 +210,13 @@ async def get_stats():
     
     if os.path.exists(output_dir):
         files = []
-        for ext in ['*.xlsx', '*.json']:
-            files.extend(glob.glob(os.path.join(output_dir, '**', ext), recursive=True))
+        for root, dirs, project_files in os.walk(output_dir):
+            for filename in project_files:
+                if filename.lower().endswith(('.xlsx', '.json')):
+                    files.append(os.path.join(root, filename))
             
         total_scrapes = len(files)
+        
         # Sort files by time for recent activity
         files.sort(key=os.path.getmtime, reverse=True)
         
@@ -200,15 +226,18 @@ async def get_stats():
 
         now = datetime.now()
         for f in files:
-            mtime = datetime.fromtimestamp(os.path.getmtime(f))
-            if now - mtime < timedelta(days=7):
-                this_week_count += 1
-            if now - mtime < timedelta(days=30):
-                this_month_count += 1
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(f))
+                if now - mtime < timedelta(days=7):
+                    this_week_count += 1
+                if now - mtime < timedelta(days=30):
+                    this_month_count += 1
+            except OSError:
+                continue
                 
     return {
         "total_scrapes": total_scrapes,
-        "total_listings": 0, # We'd need to parse files for this
+        "total_listings": 0,
         "this_week": this_week_count,
         "this_month": this_month_count,
         "last_scrape": last_scrape_date

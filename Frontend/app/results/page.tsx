@@ -28,12 +28,16 @@ export default function ResultsPage() {
     const fetchResults = async () => {
         try {
             setLoading(true);
+            console.log('Fetching results...');
             const data = await getResults();
-            setResults(data);
+            console.log('Results received:', data);
+            console.log('Results type:', typeof data);
+            console.log('Is Array:', Array.isArray(data));
+            setResults(Array.isArray(data) ? data : []);
             setError(null);
         } catch (err) {
             setError('Veriler alınırken bir hata oluştu');
-            console.error(err);
+            console.error('Fetch error:', err);
         } finally {
             setLoading(false);
         }
@@ -99,6 +103,12 @@ export default function ResultsPage() {
                 </ArtCard>
             )}
 
+            {/* DEBUG: Raw Data Display */}
+            <div className="bg-black/50 p-4 rounded text-xs font-mono text-green-400 overflow-auto max-h-60 mb-8 border border-green-500/30">
+                <h3 className="text-white font-bold mb-2 border-b border-green-500/30 pb-2">DEBUG: HAM VERİ ({results.length} adet)</h3>
+                <pre>{JSON.stringify(results, null, 2)}</pre>
+            </div>
+
             {/* Results Grid */}
             {!loading && !error && (
                 <div className="grid grid-cols-1 gap-6">
@@ -114,8 +124,8 @@ export default function ResultsPage() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${result.platform === 'Emlakjet'
-                                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                                                    : 'bg-green-500/20 text-green-300 border border-green-500/30'
+                                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                                : 'bg-green-500/20 text-green-300 border border-green-500/30'
                                                 }`}>
                                                 {result.platform}
                                             </span>
@@ -146,8 +156,8 @@ export default function ResultsPage() {
                                             <button
                                                 key={file.name}
                                                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 hover:border-white/30 transition-all hover:scale-105 ${file.type === 'excel'
-                                                        ? 'bg-green-500/10 hover:bg-green-500/20 text-green-400'
-                                                        : 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400'
+                                                    ? 'bg-green-500/10 hover:bg-green-500/20 text-green-400'
+                                                    : 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400'
                                                     }`}
                                                 onClick={() => {
                                                     // TODO: Implement download logic
@@ -183,6 +193,10 @@ export default function ResultsPage() {
                                 </div>
                                 <h3 className="text-xl font-bold text-white">Henüz Sonuç Yok</h3>
                                 <p className="text-gray-400">Yeni bir tarama başlatarak veri toplamaya başlayın.</p>
+                                <p className="text-gray-500 text-xs mt-4 bg-white/5 p-2 rounded">
+                                    Debug: Veri gelmiyorsa Backend terminal loglarını kontrol edin.<br />
+                                    API taranan dizini log olarak yazar.
+                                </p>
                             </div>
                         </ArtCard>
                     )}
