@@ -375,12 +375,15 @@ class HepsiemlakScraper(BaseScraper):
         except:
             return 1
     
-    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False) -> List[Dict[str, Any]]:
+    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None) -> List[Dict[str, Any]]:
         """Scrape all listings for a single city"""
         print(f"\n{'=' * 60}")
         print(f"{city} İÇİN SCRAPING BAŞLIYOR")
         print("=" * 60)
         
+        if progress_callback:
+            progress_callback(f"{city} için tarama başlatılıyor...", current=0, total=100)
+            
         try:
             # Select city
             if not self.select_single_city(city):
@@ -432,6 +435,10 @@ class HepsiemlakScraper(BaseScraper):
             for page in range(1, pages_to_scrape + 1):
                 print(f"{city} - Sayfa {page}/{pages_to_scrape}...")
                 
+                if progress_callback:
+                    page_progress = int((page / pages_to_scrape) * 100)
+                    progress_callback(f"{city} - Sayfa {page}/{pages_to_scrape} taranıyor...", current=page, total=pages_to_scrape, progress=page_progress)
+                
                 if page > 1:
                     page_url = f"{self.base_url}?page={page}"
                     self.driver.get(page_url)
@@ -480,7 +487,7 @@ class HepsiemlakScraper(BaseScraper):
         
         return listings
     
-    def start_scraping_api(self, max_pages: int = 1):
+    def start_scraping_api(self, max_pages: int = 1, progress_callback=None):
         """API scraping entry point"""
         print(f"\n🚀 API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")
         
@@ -504,7 +511,7 @@ class HepsiemlakScraper(BaseScraper):
                 # Currently scrape_city asks for input call: user_input = input(...)
                 
                 # We need to refactor scrape_city to take max_pages arg
-                city_listings = self.scrape_city(city, max_pages=max_pages, api_mode=True)
+                city_listings = self.scrape_city(city, max_pages=max_pages, api_mode=True, progress_callback=progress_callback)
                 if city_listings:
                     all_results[city] = city_listings
                 time.sleep(2)

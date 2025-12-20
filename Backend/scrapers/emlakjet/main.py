@@ -317,9 +317,12 @@ class EmlakJetScraper(BaseScraper):
         else:
             return [district]  # Fallback to district
     
-    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[List[str]] = None, max_pages: int = 1):
+    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[List[str]] = None, max_pages: int = 1, progress_callback=None):
         """API entry point for scraping without user interaction"""
         print(f"\n🚀 API: EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
+        
+        if progress_callback:
+            progress_callback(f"{self.category.capitalize()} taraması başlatılıyor...", 0, 100, 0)
         
         try:
             # Map city names to indices if possible, or search logic?
@@ -356,6 +359,10 @@ class EmlakJetScraper(BaseScraper):
                 print("\n" + "=" * 70)
                 print(f"🏙️  İL {prov_idx}/{len(provinces)}: {province['name']} (Toplam İlan: {listing_count})")
                 print("=" * 70)
+                
+                if progress_callback:
+                    base_progress = ((prov_idx - 1) / len(provinces)) * 100
+                    progress_callback(f"İşleniyor: {province['name']}...", prov_idx, len(provinces), base_progress)
                 
                 # Select districts for this province
                 # We pass api_mode=True
@@ -401,6 +408,11 @@ class EmlakJetScraper(BaseScraper):
                         print(f"📊 {url_max_pages} sayfa mevcut, {max_pages_to_scrape} sayfa taranacak.")
                         
                         should_skip = self.scrape_pages(target['url'], max_pages_to_scrape)
+                        
+                        if progress_callback:
+                            # Refine progress based on district progress
+                            pass
+
                         if should_skip:
                             print("⏭️  Bu lokasyon atlandı.")
             

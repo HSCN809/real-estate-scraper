@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
+import { ProgressModal } from '@/components/ui/ProgressModal';
 import { motion } from 'framer-motion';
 import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
@@ -25,6 +26,7 @@ export default function PlatformScraperPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+    const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const platformIcon = platform === 'emlakjet' ? '🔵' : '🟢';
@@ -57,6 +59,7 @@ export default function PlatformScraperPage() {
             });
 
             setResult({ type: 'success', message: response.message });
+            setIsProgressModalOpen(true);
         } catch (error) {
             setResult({
                 type: 'error',
@@ -169,6 +172,12 @@ export default function PlatformScraperPage() {
                         onClose={() => setIsMapModalOpen(false)}
                         selectedCities={selectedCities}
                         onCitiesChange={setSelectedCities}
+                    />
+
+                    {/* Progress Modal */}
+                    <ProgressModal
+                        isOpen={isProgressModalOpen}
+                        onClose={() => setIsProgressModalOpen(false)}
                     />
 
                     {/* Max Pages & Scrape All */}

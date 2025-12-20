@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from api.schemas import ScrapeRequest, ScrapeResponse
 from core.driver_manager import DriverManager
 from core.config import get_emlakjet_config, get_hepsiemlak_config
+from api.status import task_status
 import logging
 
 # Import scrapers (will need refactoring to import cleanly)
@@ -19,6 +20,14 @@ def run_emlakjet_task(request: ScrapeRequest):
     try:
         driver = manager.start()
         config = get_emlakjet_config()
+        
+        # Reset and start status
+        task_status.reset()
+        task_status.set_running(True)
+        task_status.update("EmlakJet scraper başlatılıyor...", progress=0)
+
+        def progress_callback(message, current=0, total=0, progress=0):
+            task_status.update(message=message, current=current, total=total, progress=progress)
         
         # Construct base URL based on inputs
         # Logic adapted from original main.py
@@ -41,7 +50,8 @@ def run_emlakjet_task(request: ScrapeRequest):
              scraper.start_scraping_api(
                  cities=request.cities,
                  districts=request.districts,
-                 max_pages=request.max_pages
+                 max_pages=request.max_pages,
+                 progress_callback=progress_callback
              )
         else:
             logger.warning("Scraper api method not found (Refactor needed)")
@@ -49,6 +59,8 @@ def run_emlakjet_task(request: ScrapeRequest):
     except Exception as e:
         logger.error(f"EmlakJet task error: {e}")
     finally:
+        task_status.set_running(False)
+        task_status.update("İşlem tamamlandı", progress=100)
         manager.stop()
 
 def run_hepsiemlak_task(request: ScrapeRequest):
@@ -57,6 +69,14 @@ def run_hepsiemlak_task(request: ScrapeRequest):
     manager = DriverManager()
     try:
         driver = manager.start()
+        
+        # Reset and start status
+        task_status.reset()
+        task_status.set_running(True)
+        task_status.update("HepsiEmlak scraper başlatılıyor...", progress=0)
+        
+        def progress_callback(message, current=0, total=0, progress=0):
+            task_status.update(message=message, current=current, total=total, progress=progress)
         
         scraper = HepsiemlakScraper(
             driver=driver,
@@ -67,13 +87,15 @@ def run_hepsiemlak_task(request: ScrapeRequest):
         
         # Similarly, assume refactor allows programmatic run
         if hasattr(scraper, 'start_scraping_api'):
-            scraper.start_scraping_api(max_pages=request.max_pages)
+            scraper.start_scraping_api(max_pages=request.max_pages, progress_callback=progress_callback)
         else:
              logger.warning("Scraper api method not found (Refactor needed)")
 
     except Exception as e:
         logger.error(f"HepsiEmlak task error: {e}")
     finally:
+        task_status.set_running(False)
+        task_status.update("İşlem tamamlandı", progress=100)
         manager.stop()
 
 @router.post("/scrape/emlakjet", response_model=ScrapeResponse)
@@ -143,6 +165,10 @@ async def get_results():
     # Sort by date descending
     final_results.sort(key=lambda x: x['date'], reverse=True)
     return final_results
+
+@router.get("/status")
+async def get_status():
+    return task_status.to_dict()
 
 @router.get("/stats")
 async def get_stats():
