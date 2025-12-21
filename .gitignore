@@ -17,3 +17,6 @@ outputs/
 
 # IDE
 .idea/
+
+# Cleanup Script
+cleanup.ps1
