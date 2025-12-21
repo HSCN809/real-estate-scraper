@@ -16,11 +16,12 @@ flask==2.3.3
 flask-cors==4.0.0
 blinker==1.6.2
 
-# Browser Automation (Selenium)
+# Browser Automation (Selenium) - STEALTH MODE
 selenium==4.11.2
 webdriver-manager==4.0.1
 selenium-stealth==1.0.6
 selenium-wire==5.1.0
+undetected-chromedriver>=3.5.0  # Cloudflare, Turnstile bypass
 
 # Security & Utilities
 python-dotenv==1.0.0

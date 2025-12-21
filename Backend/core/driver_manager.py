@@ -1,15 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Chrome WebDriver Manager with anti-detection features and retry mechanism
+Chrome WebDriver Manager with STEALTH anti-detection features and retry mechanism
+Uses undetected-chromedriver to bypass Cloudflare, bot detection, etc.
 """
 
 import time
+import random
 import logging
 from typing import Optional
 from contextlib import contextmanager
 
+# Selenium import - her durumda gerekli (type annotations için)
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+
+# Stealth driver - bypasses most bot detection
+try:
+    import undetected_chromedriver as uc
+    USE_UNDETECTED = True
+except ImportError:
+    USE_UNDETECTED = False
+    logging.warning("undetected-chromedriver not installed. Using standard Selenium. Run: pip install undetected-chromedriver")
+
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import WebDriverException
 
@@ -17,11 +29,21 @@ from .config import get_config
 
 logger = logging.getLogger(__name__)
 
+# User-Agent havuzu - her seferinde farklı bir tarayıcı gibi görünmek için
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+]
+
 
 class DriverManager:
     """
-    Manages Chrome WebDriver lifecycle with anti-detection features.
-    Implements retry mechanism and proper cleanup.
+    Manages Chrome WebDriver lifecycle with STEALTH anti-detection features.
+    Uses undetected-chromedriver to bypass Cloudflare, Turnstile, and bot detection.
     """
     
     def __init__(self, headless: Optional[bool] = None):
@@ -33,52 +55,58 @@ class DriverManager:
         """
         self.config = get_config()
         self.headless = headless if headless is not None else self.config.headless
-        self.driver: Optional[webdriver.Chrome] = None
+        self.driver = None
         self.wait: Optional[WebDriverWait] = None
+        # Rastgele User-Agent seç
+        self.user_agent = random.choice(USER_AGENTS)
     
-    def _create_options(self) -> Options:
-        """Create Chrome options with anti-detection settings"""
-        chrome_options = Options()
+    def _create_stealth_options(self):
+        """Create stealth Chrome options for undetected-chromedriver"""
+        options = uc.ChromeOptions() if USE_UNDETECTED else Options()
         
-        # Basic settings
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
+        # Temel ayarlar
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         
-        # Anti-detection
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        chrome_options.add_experimental_option("useAutomationExtension", False)
+        # Rastgele User-Agent
+        options.add_argument(f"user-agent={self.user_agent}")
         
-        # Disable logging
-        chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("--disable-logging")
-        chrome_options.add_argument("--disable-dev-tools")
+        # Pencere boyutu (headless modda da gerekli)
+        options.add_argument("--window-size=1920,1080")
         
-        # User agent
-        chrome_options.add_argument(f"user-agent={self.config.user_agent}")
+        # Logging kapatma
+        options.add_argument("--log-level=3")
+        options.add_argument("--silent")
         
-        # Headless mode
-        if self.headless:
-            chrome_options.add_argument("--headless=new")
-            chrome_options.add_argument("--window-size=1920,1080")
-        
-        # Disable images (optional, for faster loading)
+        # Resimleri devre dışı bırak (hız için)
         if self.config.disable_images:
             prefs = {"profile.managed_default_content_settings.images": 2}
-            chrome_options.add_experimental_option("prefs", prefs)
+            options.add_experimental_option("prefs", prefs)
         
-        return chrome_options
+        return options
     
-    def _apply_anti_detection(self):
-        """Apply anti-detection JavaScript"""
+    def _apply_extra_stealth(self):
+        """Apply additional stealth JavaScript patches"""
         if self.driver:
+            # WebDriver property'sini gizle
             self.driver.execute_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
+            # Plugins ve languages ekle (boş olması bot işareti)
+            self.driver.execute_script("""
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['tr-TR', 'tr', 'en-US', 'en']
+                });
+            """)
     
-    def start(self) -> webdriver.Chrome:
+    def start(self):
         """
-        Start the Chrome driver with retry mechanism.
+        Start the Chrome driver with STEALTH mode.
+        Uses undetected-chromedriver if available, falls back to standard Selenium.
         
         Returns:
             Chrome WebDriver instance
@@ -90,13 +118,40 @@ class DriverManager:
         
         for attempt in range(self.config.max_retries):
             try:
-                logger.info(f"Starting Chrome driver (attempt {attempt + 1}/{self.config.max_retries})")
+                logger.info(f"🚀 Starting STEALTH Chrome driver (attempt {attempt + 1}/{self.config.max_retries})")
+                logger.info(f"   User-Agent: {self.user_agent[:50]}...")
                 
-                options = self._create_options()
-                self.driver = webdriver.Chrome(options=options)
+                options = self._create_stealth_options()
                 
-                # Apply anti-detection
-                self._apply_anti_detection()
+                if USE_UNDETECTED:
+                    # Undetected ChromeDriver - Cloudflare, Turnstile bypass
+                    self.driver = uc.Chrome(
+                        options=options,
+                        headless=self.headless,
+                        use_subprocess=True,
+                        version_main=None  # Otomatik Chrome versiyonu algılama
+                    )
+                    logger.info("✅ Using undetected-chromedriver (STEALTH MODE)")
+                else:
+                    # Fallback: Standart Selenium
+                    from selenium import webdriver
+                    from selenium.webdriver.chrome.options import Options as SeleniumOptions
+                    
+                    chrome_options = SeleniumOptions()
+                    chrome_options.add_argument("--no-sandbox")
+                    chrome_options.add_argument("--disable-dev-shm-usage")
+                    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+                    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+                    chrome_options.add_argument(f"user-agent={self.user_agent}")
+                    
+                    if self.headless:
+                        chrome_options.add_argument("--headless=new")
+                    
+                    self.driver = webdriver.Chrome(options=chrome_options)
+                    logger.warning("⚠️ Using standard Selenium (install undetected-chromedriver for better stealth)")
+                
+                # Ekstra stealth JavaScript patch'leri uygula
+                self._apply_extra_stealth()
                 
                 # Create wait object
                 self.wait = WebDriverWait(self.driver, self.config.element_wait_timeout)

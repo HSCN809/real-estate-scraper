@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Base Scraper class with common functionality for all scrapers
+STEALTH MODE - Randomized delays to avoid bot detection
 """
 
 import time
+import random
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Set
@@ -74,8 +76,44 @@ class BaseScraper(ABC):
         self.wait = WebDriverWait(driver, self.config.element_wait_timeout)
     
     # =========================================================================
-    # ABSTRACT METHODS (must be implemented by subclasses)
+    # STEALTH WAIT METHODS - Rastgele bekleme süreleri
     # =========================================================================
+    
+    def random_wait(self, wait_type: str = "medium") -> float:
+        """
+        Rastgele bekleme süresi - bot tespitinden kaçınmak için.
+        
+        Args:
+            wait_type: "short", "medium", or "long"
+            
+        Returns:
+            Beklenen süre (saniye)
+        """
+        if wait_type == "short":
+            min_wait, max_wait = self.config.random_wait_short
+        elif wait_type == "long":
+            min_wait, max_wait = self.config.random_wait_long
+        else:  # medium (default)
+            min_wait, max_wait = self.config.random_wait_medium
+        
+        wait_time = random.uniform(min_wait, max_wait)
+        time.sleep(wait_time)
+        return wait_time
+    
+    def random_short_wait(self) -> float:
+        """Kısa rastgele bekleme (0.5-1.5 sn)"""
+        return self.random_wait("short")
+    
+    def random_medium_wait(self) -> float:
+        """Orta rastgele bekleme (1.0-2.5 sn)"""
+        return self.random_wait("medium")
+    
+    def random_long_wait(self) -> float:
+        """Uzun rastgele bekleme (2.0-4.0 sn)"""
+        return self.random_wait("long")
+    
+    # =========================================================================
+    # ABSTRACT METHODS (must be implemented by subclasses)
     
     @abstractmethod
     def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:

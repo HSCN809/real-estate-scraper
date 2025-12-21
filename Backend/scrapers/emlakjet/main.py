@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-EmlakJet Main Scraper
-Refactored from original emlakjet_main.py
+EmlakJet Main Scraper - STEALTH MODE
+Refactored with randomized delays to avoid bot detection
 """
 
 import time
+import random
 import unicodedata
 from typing import Dict, List, Any, Optional
 
@@ -75,7 +76,7 @@ class EmlakJetScraper(BaseScraper):
             logger.info(f"Getting {location_type} options...")
             
             self.driver.get(current_url)
-            time.sleep(3)
+            self.random_long_wait()  # Stealth: lokasyon listesi
             
             location_options = []
             location_selector = self.common_selectors.get("location_links")
@@ -125,7 +126,7 @@ class EmlakJetScraper(BaseScraper):
         try:
             if target_url:
                 self.driver.get(target_url)
-                time.sleep(2)
+                self.random_medium_wait()  # Stealth
             
             pagination_sel = self.common_selectors.get("pagination_list")
             active_sel = self.common_selectors.get("active_page")
@@ -161,7 +162,7 @@ class EmlakJetScraper(BaseScraper):
         """Get total listing count from page"""
         try:
             self.driver.get(url)
-            time.sleep(2)
+            self.random_medium_wait()  # Stealth
             
             # Try to find listing count element
             count_element = self.driver.find_elements(

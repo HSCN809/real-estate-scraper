@@ -10,7 +10,7 @@ from typing import List, Optional
 
 @dataclass
 class ScraperConfig:
-    """Main configuration class for scraper settings"""
+    """Main configuration class for scraper settings - STEALTH OPTIMIZED"""
     
     # Timeouts
     page_load_timeout: int = 15
@@ -21,23 +21,29 @@ class ScraperConfig:
     retry_delay: float = 2.0
     retry_multiplier: float = 2.0  # Exponential backoff
     
-    # Rate limiting
-    wait_between_pages: float = 2.0
-    wait_between_requests: float = 0.5
+    # Rate limiting - OPTIMIZED for speed while avoiding detection
+    # Rastgele bekleme aralıkları (saniye) - insan davranışını simüle eder
+    wait_between_pages: float = 1.5  # Düşürüldü: 2.0 -> 1.5
+    wait_between_requests: float = 0.3  # Düşürüldü: 0.5 -> 0.3
+    
+    # Rastgele bekleme aralıkları (min, max)
+    random_wait_short: tuple = (0.5, 1.5)   # Kısa işlemler için
+    random_wait_medium: tuple = (1.0, 2.5)  # Sayfa geçişleri için
+    random_wait_long: tuple = (2.0, 4.0)    # Önemli işlemler için (dropdown, arama)
     
     # Scraping limits
-    max_pages_per_location: int = 50
-    default_pages: int = 5
+    max_pages_per_location: int = 100  # Artırıldı: 50 -> 100
+    default_pages: int = 10  # Artırıldı: 5 -> 10
     
-    # Browser settings
-    headless: bool = False
-    disable_images: bool = False
+    # Browser settings - STEALTH MODE
+    headless: bool = False  # Headless KAPALI - bot tespitinden kaçınmak için
+    disable_images: bool = True  # Resimler KAPALI - hız için
     
-    # User agent
+    # User agent (artık driver_manager.py'de rastgele seçiliyor)
     user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/142.0.0.0 Safari/537.36"
+        "Chrome/120.0.0.0 Safari/537.36"
     )
     
     # Output settings

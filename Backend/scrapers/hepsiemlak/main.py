@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-HepsiEmlak Main Scraper
-Refactored from original satilik_scraper.py and kiralik_scraper.py
+HepsiEmlak Main Scraper - STEALTH MODE
+Refactored with randomized delays to avoid bot detection
 """
 
 import time
+import random
 import re
 from typing import Dict, List, Any, Optional
 
@@ -78,7 +79,7 @@ class HepsiemlakScraper(BaseScraper):
         """Get all cities and let user select"""
         print(f"\n{self.category.capitalize()} sitesine gidiliyor...")
         self.driver.get(self.base_url)
-        time.sleep(4)
+        self.random_long_wait()  # Stealth: rastgele 2-4 sn
         
         try:
             # Find city dropdown
@@ -91,7 +92,7 @@ class HepsiemlakScraper(BaseScraper):
             
             city_dropdown.click()
             print("Şehir dropdown'ı açıldı...")
-            time.sleep(2)
+            self.random_medium_wait()  # Stealth: rastgele 1-2.5 sn
             
             # Expand dropdown
             city_list_sel = self.common_selectors.get("city_list")
@@ -104,7 +105,7 @@ class HepsiemlakScraper(BaseScraper):
                     container.style.overflow = 'visible';
                     container.style.height = 'auto';
                 """, dropdown_container)
-            time.sleep(2)
+            self.random_medium_wait()  # Stealth
             
             # Get city items
             city_item_sel = self.common_selectors.get("city_item")
@@ -146,7 +147,7 @@ class HepsiemlakScraper(BaseScraper):
                 self.driver.execute_script("document.elementFromPoint(10, 10).click();")
             except:
                 pass
-            time.sleep(1)
+            self.random_short_wait()  # Stealth
             
             return cities
             
@@ -266,7 +267,7 @@ class HepsiemlakScraper(BaseScraper):
         try:
             # Refresh page
             self.driver.get(self.base_url)
-            time.sleep(3)
+            self.random_long_wait()  # Stealth
             
             # Open city dropdown
             city_dropdown_sel = self.common_selectors.get("city_dropdown")
@@ -276,7 +277,7 @@ class HepsiemlakScraper(BaseScraper):
                 return False
             
             city_dropdown.click()
-            time.sleep(2)
+            self.random_medium_wait()  # Stealth
             
             # Expand dropdown
             city_list_sel = self.common_selectors.get("city_list")
@@ -289,7 +290,7 @@ class HepsiemlakScraper(BaseScraper):
                     container.style.overflow = 'visible';
                     container.style.height = 'auto';
                 """, dropdown_container)
-            time.sleep(2)
+            self.random_medium_wait()  # Stealth
             
             # Find and select city
             city_item_sel = self.common_selectors.get("city_item")
@@ -315,7 +316,7 @@ class HepsiemlakScraper(BaseScraper):
                             self.driver.execute_script("document.elementFromPoint(10, 10).click();")
                         except:
                             pass
-                        time.sleep(2)
+                        self.random_medium_wait()  # Stealth
                         return True
                 except:
                     continue
@@ -338,7 +339,7 @@ class HepsiemlakScraper(BaseScraper):
                     if search_button:
                         self.driver.execute_script("arguments[0].click();", search_button)
                         print("Arama yapılıyor...")
-                        time.sleep(5)
+                        self.random_long_wait()  # Stealth: arama sonrası
                         
                         # Wait for results
                         results_sel = self.common_selectors.get("listing_results")
@@ -442,7 +443,7 @@ class HepsiemlakScraper(BaseScraper):
                 if page > 1:
                     page_url = f"{self.base_url}?page={page}"
                     self.driver.get(page_url)
-                    time.sleep(4)
+                    self.random_long_wait()  # Stealth: sayfa geçişi
                     self.wait_for_element(self.common_selectors.get("listing_results"))
                 
                 page_listings = self.scrape_current_page()
@@ -451,7 +452,7 @@ class HepsiemlakScraper(BaseScraper):
                 print(f"   Sayfa {page}: {len(page_listings)} ilan")
                 
                 if page < pages_to_scrape:
-                    time.sleep(3)
+                    self.random_medium_wait()  # Stealth: sayfalar arası
             
             print(f"✓ {city}: {len(city_listings)} ilan bulundu")
             return city_listings
@@ -476,7 +477,7 @@ class HepsiemlakScraper(BaseScraper):
                     data = self.parser.extract_listing_data(element)
                     if data:
                         listings.append(data)
-                    time.sleep(0.05)
+                    time.sleep(random.uniform(0.02, 0.08))  # Stealth: mikro-rastgele
                 except Exception as e:
                     continue
             
@@ -514,7 +515,7 @@ class HepsiemlakScraper(BaseScraper):
                 city_listings = self.scrape_city(city, max_pages=max_pages, api_mode=True, progress_callback=progress_callback)
                 if city_listings:
                     all_results[city] = city_listings
-                time.sleep(2)
+                self.random_medium_wait()  # Stealth: şehirler arası
             
             # Save data
             if all_results:
@@ -556,7 +557,7 @@ class HepsiemlakScraper(BaseScraper):
                 city_listings = self.scrape_city(city)
                 if city_listings:
                     all_results[city] = city_listings
-                time.sleep(2)
+                self.random_medium_wait()  # Stealth: şehirler arası
             
             # Save data
             if all_results:
