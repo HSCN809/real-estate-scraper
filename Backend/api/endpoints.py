@@ -127,6 +127,37 @@ async def stop_scraping():
     else:
         return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
 
+@router.delete("/clear-results")
+async def clear_results():
+    """Outputs klasöründeki tüm sonuç dosyalarını sil"""
+    import os
+    import shutil
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    output_dir = os.path.join(project_root, "outputs")
+    
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    if not os.path.exists(output_dir):
+        return {"status": "error", "message": "Outputs klasörü bulunamadı", "deleted_count": 0}
+    
+    deleted_count = 0
+    try:
+        for item in os.listdir(output_dir):
+            item_path = os.path.join(output_dir, item)
+            if os.path.isfile(item_path):
+                os.remove(item_path)
+                deleted_count += 1
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+                deleted_count += 1
+        
+        return {"status": "success", "message": f"{deleted_count} dosya/klasör silindi", "deleted_count": deleted_count}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "deleted_count": deleted_count}
+
 @router.get("/results")
 async def get_results():
     import os

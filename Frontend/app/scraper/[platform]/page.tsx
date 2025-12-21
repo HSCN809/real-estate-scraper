@@ -49,22 +49,23 @@ export default function PlatformScraperPage() {
 
         setIsLoading(true);
         setResult(null);
+        setIsProgressModalOpen(true); // Modal'ı hemen aç
 
         try {
             const response = await startScrape(platform, {
                 category,
                 listing_type: listingType,
                 cities: selectedCities,
-                max_pages: scrapeAllPages ? 9999 : maxPages, // Use high number for all pages
+                max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
 
             setResult({ type: 'success', message: response.message });
-            setIsProgressModalOpen(true);
         } catch (error) {
             setResult({
                 type: 'error',
                 message: error instanceof Error ? error.message : 'Bilinmeyen hata',
             });
+            setIsProgressModalOpen(false); // Hata varsa kapat
         } finally {
             setIsLoading(false);
         }
@@ -188,8 +189,19 @@ export default function PlatformScraperPage() {
                                 type="number"
                                 min={1}
                                 max={50}
-                                value={maxPages}
-                                onChange={(e) => setMaxPages(parseInt(e.target.value) || 1)}
+                                value={maxPages || ''}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                        setMaxPages(0); // Geçici olarak 0, submit'te 1 olarak işlenecek
+                                    } else {
+                                        const num = parseInt(val);
+                                        setMaxPages(Math.min(50, Math.max(1, num || 1)));
+                                    }
+                                }}
+                                onBlur={() => {
+                                    if (maxPages < 1) setMaxPages(1);
+                                }}
                                 disabled={scrapeAllPages}
                                 className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
                             />

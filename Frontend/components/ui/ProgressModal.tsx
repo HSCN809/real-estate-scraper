@@ -52,9 +52,13 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                         setIsFinished(true);
                     }
 
-                    // Eğer erken durdurulduysa da finished say
+                    // Eğer erken durdurulduysa
                     if (!data.is_running && data.stopped_early) {
                         setIsFinished(true);
+                        // 2 saniye sonra otomatik kapat
+                        setTimeout(() => {
+                            onClose();
+                        }, 2000);
                     }
                 }
             } catch (error) {
@@ -62,12 +66,13 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
             }
         };
 
-        // Poll every 1 second
-        const interval = setInterval(pollStatus, 1000);
+        // Akıllı polling: durdurma sırasında hızlı, normal durumda yavaş
+        const pollInterval = isStopping ? 1000 : 60000;
+        const interval = setInterval(pollStatus, pollInterval);
         pollStatus(); // Initial call
 
         return () => clearInterval(interval);
-    }, [isOpen]);
+    }, [isOpen, isStopping, onClose]);
 
     const handleStop = async () => {
         setIsStopping(true);

@@ -13,7 +13,9 @@ import {
     Database,
     Search,
     Filter,
-    CheckCircle2
+    CheckCircle2,
+    Trash2,
+    AlertTriangle
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getResults } from '@/lib/api';
@@ -41,6 +43,8 @@ export default function ResultsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [clearing, setClearing] = useState(false);
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
 
     const fetchResults = async () => {
         try {
@@ -53,6 +57,23 @@ export default function ResultsPage() {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const clearResults = async () => {
+        try {
+            setClearing(true);
+            const res = await fetch('http://localhost:8000/api/v1/clear-results', {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                setResults([]);
+                setShowClearConfirm(false);
+            }
+        } catch (err) {
+            console.error('Clear failed:', err);
+        } finally {
+            setClearing(false);
         }
     };
 
@@ -107,6 +128,18 @@ export default function ResultsPage() {
                         </div>
                     </div>
 
+                    {/* Temizle Butonu */}
+                    {results.length > 0 && (
+                        <button
+                            onClick={() => setShowClearConfirm(true)}
+                            disabled={clearing}
+                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50 transition-all disabled:opacity-50 group"
+                            title="Sonuçları Temizle"
+                        >
+                            <Trash2 className={`w-5 h-5 text-red-400 group-hover:text-red-300 transition-colors ${clearing ? 'animate-pulse' : ''}`} />
+                        </button>
+                    )}
+
                     <button
                         onClick={fetchResults}
                         disabled={loading}
@@ -117,6 +150,59 @@ export default function ResultsPage() {
                     </button>
                 </div>
             </motion.div>
+
+            {/* Onay Modal */}
+            {showClearConfirm && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full"
+                    >
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <AlertTriangle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Sonuçları Temizle</h3>
+                                <p className="text-sm text-gray-400">Bu işlem geri alınamaz!</p>
+                            </div>
+                        </div>
+                        <p className="text-gray-300 mb-6">
+                            Tüm tarama sonuçları ({totalFiles} dosya, {totalRecords} ilan) kalıcı olarak silinecek. Devam etmek istiyor musunuz?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowClearConfirm(false)}
+                                className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-gray-300 hover:bg-slate-700 transition-colors"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={clearResults}
+                                disabled={clearing}
+                                className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {clearing ? (
+                                    <>
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                        Siliniyor...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trash2 className="w-4 h-4" />
+                                        Evet, Sil
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
 
             {/* Content Area */}
             <div className="min-h-[400px]">
@@ -180,8 +266,8 @@ export default function ResultsPage() {
                                     {/* Card Header */}
                                     <div className="flex items-start justify-between mb-4">
                                         <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${result.platform === 'Emlakjet'
-                                                ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
-                                                : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                                            ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                                            : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
                                             }`}>
                                             {result.platform}
                                         </span>
@@ -216,8 +302,8 @@ export default function ResultsPage() {
                                                         link.download = file.name;
                                                     }}
                                                     className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg border transition-all group/btn ${file.type === 'excel'
-                                                            ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30'
-                                                            : 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30'
+                                                        ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30'
+                                                        : 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30'
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-3">

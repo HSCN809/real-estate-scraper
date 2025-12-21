@@ -268,67 +268,33 @@ class HepsiemlakScraper(BaseScraper):
         return selected
     
     def select_single_city(self, city_name: str) -> bool:
-        """Select a single city in the filter"""
+        """Select a single city - DOĞRUDAN ŞEHİR URL'İNE GİT"""
         try:
-            # Refresh page
-            self.driver.get(self.base_url)
+            # Şehir adını URL formatına çevir (Türkçe karakterleri düzelt)
+            city_slug = city_name.lower()
+            # Türkçe karakter dönüşümleri
+            tr_chars = {'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c', 
+                       'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'}
+            for tr, en in tr_chars.items():
+                city_slug = city_slug.replace(tr, en)
+            city_slug = city_slug.replace(' ', '-')
+            
+            # Doğrudan şehir sayfasına git
+            # listing_type: satilik veya kiralik
+            city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
+            print(f"Şehir URL'sine gidiliyor: {city_url}")
+            
+            self.driver.get(city_url)
             time.sleep(5)  # Sayfa tam yüklensin
             
-            # Open city dropdown
-            city_dropdown_sel = self.common_selectors.get("city_dropdown")
-            city_dropdown = self.wait_for_clickable(city_dropdown_sel)
-            
-            if not city_dropdown:
+            # URL doğru mu kontrol et
+            current_url = self.driver.current_url
+            if city_slug in current_url:
+                print(f"✓ {city_name} sayfası yüklendi")
+                return True
+            else:
+                print(f"✗ {city_name} sayfasına gidilemedi. URL: {current_url}")
                 return False
-            
-            # JS click - daha sağlam
-            self.driver.execute_script("arguments[0].click();", city_dropdown)
-            time.sleep(3)  # Dropdown açılsın
-            
-            # Expand dropdown
-            city_list_sel = self.common_selectors.get("city_list")
-            dropdown_container = self.wait_for_element(city_list_sel)
-            
-            if dropdown_container:
-                self.driver.execute_script("""
-                    var container = arguments[0];
-                    container.style.maxHeight = 'none';
-                    container.style.overflow = 'visible';
-                    container.style.height = 'auto';
-                """, dropdown_container)
-            time.sleep(2)  # Liste genişletme
-            
-            # Find and select city
-            city_item_sel = self.common_selectors.get("city_item")
-            city_link_sel = self.common_selectors.get("city_link")
-            city_radio_sel = self.common_selectors.get("city_radio")
-            
-            city_items = self.driver.find_elements(By.CSS_SELECTOR, city_item_sel)
-            
-            for city_item in city_items:
-                try:
-                    city_link = city_item.find_element(By.CSS_SELECTOR, city_link_sel)
-                    if city_link.text.strip() == city_name:
-                        try:
-                            radio = city_item.find_element(By.CSS_SELECTOR, city_radio_sel)
-                            self.driver.execute_script("arguments[0].click();", radio)
-                        except:
-                            self.driver.execute_script("arguments[0].click();", city_link)
-                        
-                        print(f"✓ {city_name} seçildi")
-                        
-                        # Close dropdown
-                        try:
-                            self.driver.execute_script("document.elementFromPoint(10, 10).click();")
-                        except:
-                            pass
-                        self.random_medium_wait()  # Stealth
-                        return True
-                except:
-                    continue
-            
-            print(f"✗ {city_name} bulunamadı")
-            return False
             
         except Exception as e:
             logger.error(f"Error selecting city {city_name}: {e}")
@@ -362,24 +328,53 @@ class HepsiemlakScraper(BaseScraper):
             return False
     
     def get_total_pages(self) -> int:
-        """Get total number of pages"""
+        """Get total number of pages from pagination - ŞEHİR SAYFASINDA ÇAĞRILMALI"""
         try:
-            pagination_selectors = self.common_selectors.get("pagination", [])
+            current_url = self.driver.current_url
+            # URL'den şehir slug'ını çıkar (örn: bilecik-satilik -> bilecik)
+            url_path = current_url.split("hepsiemlak.com")[-1].split("?")[0]
+            city_slug = url_path.replace("/", "").replace("-satilik", "").replace("-kiralik", "")
             
-            for selector in pagination_selectors:
-                try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements:
-                        last_href = elements[-1].get_attribute("href")
-                        if last_href:
-                            match = re.search(r"page=(\d+)", last_href)
-                            if match:
-                                return int(match.group(1))
-                except:
+            print(f"DEBUG: URL={current_url}, city_slug={city_slug}")
+            
+            # Şehir bazlı pagination yüklenene kadar bekle (max 10 saniye)
+            max_wait = 10
+            for wait_count in range(max_wait):
+                time.sleep(1)
+                
+                page_links = self.driver.find_elements(
+                    By.CSS_SELECTOR, 
+                    "ul.he-pagination__links li.he-pagination__item a.he-pagination__link"
+                )
+                
+                if not page_links:
                     continue
+                
+                # İlk linkin href'inde şehir adı var mı kontrol et
+                first_href = page_links[0].get_attribute("href") or ""
+                if city_slug in first_href:
+                    print(f"DEBUG: Şehir pagination bulundu! ({wait_count+1} saniye)")
+                    break
+                else:
+                    print(f"DEBUG: Bekleniyor... ({wait_count+1}/{max_wait}) - href: {first_href}")
             
-            return 1
-        except:
+            # Şimdi sayfa sayısını bul
+            max_page = 1
+            for link in page_links:
+                href = link.get_attribute("href") or ""
+                text = link.text.strip()
+                
+                # Sadece şehir bazlı linkleri say
+                if city_slug in href and text.isdigit():
+                    page_num = int(text)
+                    if page_num > max_page:
+                        max_page = page_num
+            
+            print(f"DEBUG: Final max_page = {max_page}")
+            return max_page
+            
+        except Exception as e:
+            logger.warning(f"Pagination detection failed: {e}")
             return 1
     
     def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None) -> List[Dict[str, Any]]:
@@ -392,15 +387,12 @@ class HepsiemlakScraper(BaseScraper):
             progress_callback(f"{city} için tarama başlatılıyor...", current=0, total=100)
             
         try:
-            # Select city
+            # Select city (doğrudan şehir URL'ine gider)
             if not self.select_single_city(city):
                 print(f"{city} seçilemedi, atlanıyor...")
                 return []
             
-            # Search
-            if not self.search_listings():
-                print(f"{city} için arama yapılamadı")
-                return []
+            # Artık search_listings'e gerek yok - doğrudan şehir sayfasındayız
             
             # Check for zero results
             try:
@@ -443,11 +435,16 @@ class HepsiemlakScraper(BaseScraper):
                 print(f"{city} - Sayfa {page}/{pages_to_scrape}...")
                 
                 if progress_callback:
-                    page_progress = int((page / pages_to_scrape) * 100)
+                    # Progress: tamamlanan sayfa sayısı üzerinden hesapla
+                    # Sayfa 5 taranmaya başladığında 4 tamamlanmış = %80
+                    completed_pages = page - 1
+                    page_progress = int((completed_pages / pages_to_scrape) * 100)
                     progress_callback(f"{city} - Sayfa {page}/{pages_to_scrape} taranıyor...", current=page, total=pages_to_scrape, progress=page_progress)
                 
                 if page > 1:
-                    page_url = f"{self.base_url}?page={page}"
+                    # Şehir URL'ini kullan (base_url değil!)
+                    current_city_url = self.driver.current_url.split('?')[0]
+                    page_url = f"{current_city_url}?page={page}"
                     self.driver.get(page_url)
                     self.random_long_wait()  # Stealth: sayfa geçişi
                     self.wait_for_element(self.common_selectors.get("listing_results"))
@@ -483,7 +480,7 @@ class HepsiemlakScraper(BaseScraper):
                     data = self.parser.extract_listing_data(element)
                     if data:
                         listings.append(data)
-                    time.sleep(random.uniform(0.02, 0.08))  # Stealth: mikro-rastgele
+                    time.sleep(random.uniform(0.02, 0.08))  # Stealth
                 except Exception as e:
                     continue
             
