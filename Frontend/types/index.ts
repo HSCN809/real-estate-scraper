@@ -28,8 +28,12 @@ export interface ScrapeResult {
   id: string;
   platform: string;
   category: string;
+  listing_type?: string;
+  city?: string;
   date: string;
   count: number;
+  file_size?: number;
+  file_size_mb?: number;
   status: string;
   files: {
     type: 'excel' | 'json';

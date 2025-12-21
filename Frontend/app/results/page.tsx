@@ -1,7 +1,7 @@
 'use client';
 
 import { ArtCard } from '@/components/ui/ArtCard';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText,
     Download,
@@ -12,10 +12,18 @@ import {
     RefreshCw,
     Database,
     Search,
-    Filter,
-    CheckCircle2,
     Trash2,
-    AlertTriangle
+    AlertTriangle,
+    MapPin,
+    Building2,
+    Eye,
+    X,
+    LayoutGrid,
+    List,
+    Filter,
+    Home,
+    TrendingUp,
+    Calendar
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getResults } from '@/lib/api';
@@ -26,10 +34,7 @@ const containerVariants = {
     hidden: { opacity: 0 },
     show: {
         opacity: 1,
-        transition: {
-            staggerChildren: 0.1,
-            delayChildren: 0.2
-        },
+        transition: { staggerChildren: 0.08 },
     },
 };
 
@@ -38,13 +43,29 @@ const itemVariants = {
     show: { opacity: 1, y: 0 },
 };
 
+// Extended type for our rich data
+interface RichResult extends ScrapeResult {
+    city?: string;
+    listing_type?: string;
+    file_size_mb?: number;
+}
+
 export default function ResultsPage() {
-    const [results, setResults] = useState<ScrapeResult[]>([]);
+    const [results, setResults] = useState<RichResult[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+    // Filters
+    const [platformFilter, setPlatformFilter] = useState<string>('all');
+    const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+    // Preview Modal
+    const [previewData, setPreviewData] = useState<any>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewFile, setPreviewFile] = useState<string | null>(null);
 
     const fetchResults = async () => {
         try {
@@ -54,7 +75,6 @@ export default function ResultsPage() {
             setError(null);
         } catch (err) {
             setError('Veriler alınırken bir hata oluştu');
-            console.error(err);
         } finally {
             setLoading(false);
         }
@@ -63,9 +83,7 @@ export default function ResultsPage() {
     const clearResults = async () => {
         try {
             setClearing(true);
-            const res = await fetch('http://localhost:8000/api/v1/clear-results', {
-                method: 'DELETE'
-            });
+            const res = await fetch('http://localhost:8000/api/v1/clear-results', { method: 'DELETE' });
             if (res.ok) {
                 setResults([]);
                 setShowClearConfirm(false);
@@ -74,6 +92,20 @@ export default function ResultsPage() {
             console.error('Clear failed:', err);
         } finally {
             setClearing(false);
+        }
+    };
+
+    const openPreview = async (filename: string) => {
+        setPreviewFile(filename);
+        setPreviewLoading(true);
+        try {
+            const res = await fetch(`http://localhost:8000/api/v1/results/${filename}/preview?limit=20`);
+            const data = await res.json();
+            setPreviewData(data);
+        } catch (err) {
+            console.error('Preview failed:', err);
+        } finally {
+            setPreviewLoading(false);
         }
     };
 
@@ -92,9 +124,22 @@ export default function ResultsPage() {
         );
     }
 
-    // Derived stats
+    // Filtered results
+    const filteredResults = results.filter(r => {
+        if (platformFilter !== 'all' && r.platform !== platformFilter) return false;
+        if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
+        return true;
+    });
+
+    // Stats
     const totalFiles = results.length;
     const totalRecords = results.reduce((acc, curr) => acc + (curr.count || 0), 0);
+    const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
+    const latestDate = results.length > 0 ? results[0].date : '-';
+
+    // Unique platforms and categories for filters
+    const platforms = [...new Set(results.map(r => r.platform))];
+    const categories = [...new Set(results.map(r => r.category))];
 
     return (
         <motion.div
@@ -103,108 +148,142 @@ export default function ResultsPage() {
             initial="hidden"
             animate="show"
         >
-            {/* Header Section */}
+            {/* Header */}
             <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 mb-2">
                         Veri Sonuçları
                     </h1>
                     <p className="text-gray-400 text-lg flex items-center gap-2">
-                        Taranan ilan verileri ve raporlar
+                        Taranan emlak verileri ve raporlar
                         <Sparkles className="w-4 h-4 text-yellow-400" />
                     </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center gap-4 mr-4 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                            <Database className="w-4 h-4 text-emerald-400" />
-                            <span>{totalFiles} Dosya</span>
-                        </div>
-                        <div className="w-px h-4 bg-slate-700"></div>
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                            <FileText className="w-4 h-4 text-blue-400" />
-                            <span>{totalRecords} İlan</span>
-                        </div>
+                    {/* View Toggle */}
+                    <div className="flex rounded-xl overflow-hidden border border-slate-700">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`p-2.5 transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('table')}
+                            className={`p-2.5 transition-colors ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
                     </div>
 
-                    {/* Temizle Butonu */}
                     {results.length > 0 && (
                         <button
                             onClick={() => setShowClearConfirm(true)}
-                            disabled={clearing}
-                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50 transition-all disabled:opacity-50 group"
+                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all"
                             title="Sonuçları Temizle"
                         >
-                            <Trash2 className={`w-5 h-5 text-red-400 group-hover:text-red-300 transition-colors ${clearing ? 'animate-pulse' : ''}`} />
+                            <Trash2 className="w-5 h-5 text-red-400" />
                         </button>
                     )}
 
                     <button
                         onClick={fetchResults}
                         disabled={loading}
-                        className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 hover:border-slate-600 transition-all disabled:opacity-50 group"
+                        className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all"
                         title="Yenile"
                     >
-                        <RefreshCw className={`w-5 h-5 text-gray-300 group-hover:text-white transition-colors ${loading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-5 h-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
             </motion.div>
 
-            {/* Onay Modal */}
-            {showClearConfirm && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                >
-                    <motion.div
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full"
-                    >
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-                                <AlertTriangle className="w-6 h-6 text-red-500" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-white">Sonuçları Temizle</h3>
-                                <p className="text-sm text-gray-400">Bu işlem geri alınamaz!</p>
-                            </div>
+            {/* Dashboard Stats */}
+            <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-blue-500/20 rounded-lg">
+                            <Database className="w-5 h-5 text-blue-400" />
                         </div>
-                        <p className="text-gray-300 mb-6">
-                            Tüm tarama sonuçları ({totalFiles} dosya, {totalRecords} ilan) kalıcı olarak silinecek. Devam etmek istiyor musunuz?
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowClearConfirm(false)}
-                                className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-gray-300 hover:bg-slate-700 transition-colors"
-                            >
-                                İptal
-                            </button>
-                            <button
-                                onClick={clearResults}
-                                disabled={clearing}
-                                className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {clearing ? (
-                                    <>
-                                        <RefreshCw className="w-4 h-4 animate-spin" />
-                                        Siliniyor...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Trash2 className="w-4 h-4" />
-                                        Evet, Sil
-                                    </>
-                                )}
-                            </button>
+                        <span className="text-gray-400 text-sm">Toplam İlan</span>
+                    </div>
+                    <p className="text-3xl font-bold text-white">{totalRecords.toLocaleString()}</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-emerald-500/20 rounded-lg">
+                            <MapPin className="w-5 h-5 text-emerald-400" />
                         </div>
-                    </motion.div>
+                        <span className="text-gray-400 text-sm">Şehir</span>
+                    </div>
+                    <p className="text-3xl font-bold text-white">{uniqueCities}</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-purple-500/20 rounded-lg">
+                            <FileText className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <span className="text-gray-400 text-sm">Dosya</span>
+                    </div>
+                    <p className="text-3xl font-bold text-white">{totalFiles}</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-amber-500/20 rounded-lg">
+                            <Calendar className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <span className="text-gray-400 text-sm">Son Tarama</span>
+                    </div>
+                    <p className="text-lg font-bold text-white truncate">{latestDate}</p>
+                </div>
+            </motion.div>
+
+            {/* Filters */}
+            {results.length > 0 && (
+                <motion.div variants={itemVariants} className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Filter className="w-4 h-4" />
+                        Filtre:
+                    </div>
+
+                    {/* Platform Filter */}
+                    <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                        <button
+                            onClick={() => setPlatformFilter('all')}
+                            className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                        >
+                            Tümü
+                        </button>
+                        {platforms.map(p => (
+                            <button
+                                key={p}
+                                onClick={() => setPlatformFilter(p)}
+                                className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === p ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                            >
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Category Filter */}
+                    <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                        {categories.map(c => (
+                            <button
+                                key={c}
+                                onClick={() => setCategoryFilter(categoryFilter === c ? 'all' : c)}
+                                className={`px-3 py-1.5 text-sm transition-colors ${categoryFilter === c ? 'bg-emerald-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                            >
+                                {c}
+                            </button>
+                        ))}
+                    </div>
                 </motion.div>
             )}
 
-            {/* Content Area */}
+            {/* Content */}
             <div className="min-h-[400px]">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -214,120 +293,292 @@ export default function ResultsPage() {
                 ) : error ? (
                     <ArtCard glowColor="pink" className="text-center py-16 max-w-lg mx-auto">
                         <div className="flex flex-col items-center gap-6">
-                            <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center ring-1 ring-red-500/20">
+                            <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center">
                                 <FileText className="w-10 h-10 text-red-500" />
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold text-white mb-2">Veri Alınamadı</h3>
                                 <p className="text-gray-400">{error}</p>
                             </div>
-                            <button
-                                onClick={fetchResults}
-                                className="px-8 py-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all font-medium"
-                            >
+                            <button onClick={fetchResults} className="px-8 py-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20">
                                 Tekrar Dene
                             </button>
                         </div>
                     </ArtCard>
-                ) : results.length === 0 ? (
+                ) : filteredResults.length === 0 ? (
                     <motion.div variants={itemVariants}>
                         <ArtCard glowColor="blue" className="text-center py-20">
                             <div className="flex flex-col items-center gap-6 max-w-md mx-auto">
-                                <div className="w-24 h-24 rounded-full bg-slate-800/50 flex items-center justify-center ring-1 ring-slate-700">
+                                <div className="w-24 h-24 rounded-full bg-slate-800/50 flex items-center justify-center">
                                     <Search className="w-12 h-12 text-gray-600" />
                                 </div>
                                 <div>
                                     <h3 className="text-2xl font-bold text-white mb-3">Henüz Sonuç Yok</h3>
-                                    <p className="text-gray-400 leading-relaxed">
-                                        Şuan için listelenecek taranmış veri bulunmuyor. Yeni bir tarama başlatarak emlak verilerini toplamaya başlayabilirsiniz.
-                                    </p>
+                                    <p className="text-gray-400">Yeni bir tarama başlatarak emlak verilerini toplamaya başlayın.</p>
                                 </div>
                             </div>
                         </ArtCard>
                     </motion.div>
-                ) : (
-                    <motion.div
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                        key="results-grid"
-                    >
-                        {results.map((result, index) => (
-                            <motion.div
-                                key={result.id || index}
-                                variants={itemVariants}
-                                layout
-                            >
+                ) : viewMode === 'grid' ? (
+                    /* Grid View */
+                    <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" variants={containerVariants}>
+                        {filteredResults.map((result, index) => (
+                            <motion.div key={result.id || index} variants={itemVariants} layout>
                                 <ArtCard
                                     glowColor={result.platform === 'Emlakjet' ? 'purple' : 'blue'}
                                     className="h-full flex flex-col hover:-translate-y-1 transition-transform duration-300"
                                 >
                                     {/* Card Header */}
                                     <div className="flex items-start justify-between mb-4">
-                                        <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${result.platform === 'Emlakjet'
-                                            ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
-                                            : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
-                                            }`}>
-                                            {result.platform}
-                                        </span>
-                                        <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-slate-900/50 px-2 py-1 rounded border border-slate-800">
-                                            <Clock className="w-3 h-3" />
+                                        <div className="flex gap-2">
+                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase border ${result.platform === 'Emlakjet' ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                                                }`}>
+                                                {result.platform}
+                                            </span>
+                                            <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                                                {result.category}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* City Name - Big */}
+                                    <div className="mb-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <MapPin className="w-5 h-5 text-sky-400" />
+                                            <h3 className="text-2xl font-bold text-white">{result.city || 'Bilinmiyor'}</h3>
+                                        </div>
+                                        <p className="text-sm text-gray-500">{result.listing_type}</p>
+                                    </div>
+
+                                    {/* Stats */}
+                                    <div className="flex items-center gap-4 mb-4 text-sm">
+                                        <div className="flex items-center gap-1.5 text-emerald-400">
+                                            <Building2 className="w-4 h-4" />
+                                            <span className="font-semibold">{(result.count || 0).toLocaleString()} ilan</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-gray-500">
+                                            <Clock className="w-3.5 h-3.5" />
                                             {result.date}
                                         </div>
                                     </div>
 
-                                    {/* Card Content */}
-                                    <div className="flex-1">
-                                        <div className="mb-4">
-                                            <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 leading-snug" title={result.files?.[0]?.name}>
-                                                {result.files?.[0]?.name?.split('_').slice(0, 3).join(' ') || 'Bilinmeyen Dosya'}
-                                            </h3>
-                                            <p className="text-sm text-gray-400 flex items-center gap-2">
-                                                <span className={`w-2 h-2 rounded-full ${result.status === 'completed' ? 'bg-emerald-500' : 'bg-yellow-500'}`}></span>
-                                                {(result.count || 0) > 0 ? `${result.count} İlan Bulundu` : 'Sonuç Yok'}
-                                            </p>
-                                        </div>
+                                    <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-700 to-transparent my-3"></div>
 
-                                        <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-700 to-transparent my-4"></div>
-
-                                        {/* Download Actions */}
-                                        <div className="space-y-2">
-                                            {result.files?.map((file, fIndex) => (
-                                                <button
-                                                    key={file.name || fIndex}
-                                                    onClick={() => {
-                                                        const link = document.createElement('a');
-                                                        link.href = `/api/download?file=${file.name}`;
-                                                        link.download = file.name;
-                                                    }}
-                                                    className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg border transition-all group/btn ${file.type === 'excel'
-                                                        ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30'
-                                                        : 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10 hover:border-amber-500/30'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        {file.type === 'excel' ? (
-                                                            <FileSpreadsheet className="w-4 h-4 text-emerald-400 group-hover/btn:scale-110 transition-transform" />
-                                                        ) : (
-                                                            <FileJson className="w-4 h-4 text-amber-400 group-hover/btn:scale-110 transition-transform" />
-                                                        )}
-                                                        <span className={`text-sm font-medium ${file.type === 'excel' ? 'text-emerald-300' : 'text-amber-300'
-                                                            }`}>
-                                                            {file.type === 'excel' ? 'Excel Raporu' : 'JSON Verisi'}
-                                                        </span>
-                                                    </div>
-                                                    <Download className="w-4 h-4 text-gray-500 group-hover/btn:text-white transition-colors" />
-                                                </button>
-                                            ))}
-                                        </div>
+                                    {/* Actions */}
+                                    <div className="flex gap-2 mt-auto">
+                                        <button
+                                            onClick={() => openPreview(result.files?.[0]?.name || '')}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition-colors text-sm text-gray-300"
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                            Önizle
+                                        </button>
+                                        <a
+                                            href={`http://localhost:8000/api/v1/download/${result.files?.[0]?.name}`}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 transition-colors text-sm text-emerald-300"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            İndir
+                                        </a>
                                     </div>
                                 </ArtCard>
                             </motion.div>
                         ))}
                     </motion.div>
+                ) : (
+                    /* Table View */
+                    <motion.div variants={itemVariants} className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-700">
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Şehir</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Platform</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Kategori</th>
+                                    <th className="text-right py-4 px-4 text-gray-400 font-medium">İlan</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Tarih</th>
+                                    <th className="text-right py-4 px-4 text-gray-400 font-medium">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredResults.map((result, index) => (
+                                    <tr key={result.id || index} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
+                                        <td className="py-3 px-4">
+                                            <div className="flex items-center gap-2">
+                                                <MapPin className="w-4 h-4 text-sky-400" />
+                                                <span className="text-white font-medium">{result.city || 'Bilinmiyor'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span className={`px-2 py-0.5 rounded text-xs ${result.platform === 'Emlakjet' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
+                                                }`}>
+                                                {result.platform}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4 text-gray-400">{result.category}</td>
+                                        <td className="py-3 px-4 text-right text-emerald-400 font-medium">{(result.count || 0).toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-gray-500 text-sm">{result.date}</td>
+                                        <td className="py-3 px-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => openPreview(result.files?.[0]?.name || '')}
+                                                    className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
+                                                >
+                                                    <Eye className="w-4 h-4 text-gray-400" />
+                                                </button>
+                                                <a
+                                                    href={`http://localhost:8000/api/v1/download/${result.files?.[0]?.name}`}
+                                                    className="p-2 rounded-lg hover:bg-emerald-600/20 transition-colors"
+                                                >
+                                                    <Download className="w-4 h-4 text-emerald-400" />
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </motion.div>
                 )}
             </div>
+
+            {/* Clear Confirm Modal */}
+            <AnimatePresence>
+                {showClearConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.9 }}
+                            className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full"
+                        >
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <AlertTriangle className="w-6 h-6 text-red-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Sonuçları Temizle</h3>
+                                    <p className="text-sm text-gray-400">Bu işlem geri alınamaz!</p>
+                                </div>
+                            </div>
+                            <p className="text-gray-300 mb-6">
+                                Tüm tarama sonuçları ({totalFiles} dosya, {totalRecords} ilan) kalıcı olarak silinecek.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowClearConfirm(false)}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-gray-300 hover:bg-slate-700"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    onClick={clearResults}
+                                    disabled={clearing}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {clearing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                    {clearing ? 'Siliniyor...' : 'Evet, Sil'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Preview Modal */}
+            <AnimatePresence>
+                {previewFile && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => setPreviewFile(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Veri Önizleme</h3>
+                                    <p className="text-sm text-gray-400">{previewFile}</p>
+                                </div>
+                                <button
+                                    onClick={() => setPreviewFile(null)}
+                                    className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-gray-400" />
+                                </button>
+                            </div>
+
+                            {/* Modal Content */}
+                            <div className="flex-1 overflow-auto p-4">
+                                {previewLoading ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                    </div>
+                                ) : previewData?.data?.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-700">
+                                                    {Object.keys(previewData.data[0]).slice(0, 8).map((key) => (
+                                                        <th key={key} className="text-left py-2 px-3 text-gray-400 font-medium whitespace-nowrap">
+                                                            {key}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.data.map((row: any, idx: number) => (
+                                                    <tr key={idx} className="border-b border-slate-800">
+                                                        {Object.values(row).slice(0, 8).map((val: any, cidx: number) => (
+                                                            <td key={cidx} className="py-2 px-3 text-gray-300 max-w-[200px] truncate">
+                                                                {String(val || '-')}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <p className="text-center text-gray-500 text-sm mt-4">
+                                            {previewData.showing} / {previewData.total} kayıt gösteriliyor
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-gray-400 py-12">Veri bulunamadı</p>
+                                )}
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setPreviewFile(null)}
+                                    className="px-4 py-2 rounded-lg bg-slate-800 text-gray-300 hover:bg-slate-700"
+                                >
+                                    Kapat
+                                </button>
+                                <a
+                                    href={`http://localhost:8000/api/v1/download/${previewFile}`}
+                                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Tümünü İndir
+                                </a>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }

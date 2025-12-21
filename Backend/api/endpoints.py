@@ -100,6 +100,11 @@ def run_hepsiemlak_task(request: ScrapeRequest):
 
 @router.post("/scrape/emlakjet", response_model=ScrapeResponse)
 async def scrape_emlakjet(request: ScrapeRequest, background_tasks: BackgroundTasks):
+    # Status'u HEMEN ayarla
+    task_status.reset()
+    task_status.set_running(True)
+    task_status.update("EmlakJet taraması başlatılıyor...", progress=0)
+    
     background_tasks.add_task(run_emlakjet_task, request)
     return ScrapeResponse(
         status="accepted",
@@ -110,6 +115,11 @@ async def scrape_emlakjet(request: ScrapeRequest, background_tasks: BackgroundTa
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
 async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: BackgroundTasks):
+    # Status'u HEMEN ayarla - frontend ilk sorguladığında hazır olsun
+    task_status.reset()
+    task_status.set_running(True)
+    task_status.update("HepsiEmlak taraması başlatılıyor...", progress=0)
+    
     background_tasks.add_task(run_hepsiemlak_task, request)
     return ScrapeResponse(
         status="accepted",
@@ -167,28 +177,22 @@ async def get_results():
     current_file = os.path.abspath(__file__)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
     
-    # Check for outputs directory (trying both cases just to be safe, though Windows is insensitive)
-    output_dir_name = "outputs"
-    output_dir = os.path.join(project_root, output_dir_name)
-    
+    # Check for outputs directory
+    output_dir = os.path.join(project_root, "outputs")
     if not os.path.exists(output_dir):
-        # Try capitalized
         output_dir = os.path.join(project_root, "Outputs")
         if not os.path.exists(output_dir):
-            logger.warning(f"Output directory not found at {os.path.join(project_root, 'outputs')} or Outputs")
             return []
 
     final_results = []
     
-    print(f"DEBUG: Scanning directory for results: {output_dir}")
-    
-    # Use os.walk for robust directory traversal
     for root, dirs, files in os.walk(output_dir):
         for filename in files:
             if filename.lower().endswith(('.xlsx', '.json')):
                 file_path = os.path.join(root, filename)
                 try:
                     stats = os.stat(file_path)
+                    file_size = stats.st_size
                     
                     # Platform detection
                     platform = "Unknown"
@@ -204,12 +208,47 @@ async def get_results():
                     elif "arsa" in lower_name: category = "Arsa"
                     elif "isyeri" in lower_name: category = "İşyeri"
                     
+                    # Listing type detection
+                    listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
+                    
+                    # City name from filename (e.g., hepsiemlak_satilik_konut_balikesir.xlsx -> Balıkesir)
+                    city = "Bilinmiyor"
+                    parts = filename.replace('.xlsx', '').replace('.json', '').split('_')
+                    if len(parts) >= 4:
+                        city_slug = parts[-1]
+                        # Capitalize city name
+                        city = city_slug.replace('-', ' ').title()
+                    
+                    # Get real record count from Excel file
+                    count = 0
+                    if filename.endswith('.xlsx'):
+                        try:
+                            import openpyxl
+                            wb = openpyxl.load_workbook(file_path, read_only=True)
+                            ws = wb.active
+                            count = ws.max_row - 1 if ws.max_row else 0  # Subtract header
+                            wb.close()
+                        except Exception as e:
+                            logger.warning(f"Could not read Excel row count: {e}")
+                    elif filename.endswith('.json'):
+                        try:
+                            import json
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                                count = len(data) if isinstance(data, list) else 0
+                        except:
+                            pass
+                    
                     final_results.append({
                         "id": filename,
                         "platform": platform,
                         "category": category,
+                        "listing_type": listing_type,
+                        "city": city,
                         "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
-                        "count": 0, 
+                        "count": count,
+                        "file_size": file_size,
+                        "file_size_mb": round(file_size / (1024 * 1024), 2),
                         "status": "completed",
                         "files": [{
                             "type": "excel" if filename.endswith('.xlsx') else "json",
@@ -222,8 +261,68 @@ async def get_results():
         
     # Sort by date descending
     final_results.sort(key=lambda x: x['date'], reverse=True)
-    print(f"DEBUG: Found {len(final_results)} results")
     return final_results
+
+@router.get("/results/{filename}/preview")
+async def get_result_preview(filename: str, limit: int = 20):
+    """Dosyadan ilk N kaydı döndür"""
+    import os
+    from datetime import datetime
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    # Find the file
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    file_path = None
+    for root, dirs, files in os.walk(output_dir):
+        if filename in files:
+            file_path = os.path.join(root, filename)
+            break
+    
+    if not file_path or not os.path.exists(file_path):
+        return {"error": "Dosya bulunamadı", "data": [], "total": 0}
+    
+    data = []
+    total = 0
+    
+    try:
+        if filename.endswith('.xlsx'):
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, read_only=True)
+            ws = wb.active
+            
+            # Get headers
+            headers = []
+            for cell in ws[1]:
+                headers.append(cell.value if cell.value else "")
+            
+            # Get data rows
+            total = ws.max_row - 1 if ws.max_row else 0
+            for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=min(limit + 1, ws.max_row)), start=1):
+                row_data = {}
+                for col_idx, cell in enumerate(row):
+                    if col_idx < len(headers):
+                        row_data[headers[col_idx]] = cell.value if cell.value else ""
+                data.append(row_data)
+            
+            wb.close()
+            
+        elif filename.endswith('.json'):
+            import json
+            with open(file_path, 'r', encoding='utf-8') as f:
+                all_data = json.load(f)
+                if isinstance(all_data, list):
+                    total = len(all_data)
+                    data = all_data[:limit]
+    except Exception as e:
+        logger.error(f"Preview error: {e}")
+        return {"error": str(e), "data": [], "total": 0}
+    
+    return {"data": data, "total": total, "showing": len(data)}
 
 @router.get("/status")
 async def get_status():
@@ -283,4 +382,34 @@ async def get_stats():
         "last_scrape": last_scrape_date
     }
 
-
+@router.get("/download/{filename}")
+async def download_file(filename: str):
+    """Dosyayı indir"""
+    import os
+    from fastapi.responses import FileResponse
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    # Find the file
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    file_path = None
+    for root, dirs, files in os.walk(output_dir):
+        if filename in files:
+            file_path = os.path.join(root, filename)
+            break
+    
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    
+    # Determine media type
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if filename.endswith('.xlsx') else "application/json"
+    
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type=media_type
+    )
