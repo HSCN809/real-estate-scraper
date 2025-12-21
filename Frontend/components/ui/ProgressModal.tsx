@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, StopCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ProgressModalProps {
@@ -18,12 +18,15 @@ interface TaskStatus {
     total: number;
     current: number;
     details: string;
+    should_stop?: boolean;
+    stopped_early?: boolean;
 }
 
 export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
     const [mounted, setMounted] = useState(false);
     const [status, setStatus] = useState<TaskStatus | null>(null);
     const [isFinished, setIsFinished] = useState(false);
+    const [isStopping, setIsStopping] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -34,6 +37,7 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
         if (!isOpen) {
             setStatus(null);
             setIsFinished(false);
+            setIsStopping(false);
             return;
         }
 
@@ -45,6 +49,11 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                     setStatus(data);
 
                     if (!data.is_running && data.progress === 100) {
+                        setIsFinished(true);
+                    }
+
+                    // Eğer erken durdurulduysa da finished say
+                    if (!data.is_running && data.stopped_early) {
                         setIsFinished(true);
                     }
                 }
@@ -59,6 +68,20 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
 
         return () => clearInterval(interval);
     }, [isOpen]);
+
+    const handleStop = async () => {
+        setIsStopping(true);
+        try {
+            const res = await fetch('http://localhost:8000/api/v1/stop', {
+                method: 'POST'
+            });
+            if (res.ok) {
+                console.log("Stop request sent");
+            }
+        } catch (error) {
+            console.error("Stop request failed", error);
+        }
+    };
 
     if (!mounted) return null;
 
@@ -85,8 +108,15 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                             {/* Header */}
                             <div className="p-6 text-center border-b border-slate-800">
                                 {isFinished ? (
-                                    <div className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-                                        <CheckCircle2 className="w-10 h-10 text-green-500" />
+                                    <div className={cn(
+                                        "mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4",
+                                        status?.stopped_early ? "bg-yellow-500/20" : "bg-green-500/20"
+                                    )}>
+                                        {status?.stopped_early ? (
+                                            <StopCircle className="w-10 h-10 text-yellow-500" />
+                                        ) : (
+                                            <CheckCircle2 className="w-10 h-10 text-green-500" />
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="mx-auto w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
@@ -95,7 +125,9 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                                 )}
 
                                 <h2 className="text-xl font-bold text-white mb-2">
-                                    {isFinished ? 'İşlem Tamamlandı' : 'İşlem Devam Ediyor'}
+                                    {isFinished
+                                        ? (status?.stopped_early ? 'İşlem Durduruldu' : 'İşlem Tamamlandı')
+                                        : 'İşlem Devam Ediyor'}
                                 </h2>
                                 <p className="text-slate-400 text-sm">
                                     {status?.message || 'Başlatılıyor...'}
@@ -112,7 +144,10 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                                     </div>
                                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                                         <motion.div
-                                            className="h-full bg-blue-500 rounded-full"
+                                            className={cn(
+                                                "h-full rounded-full",
+                                                status?.stopped_early ? "bg-yellow-500" : "bg-blue-500"
+                                            )}
                                             initial={{ width: 0 }}
                                             animate={{ width: `${status?.progress || 0}%` }}
                                             transition={{ duration: 0.5 }}
@@ -127,16 +162,40 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
                                     </div>
                                 )}
 
+                                {/* Durdur Butonu - sadece çalışırken göster */}
+                                {!isFinished && (
+                                    <motion.button
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        onClick={handleStop}
+                                        disabled={isStopping || status?.should_stop}
+                                        className={cn(
+                                            "w-full py-3 px-4 font-medium rounded-xl transition-colors flex items-center justify-center gap-2",
+                                            isStopping || status?.should_stop
+                                                ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                                                : "bg-red-600 hover:bg-red-700 text-white"
+                                        )}
+                                    >
+                                        <StopCircle className="w-5 h-5" />
+                                        {isStopping || status?.should_stop ? 'Durduruluyor...' : 'İşlemi Durdur'}
+                                    </motion.button>
+                                )}
+
                                 {/* Close Button (only when finished) */}
                                 {isFinished && (
                                     <motion.button
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         onClick={onClose}
-                                        className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                                        className={cn(
+                                            "w-full py-3 px-4 font-medium rounded-xl transition-colors flex items-center justify-center gap-2",
+                                            status?.stopped_early
+                                                ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+                                                : "bg-green-600 hover:bg-green-700 text-white"
+                                        )}
                                     >
                                         <CheckCircle2 className="w-5 h-5" />
-                                        Tamam
+                                        {status?.stopped_early ? 'Kaydedildi - Kapat' : 'Tamam'}
                                     </motion.button>
                                 )}
                             </div>
@@ -148,3 +207,4 @@ export function ProgressModal({ isOpen, onClose }: ProgressModalProps) {
         document.body
     );
 }
+

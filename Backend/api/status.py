@@ -14,6 +14,8 @@ class TaskStatus:
         self.total = 0
         self.current = 0
         self.details = ""
+        self.should_stop = False  # Durdurma flag'i
+        self.stopped_early = False  # Erken durduruldu mu?
     
     def update(self, message=None, progress=None, current=None, total=None, details=None):
         if message is not None:
@@ -29,6 +31,15 @@ class TaskStatus:
             
     def set_running(self, running: bool):
         self.is_running = running
+    
+    def request_stop(self):
+        """Taramayı durdurmayı talep et"""
+        self.should_stop = True
+        self.message = "Durdurma isteği alındı, mevcut veriler kaydediliyor..."
+    
+    def is_stop_requested(self) -> bool:
+        """Durdurma talep edildi mi?"""
+        return self.should_stop
 
     def to_dict(self):
         return {
@@ -37,7 +48,9 @@ class TaskStatus:
             "progress": self.progress,
             "total": self.total,
             "current": self.current,
-            "details": self.details
+            "details": self.details,
+            "should_stop": self.should_stop,
+            "stopped_early": self.stopped_early
         }
 
 # Global instance

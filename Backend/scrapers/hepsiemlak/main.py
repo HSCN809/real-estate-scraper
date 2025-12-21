@@ -79,7 +79,7 @@ class HepsiemlakScraper(BaseScraper):
         """Get all cities and let user select"""
         print(f"\n{self.category.capitalize()} sitesine gidiliyor...")
         self.driver.get(self.base_url)
-        self.random_long_wait()  # Stealth: rastgele 2-4 sn
+        time.sleep(5)  # HepsiEmlak için sabit 5 saniye - sayfa tam yüklensin
         
         try:
             # Find city dropdown
@@ -90,9 +90,10 @@ class HepsiemlakScraper(BaseScraper):
                 logger.error("City dropdown not found")
                 return []
             
-            city_dropdown.click()
+            # JS click ile menüyü aç (Selenium'un objeye tıklayamama riskine karşı)
+            self.driver.execute_script("arguments[0].click();", city_dropdown)
             print("Şehir dropdown'ı açıldı...")
-            self.random_medium_wait()  # Stealth: rastgele 1-2.5 sn
+            time.sleep(3)  # Dropdown açılması için 3 saniye
             
             # Expand dropdown
             city_list_sel = self.common_selectors.get("city_list")
@@ -105,7 +106,11 @@ class HepsiemlakScraper(BaseScraper):
                     container.style.overflow = 'visible';
                     container.style.height = 'auto';
                 """, dropdown_container)
-            self.random_medium_wait()  # Stealth
+            time.sleep(2)  # Liste genişletme sonrası bekleme
+            
+            if not dropdown_container:
+                logger.error("City list container not showing after click")
+                return []
             
             # Get city items
             city_item_sel = self.common_selectors.get("city_item")
@@ -267,7 +272,7 @@ class HepsiemlakScraper(BaseScraper):
         try:
             # Refresh page
             self.driver.get(self.base_url)
-            self.random_long_wait()  # Stealth
+            time.sleep(5)  # Sayfa tam yüklensin
             
             # Open city dropdown
             city_dropdown_sel = self.common_selectors.get("city_dropdown")
@@ -276,8 +281,9 @@ class HepsiemlakScraper(BaseScraper):
             if not city_dropdown:
                 return False
             
-            city_dropdown.click()
-            self.random_medium_wait()  # Stealth
+            # JS click - daha sağlam
+            self.driver.execute_script("arguments[0].click();", city_dropdown)
+            time.sleep(3)  # Dropdown açılsın
             
             # Expand dropdown
             city_list_sel = self.common_selectors.get("city_list")
@@ -290,7 +296,7 @@ class HepsiemlakScraper(BaseScraper):
                     container.style.overflow = 'visible';
                     container.style.height = 'auto';
                 """, dropdown_container)
-            self.random_medium_wait()  # Stealth
+            time.sleep(2)  # Liste genişletme
             
             # Find and select city
             city_item_sel = self.common_selectors.get("city_item")
@@ -508,8 +514,12 @@ class HepsiemlakScraper(BaseScraper):
             # Scrape each city
             all_results = {}
             for city in self.selected_cities:
-                # We can control max pages via self.scrape_city if we modify it to accept max_pages argument
-                # Currently scrape_city asks for input call: user_input = input(...)
+                # Durdurma kontrolü - kullanıcı durdur dediyse mevcut verileri kaydet
+                from api.status import task_status
+                if task_status.is_stop_requested():
+                    print(f"\n⚠️ Durdurma isteği alındı! {len(all_results)} şehir tarandı.")
+                    task_status.stopped_early = True
+                    break
                 
                 # We need to refactor scrape_city to take max_pages arg
                 city_listings = self.scrape_city(city, max_pages=max_pages, api_mode=True, progress_callback=progress_callback)
@@ -517,7 +527,7 @@ class HepsiemlakScraper(BaseScraper):
                     all_results[city] = city_listings
                 self.random_medium_wait()  # Stealth: şehirler arası
             
-            # Save data
+            # Save data (hem normal hem de erken durdurmada kaydedilir)
             if all_results:
                 self.exporter.save_by_city(
                     all_results,
@@ -526,7 +536,10 @@ class HepsiemlakScraper(BaseScraper):
                 )
                 
                 total = sum(len(v) for v in all_results.values())
-                print(f"\n🎉 TOPLAM: {len(all_results)} şehir, {total} ilan")
+                if task_status.stopped_early:
+                    print(f"\n⚠️ ERKEN DURDURULDU: {len(all_results)} şehir, {total} ilan kaydedildi")
+                else:
+                    print(f"\n🎉 TOPLAM: {len(all_results)} şehir, {total} ilan")
             else:
                 print("❌ Hiç ilan bulunamadı!")
                 

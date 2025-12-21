@@ -13,8 +13,8 @@ class ScraperConfig:
     """Main configuration class for scraper settings - STEALTH OPTIMIZED"""
     
     # Timeouts
-    page_load_timeout: int = 15
-    element_wait_timeout: int = 10
+    page_load_timeout: int = 30
+    element_wait_timeout: int = 10  # Düşürüldü (20 -> 10)
     
     # Retry settings
     max_retries: int = 3
@@ -27,9 +27,9 @@ class ScraperConfig:
     wait_between_requests: float = 0.3  # Düşürüldü: 0.5 -> 0.3
     
     # Rastgele bekleme aralıkları (min, max)
-    random_wait_short: tuple = (0.5, 1.5)   # Kısa işlemler için
-    random_wait_medium: tuple = (1.0, 2.5)  # Sayfa geçişleri için
-    random_wait_long: tuple = (2.0, 4.0)    # Önemli işlemler için (dropdown, arama)
+    random_wait_short: tuple = (1.0, 2.0)   # Alt limit artırıldı (0.5 -> 1.0)
+    random_wait_medium: tuple = (1.5, 3.5)  # Alt limit artırıldı (1.0 -> 1.5)
+    random_wait_long: tuple = (3.0, 6.0)    # Alt limit artırıldı (2.0 -> 3.0)
     
     # Scraping limits
     max_pages_per_location: int = 100  # Artırıldı: 50 -> 100

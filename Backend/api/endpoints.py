@@ -118,6 +118,15 @@ async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: Background
         output_files=[]
     )
 
+@router.post("/stop")
+async def stop_scraping():
+    """Aktif tarama işlemini durdur ve mevcut verileri kaydet"""
+    if task_status.is_running:
+        task_status.request_stop()
+        return {"status": "stopping", "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor..."}
+    else:
+        return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
+
 @router.get("/results")
 async def get_results():
     import os
