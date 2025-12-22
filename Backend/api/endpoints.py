@@ -235,33 +235,66 @@ async def get_results():
                             count = ws.max_row - 1 if ws.max_row else 0  # Subtract header
                             
                             # Find price column (Fiyat)
+                            # Find price column (Fiyat)
                             price_col_idx = None
                             headers = []
-                            for idx, cell in enumerate(ws[1]):
-                                headers.append(cell.value if cell.value else "")
-                                if cell.value and "fiyat" in str(cell.value).lower():
-                                    price_col_idx = idx
+                            # Use iter_rows for header to be safe in read_only
+                            header_row = next(ws.iter_rows(min_row=1, max_row=1))
                             
+                            for idx, cell in enumerate(header_row):
+                                val = str(cell.value).strip() if cell.value else ""
+                                headers.append(val)
+                                val_lower = val.lower()
+                                # Priority 1: Exact "fiyat"
+                                if val_lower == "fiyat":
+                                    price_col_idx = idx
+                                    break # Found exact match, stop searching
+                                # Priority 2: Contains "fiyat" but NOT "metrekare" (if no exact match found yet)
+                                elif "fiyat" in val_lower and "metrekare" not in val_lower:
+                                    if price_col_idx is None: # Only set if not set already
+                                        price_col_idx = idx
+
                             # Calculate average price
                             if price_col_idx is not None:
                                 prices = []
-                                for row in ws.iter_rows(min_row=2, max_row=min(1000, ws.max_row)):
+                                # Iterate all rows (starting from row 2)
+                                for row in ws.iter_rows(min_row=2):
                                     cell = row[price_col_idx]
                                     if cell.value:
                                         try:
-                                            # Remove non-numeric chars and convert
-                                            price_str = str(cell.value).replace('.', '').replace(',', '.').replace('TL', '').replace('₺', '').strip()
-                                            price = float(price_str)
+                                            # Robust price cleaning
+                                            import re
+                                            val_str = str(cell.value).strip()
+                                            # Remove all whitespace (including \xa0) and currency symbols
+                                            val_str = re.sub(r'\s+', '', val_str)
+                                            val_str = val_str.replace('TL', '').replace('₺', '')
+                                            
+                                            # Handle 1.234,56 format -> 1234.56
+                                            if ',' in val_str and '.' in val_str:
+                                                val_str = val_str.replace('.', '').replace(',', '.')
+                                            elif '.' in val_str and val_str.count('.') > 1: 
+                                                # Multiple dots like 1.234.567 -> 1234567
+                                                val_str = val_str.replace('.', '')
+                                            elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
+                                                # Likely thousands separator 45.000 -> 45000
+                                                val_str = val_str.replace('.', '')
+                                            elif ',' in val_str:
+                                                # Likely decimal separator or thousands (ambiguous, assume decimal if at end?)
+                                                # In TR, comma is decimal. 15,5 -> 15.5
+                                                val_str = val_str.replace(',', '.')
+                                            
+                                            price = float(val_str)
                                             if price > 0:
                                                 prices.append(price)
-                                        except:
+                                        except Exception:
                                             pass
+                                
                                 if prices:
-                                    avg_price = int(sum(prices) / len(prices))
+                                    avg_price = round(sum(prices) / len(prices), 2)
                             
                             wb.close()
                         except Exception as e:
-                            logger.warning(f"Could not read Excel data: {e}")
+                            logger.warning(f"Could not read Excel data for {filename}: {e}")
                     elif filename.endswith('.json'):
                         try:
                             import json
