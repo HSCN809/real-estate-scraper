@@ -32,6 +32,7 @@ export interface ScrapeResult {
   city?: string;
   date: string;
   count: number;
+  avg_price?: number | null;
   file_size?: number;
   file_size_mb?: number;
   status: string;

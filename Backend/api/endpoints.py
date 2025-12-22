@@ -211,25 +211,57 @@ async def get_results():
                     # Listing type detection
                     listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
                     
-                    # City name from filename (e.g., hepsiemlak_satilik_konut_balikesir.xlsx -> Balıkesir)
+                    # City name from filename
+                    # Format: hepsiemlak_satilik_konut_afyonkarahisar_20251221_172252.xlsx
+                    # Or: hepsiemlak_satilik_konut_balikesir.xlsx (eski format)
                     city = "Bilinmiyor"
                     parts = filename.replace('.xlsx', '').replace('.json', '').split('_')
                     if len(parts) >= 4:
-                        city_slug = parts[-1]
-                        # Capitalize city name
+                        # Eğer son parça sayıya benziyorsa (timestamp), 4. pozisyonu al
+                        if len(parts) >= 6 and parts[-1].isdigit():
+                            city_slug = parts[3]  # hepsiemlak_satilik_konut_SEHIR_...
+                        else:
+                            city_slug = parts[-1]  # Eski format
                         city = city_slug.replace('-', ' ').title()
                     
-                    # Get real record count from Excel file
+                    # Get real record count and average price from Excel file
                     count = 0
+                    avg_price = None
                     if filename.endswith('.xlsx'):
                         try:
                             import openpyxl
                             wb = openpyxl.load_workbook(file_path, read_only=True)
                             ws = wb.active
                             count = ws.max_row - 1 if ws.max_row else 0  # Subtract header
+                            
+                            # Find price column (Fiyat)
+                            price_col_idx = None
+                            headers = []
+                            for idx, cell in enumerate(ws[1]):
+                                headers.append(cell.value if cell.value else "")
+                                if cell.value and "fiyat" in str(cell.value).lower():
+                                    price_col_idx = idx
+                            
+                            # Calculate average price
+                            if price_col_idx is not None:
+                                prices = []
+                                for row in ws.iter_rows(min_row=2, max_row=min(1000, ws.max_row)):
+                                    cell = row[price_col_idx]
+                                    if cell.value:
+                                        try:
+                                            # Remove non-numeric chars and convert
+                                            price_str = str(cell.value).replace('.', '').replace(',', '.').replace('TL', '').replace('₺', '').strip()
+                                            price = float(price_str)
+                                            if price > 0:
+                                                prices.append(price)
+                                        except:
+                                            pass
+                                if prices:
+                                    avg_price = int(sum(prices) / len(prices))
+                            
                             wb.close()
                         except Exception as e:
-                            logger.warning(f"Could not read Excel row count: {e}")
+                            logger.warning(f"Could not read Excel data: {e}")
                     elif filename.endswith('.json'):
                         try:
                             import json
@@ -247,6 +279,7 @@ async def get_results():
                         "city": city,
                         "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
                         "count": count,
+                        "avg_price": avg_price,
                         "file_size": file_size,
                         "file_size_mb": round(file_size / (1024 * 1024), 2),
                         "status": "completed",
