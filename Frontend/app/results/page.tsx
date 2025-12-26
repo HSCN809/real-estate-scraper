@@ -2,6 +2,7 @@
 
 import { ArtCard } from '@/components/ui/ArtCard';
 import { ResultsMap } from '@/components/ui/ResultsMap';
+import { ResultsCharts } from '@/components/ui/ResultsCharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText,
@@ -24,7 +25,8 @@ import {
     Home,
     TrendingUp,
     Calendar,
-    Map
+    Map,
+    BarChart3
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getResults } from '@/lib/api';
@@ -56,7 +58,7 @@ export default function ResultsPage() {
     const [results, setResults] = useState<RichResult[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [viewMode, setViewMode] = useState<'table' | 'map'>('map');
+    const [viewMode, setViewMode] = useState<'table' | 'map' | 'charts'>('map');
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -69,6 +71,59 @@ export default function ResultsPage() {
     const [previewData, setPreviewData] = useState<any>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewFile, setPreviewFile] = useState<string | null>(null);
+
+    // Price data for charts - with filter tracking to prevent stale data rendering
+    const [priceData, setPriceData] = useState<{
+        prices: any[];
+        filters: { platform: string; category: string; listingType: string };
+    }>({ prices: [], filters: { platform: 'all', category: 'all', listingType: 'all' } });
+    const [priceDataLoading, setPriceDataLoading] = useState(false);
+
+    // Check if current priceData matches current filters
+    const isPriceDataValid =
+        priceData.filters.platform === platformFilter &&
+        priceData.filters.category === categoryFilter &&
+        priceData.filters.listingType === listingTypeFilter;
+
+    // Fetch price data with filters
+    const fetchPriceData = async () => {
+        const currentFilters = {
+            platform: platformFilter,
+            category: categoryFilter,
+            listingType: listingTypeFilter
+        };
+
+        setPriceDataLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (platformFilter !== 'all') params.append('platform', platformFilter);
+            if (categoryFilter !== 'all') params.append('category', categoryFilter);
+            if (listingTypeFilter !== 'all') params.append('listing_type', listingTypeFilter);
+
+            const url = `http://localhost:8000/api/v1/analytics/prices${params.toString() ? '?' + params.toString() : ''}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            // Store prices with the filters they were fetched for
+            setPriceData({
+                prices: data.prices || [],
+                filters: currentFilters
+            });
+        } catch (err) {
+            console.error('Price data fetch failed:', err);
+            setPriceData({ prices: [], filters: currentFilters });
+        } finally {
+            setPriceDataLoading(false);
+        }
+    };
+
+    // Auto-refetch price data when filters change and in charts view
+    useEffect(() => {
+        if (viewMode === 'charts') {
+            setPriceDataLoading(true); // Show loading spinner immediately
+            fetchPriceData();
+        }
+    }, [platformFilter, categoryFilter, listingTypeFilter, viewMode]);
 
     const fetchResults = async () => {
         try {
@@ -182,6 +237,16 @@ export default function ResultsPage() {
                         >
                             <List className="w-4 h-4" />
                         </button>
+                        <button
+                            onClick={() => {
+                                setPriceDataLoading(true); // Show loading immediately
+                                setViewMode('charts');
+                            }}
+                            className={`p-2.5 transition-colors ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                            title="Grafikler"
+                        >
+                            <BarChart3 className="w-4 h-4" />
+                        </button>
                     </div>
 
                     {results.length > 0 && (
@@ -289,16 +354,10 @@ export default function ResultsPage() {
 
                 {/* Listing Type Filter (Satılık/Kiralık) */}
                 <div className="flex rounded-lg overflow-hidden border border-slate-700">
-                    <button
-                        onClick={() => setListingTypeFilter('all')}
-                        className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === 'all' ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
-                    >
-                        Tümü
-                    </button>
                     {listingTypes.map(lt => (
                         <button
                             key={lt}
-                            onClick={() => setListingTypeFilter(lt || 'all')}
+                            onClick={() => setListingTypeFilter(listingTypeFilter === lt ? 'all' : (lt || 'all'))}
                             className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === lt ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
                         >
                             {lt}
@@ -348,6 +407,23 @@ export default function ResultsPage() {
                     <motion.div variants={itemVariants}>
                         <ResultsMap results={filteredResults} onPreview={openPreview} />
                     </motion.div>
+                ) : viewMode === 'charts' ? (
+                    /* Charts View */
+                    <motion.div variants={itemVariants}>
+                        {(priceDataLoading || !isPriceDataValid) ? (
+                            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                <p className="text-gray-400 animate-pulse">Fiyat verileri yükleniyor...</p>
+                            </div>
+                        ) : (
+                            <ResultsCharts
+                                results={filteredResults}
+                                priceData={priceData.prices}
+                                categoryFilter={categoryFilter}
+                                listingTypeFilter={listingTypeFilter}
+                            />
+                        )}
+                    </motion.div>
                 ) : (
                     /* Table View */
                     <motion.div variants={itemVariants} className="overflow-x-auto">
@@ -380,8 +456,8 @@ export default function ResultsPage() {
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`px-2 py-0.5 rounded text-xs ${result.category === 'Konut' ? 'bg-emerald-500/20 text-emerald-300' :
-                                                    result.category === 'Arsa' ? 'bg-cyan-500/20 text-cyan-300' :
-                                                        'bg-purple-500/20 text-purple-300'
+                                                result.category === 'Arsa' ? 'bg-cyan-500/20 text-cyan-300' :
+                                                    'bg-purple-500/20 text-purple-300'
                                                 }`}>
                                                 {result.category}
                                             </span>

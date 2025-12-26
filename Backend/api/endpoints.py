@@ -85,6 +85,9 @@ def run_hepsiemlak_task(request: ScrapeRequest):
             selected_cities=request.cities
         )
         
+        # DEBUG: Log received parameters
+        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, cities={request.cities}")
+        
         # Similarly, assume refactor allows programmatic run
         if hasattr(scraper, 'start_scraping_api'):
             scraper.start_scraping_api(max_pages=request.max_pages, progress_callback=progress_callback)
@@ -136,6 +139,271 @@ async def stop_scraping():
         return {"status": "stopping", "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor..."}
     else:
         return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
+
+@router.get("/analytics/prices")
+async def get_price_analytics(
+    platform: str = None,
+    category: str = None,
+    listing_type: str = None
+):
+    """Tüm dosyalardan fiyat verilerini çek - grafikler için (filtrelenebilir)"""
+    import os
+    import re
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    if not os.path.exists(output_dir):
+        return {"prices": [], "summary": {"total_count": 0}}
+    
+    all_prices = []
+    
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.lower().endswith('.xlsx'):
+                continue
+                
+            file_path = os.path.join(root, filename)
+            lower_name = filename.lower()
+            
+            # Metadata extraction
+            file_platform = "HepsiEmlak" if "hepsiemlak" in lower_name else "Emlakjet" if "emlakjet" in lower_name else "Unknown"
+            file_category = "Konut" if "konut" in lower_name else "Arsa" if "arsa" in lower_name else "İşyeri" if "isyeri" in lower_name else "Genel"
+            file_listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
+            
+            # Apply filters - skip files that don't match
+            if platform and platform != "all" and file_platform != platform:
+                continue
+            if category and category != "all" and file_category != category:
+                continue
+            if listing_type and listing_type != "all" and file_listing_type != listing_type:
+                continue
+            
+            # City extraction
+            parts = filename.replace('.xlsx', '').split('_')
+            city = "Bilinmiyor"
+            if len(parts) >= 4:
+                if len(parts) >= 6 and parts[-1].isdigit():
+                    city = parts[3].replace('-', ' ').title()
+                else:
+                    city = parts[-1].replace('-', ' ').title()
+            
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True)
+                ws = wb.active
+                
+                # Find price column
+                price_col_idx = None
+                header_row = next(ws.iter_rows(min_row=1, max_row=1))
+                
+                for idx, cell in enumerate(header_row):
+                    val = str(cell.value).strip().lower() if cell.value else ""
+                    if val == "fiyat":
+                        price_col_idx = idx
+                        break
+                    elif "fiyat" in val and "metrekare" not in val:
+                        if price_col_idx is None:
+                            price_col_idx = idx
+                
+                if price_col_idx is not None:
+                    for row in ws.iter_rows(min_row=2):
+                        cell = row[price_col_idx]
+                        if cell.value:
+                            try:
+                                val_str = str(cell.value).strip()
+                                val_str = re.sub(r'\s+', '', val_str)
+                                val_str = val_str.replace('TL', '').replace('₺', '')
+                                
+                                if ',' in val_str and '.' in val_str:
+                                    val_str = val_str.replace('.', '').replace(',', '.')
+                                elif '.' in val_str and val_str.count('.') > 1:
+                                    val_str = val_str.replace('.', '')
+                                elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
+                                    val_str = val_str.replace('.', '')
+                                elif ',' in val_str:
+                                    val_str = val_str.replace(',', '.')
+                                
+                                price = float(val_str)
+                                if price > 0:
+                                    all_prices.append({
+                                        "city": city,
+                                        "platform": file_platform,
+                                        "category": file_category,
+                                        "listing_type": file_listing_type,
+                                        "price": price
+                                    })
+                            except:
+                                pass
+                
+                wb.close()
+            except Exception as e:
+                logger.warning(f"Could not read prices from {filename}: {e}")
+    
+    # Summary stats
+    summary = {
+        "total_count": len(all_prices),
+        "avg_price": round(sum(p["price"] for p in all_prices) / len(all_prices), 2) if all_prices else 0,
+        "min_price": min(p["price"] for p in all_prices) if all_prices else 0,
+        "max_price": max(p["price"] for p in all_prices) if all_prices else 0
+    }
+    
+    return {"prices": all_prices, "summary": summary}
+
+@router.get("/analytics/file-stats/{filename}")
+async def get_file_statistics(filename: str):
+    """Dosya bazlı detaylı istatistikler - describe + fiyat aralıkları"""
+    import os
+    import re
+    import statistics
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    # Find the file
+    file_path = None
+    for root, dirs, files in os.walk(output_dir):
+        if filename in files:
+            file_path = os.path.join(root, filename)
+            break
+    
+    if not file_path or not os.path.exists(file_path):
+        return {"error": "Dosya bulunamadı", "stats": None}
+    
+    prices = []
+    
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        ws = wb.active
+        
+        # Find price column
+        price_col_idx = None
+        header_row = next(ws.iter_rows(min_row=1, max_row=1))
+        
+        for idx, cell in enumerate(header_row):
+            val = str(cell.value).strip().lower() if cell.value else ""
+            if val == "fiyat":
+                price_col_idx = idx
+                break
+            elif "fiyat" in val and "metrekare" not in val:
+                if price_col_idx is None:
+                    price_col_idx = idx
+        
+        if price_col_idx is not None:
+            for row in ws.iter_rows(min_row=2):
+                cell = row[price_col_idx]
+                if cell.value:
+                    try:
+                        val_str = str(cell.value).strip()
+                        val_str = re.sub(r'\s+', '', val_str)
+                        val_str = val_str.replace('TL', '').replace('₺', '')
+                        
+                        if ',' in val_str and '.' in val_str:
+                            val_str = val_str.replace('.', '').replace(',', '.')
+                        elif '.' in val_str and val_str.count('.') > 1:
+                            val_str = val_str.replace('.', '')
+                        elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
+                            val_str = val_str.replace('.', '')
+                        elif ',' in val_str:
+                            val_str = val_str.replace(',', '.')
+                        
+                        price = float(val_str)
+                        if price > 0:
+                            prices.append(price)
+                    except:
+                        pass
+        
+        wb.close()
+    except Exception as e:
+        logger.error(f"Error reading file stats: {e}")
+        return {"error": str(e), "stats": None}
+    
+    if not prices:
+        return {"error": "Fiyat verisi bulunamadı", "stats": None}
+    
+    # Sort prices for percentile calculations
+    sorted_prices = sorted(prices)
+    n = len(sorted_prices)
+    
+    # Calculate percentiles (quartiles)
+    def percentile(data, p):
+        k = (len(data) - 1) * p / 100
+        f = int(k)
+        c = f + 1 if f + 1 < len(data) else f
+        return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
+    
+    # Descriptive statistics (like pandas describe)
+    describe_stats = {
+        "count": n,
+        "mean": round(statistics.mean(prices), 2),
+        "std": round(statistics.stdev(prices), 2) if n > 1 else 0,
+        "min": round(min(prices), 2),
+        "q25": round(percentile(sorted_prices, 25), 2),
+        "median": round(statistics.median(prices), 2),
+        "q75": round(percentile(sorted_prices, 75), 2),
+        "max": round(max(prices), 2)
+    }
+    
+    # Dynamic price range distribution using quantile-based binning (like pandas qcut)
+    # Create 5 bins based on data distribution
+    num_bins = 5
+    bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
+    
+    # Ensure unique edges
+    unique_edges = []
+    for e in bin_edges:
+        if not unique_edges or e > unique_edges[-1]:
+            unique_edges.append(e)
+    
+    # If not enough unique edges, fall back to equal-width bins
+    if len(unique_edges) < 3:
+        min_p, max_p = min(prices), max(prices)
+        bin_width = (max_p - min_p) / num_bins
+        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
+    
+    # Count items in each bin
+    price_ranges = []
+    for i in range(len(unique_edges) - 1):
+        low = unique_edges[i]
+        high = unique_edges[i + 1]
+        
+        # Format the range label
+        def format_price(p):
+            if p >= 1000000:
+                return f"{p/1000000:.1f}M"
+            elif p >= 1000:
+                return f"{p/1000:.0f}K"
+            else:
+                return f"{p:.0f}"
+        
+        label = f"{format_price(low)} - {format_price(high)}"
+        
+        # Count items in range
+        if i == len(unique_edges) - 2:  # Last bin includes upper edge
+            count = sum(1 for p in prices if low <= p <= high)
+        else:
+            count = sum(1 for p in prices if low <= p < high)
+        
+        price_ranges.append({
+            "range": label,
+            "count": count,
+            "percentage": round(count / n * 100, 1)
+        })
+    
+    return {
+        "stats": describe_stats,
+        "price_ranges": price_ranges,
+        "total_listings": n
+    }
 
 @router.delete("/clear-results")
 async def clear_results():

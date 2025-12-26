@@ -270,19 +270,29 @@ class HepsiemlakScraper(BaseScraper):
     def select_single_city(self, city_name: str) -> bool:
         """Select a single city - DOĞRUDAN ŞEHİR URL'İNE GİT"""
         try:
-            # Şehir adını URL formatına çevir (Türkçe karakterleri düzelt)
-            city_slug = city_name.lower()
-            # Türkçe karakter dönüşümleri
-            tr_chars = {'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c', 
-                       'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'}
-            for tr, en in tr_chars.items():
+            import unicodedata
+            
+            # Unicode normalizasyonu (NFC -> composed form)
+            city_slug = unicodedata.normalize('NFC', city_name)
+            
+            # Türkçe karakter dönüşümleri - önce büyük harfleri çevir
+            tr_upper = {'İ': 'i', 'I': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'}
+            for tr, en in tr_upper.items():
                 city_slug = city_slug.replace(tr, en)
+            
+            # Sonra küçük harfe çevir ve küçük Türkçe karakterleri dönüştür
+            city_slug = city_slug.lower()
+            tr_lower = {'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c'}
+            for tr, en in tr_lower.items():
+                city_slug = city_slug.replace(tr, en)
+            
             city_slug = city_slug.replace(' ', '-')
             
             # Doğrudan şehir sayfasına git
             # listing_type: satilik veya kiralik
             city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
             print(f"Şehir URL'sine gidiliyor: {city_url}")
+            print(f"DEBUG: listing_type = {self.listing_type}")
             
             self.driver.get(city_url)
             time.sleep(5)  # Sayfa tam yüklensin

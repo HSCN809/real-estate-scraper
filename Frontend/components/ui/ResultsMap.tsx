@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Download, Eye, X, Building2 } from 'lucide-react';
+import { Download, Eye, X, Building2, BarChart3, TrendingUp } from 'lucide-react';
 import { ScrapeResult } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
 
@@ -57,6 +57,25 @@ interface GeoFeature {
     geometry: { type: string; coordinates: number[][][] | number[][][][] };
 }
 
+interface FileStats {
+    stats: {
+        count: number;
+        mean: number;
+        std: number;
+        min: number;
+        q25: number;
+        median: number;
+        q75: number;
+        max: number;
+    };
+    price_ranges: Array<{
+        range: string;
+        count: number;
+        percentage: number;
+    }>;
+    total_listings: number;
+}
+
 interface ResultsMapProps {
     results: ScrapeResult[];
     onPreview: (filename: string) => void;
@@ -67,6 +86,8 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
     const [hoveredCity, setHoveredCity] = useState<string | null>(null);
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
     const [geoData, setGeoData] = useState<GeoFeature[]>([]);
+    const [fileStats, setFileStats] = useState<FileStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
 
     // GeoJSON yükle
     useEffect(() => {
@@ -75,6 +96,23 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
             .then(data => setGeoData(data.features || []))
             .catch(err => console.error('GeoJSON yüklenemedi:', err));
     }, []);
+
+    // Şehir seçildiğinde istatistikleri yükle
+    useEffect(() => {
+        if (selectedCity?.files?.[0]?.name) {
+            setStatsLoading(true);
+            setFileStats(null);
+            fetch(`http://localhost:8000/api/v1/analytics/file-stats/${selectedCity.files[0].name}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.stats) {
+                        setFileStats(data);
+                    }
+                })
+                .catch(err => console.error('Stats yüklenemedi:', err))
+                .finally(() => setStatsLoading(false));
+        }
+    }, [selectedCity]);
 
     // Şehir verilerini map'e dönüştür
     const cityDataMap = useMemo(() => {
@@ -113,7 +151,6 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                 <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
                     {geoData.map((feature, i) => {
                         const geoName = feature.properties.name;
-                        // GeoJSON adını veri kaynağı adına çevir (mapping varsa)
                         const dataName = CITY_NAME_MAP[geoName] || geoName;
                         const result = cityDataMap.get(dataName.toLowerCase());
                         const fillColor = result ? getColorByCount(result.count || 0) : '#334155';
@@ -157,7 +194,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
 
             {selectedCity && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedCity(null)}>
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-emerald-500/20 rounded-lg"><Building2 className="w-6 h-6 text-emerald-400" /></div>
@@ -178,7 +215,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                             {selectedCity.file_size_mb && <span>📁 {selectedCity.file_size_mb.toFixed(2)} MB</span>}
                         </div>
 
-                        {/* Stats Grid */}
+                        {/* Basic Stats Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             <div className="bg-slate-800/50 rounded-xl p-4">
                                 <p className="text-gray-400 text-sm mb-1">Toplam İlan</p>
@@ -191,6 +228,79 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                 </p>
                             </div>
                         </div>
+
+                        {/* Descriptive Statistics */}
+                        {statsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                <span className="ml-3 text-gray-400">İstatistikler yükleniyor...</span>
+                            </div>
+                        ) : fileStats?.stats ? (
+                            <>
+                                {/* Describe Stats */}
+                                <div className="mb-6">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <TrendingUp className="w-5 h-5 text-purple-400" />
+                                        <h4 className="text-lg font-semibold text-white">Fiyat İstatistikleri</h4>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-2 text-sm">
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Min</p>
+                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.min)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Q1</p>
+                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.q25)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Medyan</p>
+                                            <p className="text-amber-400 font-semibold">{formatPrice(fileStats.stats.median)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Q3</p>
+                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.q75)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Max</p>
+                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.max)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                            <p className="text-gray-500 text-xs">Ortalama</p>
+                                            <p className="text-blue-400 font-semibold">{formatPrice(fileStats.stats.mean)} ₺</p>
+                                        </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center col-span-2">
+                                            <p className="text-gray-500 text-xs">Std. Sapma</p>
+                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.std)} ₺</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Price Range Distribution */}
+                                <div className="mb-6">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <BarChart3 className="w-5 h-5 text-cyan-400" />
+                                        <h4 className="text-lg font-semibold text-white">Fiyat Aralığı Dağılımı</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {fileStats.price_ranges.map((range, idx) => (
+                                            <div key={idx} className="flex items-center gap-3">
+                                                <div className="w-32 text-xs text-gray-400 truncate" title={range.range}>{range.range}</div>
+                                                <div className="flex-1 h-6 bg-slate-800 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full transition-all duration-500"
+                                                        style={{ width: `${range.percentage}%` }}
+                                                    ></div>
+                                                </div>
+                                                <div className="w-20 text-right text-xs">
+                                                    <span className="text-white font-medium">{range.count}</span>
+                                                    <span className="text-gray-500 ml-1">(%{range.percentage})</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        ) : null}
 
                         {selectedCity.files?.length > 0 && (
                             <div className="flex gap-3">
