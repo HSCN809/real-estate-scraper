@@ -378,7 +378,19 @@ export default function ResultsPage() {
                                                 {result.platform}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4 text-gray-400">{result.category}</td>
+                                        <td className="py-3 px-4">
+                                            <span className={`px-2 py-0.5 rounded text-xs ${result.category === 'Konut' ? 'bg-emerald-500/20 text-emerald-300' :
+                                                    result.category === 'Arsa' ? 'bg-cyan-500/20 text-cyan-300' :
+                                                        'bg-purple-500/20 text-purple-300'
+                                                }`}>
+                                                {result.category}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span className={`px-2 py-0.5 rounded text-xs ${result.listing_type === 'Satılık' ? 'bg-amber-500/20 text-amber-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                {result.listing_type || '-'}
+                                            </span>
+                                        </td>
                                         <td className="py-3 px-4 text-right text-emerald-400 font-medium">{(result.count || 0).toLocaleString()}</td>
                                         <td className="py-3 px-4 text-gray-500 text-sm">{result.date}</td>
                                         <td className="py-3 px-4 text-right">
