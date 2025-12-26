@@ -63,6 +63,7 @@ export default function ResultsPage() {
     // Filters
     const [platformFilter, setPlatformFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
+    const [listingTypeFilter, setListingTypeFilter] = useState<string>('all');
 
     // Preview Modal
     const [previewData, setPreviewData] = useState<any>(null);
@@ -130,6 +131,7 @@ export default function ResultsPage() {
     const filteredResults = results.filter(r => {
         if (platformFilter !== 'all' && r.platform !== platformFilter) return false;
         if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
+        if (listingTypeFilter !== 'all' && r.listing_type !== listingTypeFilter) return false;
         return true;
     });
 
@@ -139,9 +141,10 @@ export default function ResultsPage() {
     const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
     const latestDate = results.length > 0 ? results[0].date : '-';
 
-    // Unique platforms and categories for filters
+    // Unique platforms, categories, and listing types for filters
     const platforms = [...new Set(results.map(r => r.platform))];
     const categories = [...new Set(results.map(r => r.category))];
+    const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
 
     return (
         <motion.div
@@ -283,6 +286,25 @@ export default function ResultsPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* Listing Type Filter (Satılık/Kiralık) */}
+                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                    <button
+                        onClick={() => setListingTypeFilter('all')}
+                        className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === 'all' ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                    >
+                        Tümü
+                    </button>
+                    {listingTypes.map(lt => (
+                        <button
+                            key={lt}
+                            onClick={() => setListingTypeFilter(lt || 'all')}
+                            className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === lt ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                        >
+                            {lt}
+                        </button>
+                    ))}
+                </div>
             </motion.div>
 
             {/* Content */}
@@ -335,6 +357,7 @@ export default function ResultsPage() {
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Şehir</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Platform</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Kategori</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Tür</th>
                                     <th className="text-right py-4 px-4 text-gray-400 font-medium">İlan</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Tarih</th>
                                     <th className="text-right py-4 px-4 text-gray-400 font-medium">İşlem</th>
