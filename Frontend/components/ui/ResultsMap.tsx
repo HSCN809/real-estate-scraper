@@ -202,6 +202,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                     <h3 className="text-xl font-bold text-white">{selectedCity.city}</h3>
                                     <p className="text-sm text-gray-400">
                                         {selectedCity.platform} • {selectedCity.category}
+                                        {selectedCity.subtype && ` • ${selectedCity.subtype}`}
                                         {selectedCity.listing_type && ` • ${selectedCity.listing_type}`}
                                     </p>
                                 </div>

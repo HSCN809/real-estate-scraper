@@ -13,6 +13,62 @@ import logging
 router = APIRouter()
 logger = logging.getLogger("api")
 
+# Category name mappings for display
+CATEGORY_NAMES = {
+    "konut": "Konut",
+    "arsa": "Arsa",
+    "isyeri": "İşyeri",
+    "devremulk": "Devremülk",
+    "turistik_isletme": "Turistik İşletme",
+    "turistik_tesis": "Turistik Tesis",
+    "kat_karsiligi_arsa": "Kat Karşılığı Arsa",
+    "devren_isyeri": "Devren İşyeri",
+    "gunluk_kiralik": "Günlük Kiralık"
+}
+
+@router.get("/config/categories")
+async def get_categories():
+    """Get all platform categories from config"""
+    emlakjet = get_emlakjet_config()
+    hepsiemlak = get_hepsiemlak_config()
+    
+    def format_categories(categories_dict):
+        return [
+            {"id": k, "name": CATEGORY_NAMES.get(k, k.replace("_", " ").title())}
+            for k in categories_dict.keys()
+        ]
+    
+    return {
+        "emlakjet": {
+            "satilik": format_categories(emlakjet.categories["satilik"]),
+            "kiralik": format_categories(emlakjet.categories["kiralik"])
+        },
+        "hepsiemlak": {
+            "satilik": format_categories(hepsiemlak.categories["satilik"]),
+            "kiralik": format_categories(hepsiemlak.categories["kiralik"])
+        }
+    }
+
+@router.get("/config/subtypes")
+async def get_subtypes(listing_type: str, category: str):
+    """
+    Belirli bir kategori için alt tipleri JSON dosyasından oku.
+    JSON dosyası yoksa boş liste döner.
+    Örnek: /config/subtypes?listing_type=kiralik&category=arsa
+    """
+    from scrapers.hepsiemlak.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
+    
+    # JSON dosyasından oku
+    subtypes = fetch_subtypes(listing_type, category)
+    
+    if not SUBCATEGORIES_JSON_PATH.exists():
+        return {
+            "subtypes": [],
+            "error": "Subcategories JSON dosyası bulunamadı. 'python -m scrapers.hepsiemlak.subtype_fetcher' çalıştırın."
+        }
+    
+    return {"subtypes": subtypes, "cached": True}
+
 def run_emlakjet_task(request: ScrapeRequest):
     from scrapers.emlakjet.main import EmlakJetScraper
     
@@ -82,11 +138,12 @@ def run_hepsiemlak_task(request: ScrapeRequest):
             driver=driver,
             listing_type=request.listing_type,
             category=request.category,
+            subtype_path=request.subtype_path,  # Yeni: Alt kategori path'i
             selected_cities=request.cities
         )
         
         # DEBUG: Log received parameters
-        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, cities={request.cities}")
+        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, subtype_path={request.subtype_path}, cities={request.cities}")
         
         # Similarly, assume refactor allows programmatic run
         if hasattr(scraper, 'start_scraping_api'):
@@ -436,6 +493,66 @@ async def clear_results():
     except Exception as e:
         return {"status": "error", "message": str(e), "deleted_count": deleted_count}
 
+@router.delete("/results/{filename:path}")
+async def delete_result(filename: str):
+    """Tek bir sonuç dosyasını sil"""
+    import os
+    import gc
+    import time
+    from urllib.parse import unquote
+    
+    # URL decode the filename (handles Turkish characters)
+    decoded_filename = unquote(filename)
+    logger.info(f"Delete request for: {decoded_filename}")
+    
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+    output_dir = os.path.join(project_root, "outputs")
+    
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+    
+    # Find the file
+    file_path = None
+    for root, dirs, files in os.walk(output_dir):
+        for f in files:
+            if f == decoded_filename:
+                file_path = os.path.join(root, f)
+                break
+        if file_path:
+            break
+    
+    if not file_path or not os.path.exists(file_path):
+        logger.warning(f"File not found: {decoded_filename}")
+        raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {decoded_filename}")
+    
+    # Retry mechanism for Windows file locking
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Force garbage collection to release any file handles
+            gc.collect()
+            time.sleep(0.1)  # Small delay
+            
+            os.remove(file_path)
+            logger.info(f"Deleted: {file_path}")
+            return {"status": "success", "message": f"{decoded_filename} silindi"}
+        except PermissionError as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Retry {attempt + 1}/{max_retries} for {decoded_filename}")
+                gc.collect()
+                time.sleep(0.5)  # Wait longer before retry
+            else:
+                logger.error(f"Delete failed after {max_retries} attempts: {e}")
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Dosya başka bir işlem tarafından kullanılıyor. Lütfen biraz bekleyip tekrar deneyin."
+                )
+        except Exception as e:
+            logger.error(f"Delete error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/results")
 async def get_results():
     import os
@@ -470,40 +587,107 @@ async def get_results():
                     elif "hepsiemlak" in lower_name: 
                         platform = "HepsiEmlak"
                     
-                    # Category detection
+                    # Category detection - tüm kategoriler
                     category = "Genel"
-                    if "konut" in lower_name: category = "Konut"
-                    elif "arsa" in lower_name: category = "Arsa"
-                    elif "isyeri" in lower_name: category = "İşyeri"
+                    if "konut" in lower_name: 
+                        category = "Konut"
+                    elif "turistik_isletme" in lower_name or "turistik-isletme" in lower_name:
+                        category = "Turistik İşletme"
+                    elif "turistik_tesis" in lower_name or "turistik-tesis" in lower_name:
+                        category = "Turistik Tesis"
+                    elif "devremulk" in lower_name or "devremülk" in lower_name:
+                        category = "Devremülk"
+                    elif "kat_karsiligi" in lower_name or "kat-karsiligi" in lower_name:
+                        category = "Kat Karşılığı Arsa"
+                    elif "devren_isyeri" in lower_name or "devren-isyeri" in lower_name:
+                        category = "Devren İşyeri"
+                    elif "gunluk_kiralik" in lower_name or "gunluk-kiralik" in lower_name:
+                        category = "Günlük Kiralık"
+                    elif "arsa" in lower_name: 
+                        category = "Arsa"
+                    elif "isyeri" in lower_name: 
+                        category = "İşyeri"
                     
                     # Listing type detection
                     listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
                     
-                    # City name from filename
-                    # Format: hepsiemlak_satilik_konut_afyonkarahisar_20251221_172252.xlsx
-                    # Or: hepsiemlak_satilik_konut_balikesir.xlsx (eski format)
+                    # City name and subtype from filename
+                    # Format: hepsiemlak_satilik_konut_daire_istanbul_20251221_172252.xlsx
+                    # Or: hepsiemlak_satilik_konut_istanbul_20251221_172252.xlsx (no subtype)
                     city = "Bilinmiyor"
+                    subtype = None
                     parts = filename.replace('.xlsx', '').replace('.json', '').split('_')
+                    
+                    # Bilinen kategori anahtar kelimeleri
+                    category_keywords = ['konut', 'arsa', 'isyeri', 'devremulk', 'isletme', 'tesis', 'kiralik']
+                    
+                    # Bilinen alt kategori anahtar kelimeleri (örnekler)
+                    subtype_keywords = [
+                        'daire', 'villa', 'mustakil', 'residence', 'yazlik', 'bina',
+                        'tarla', 'bahce', 'zeytinlik', 'imarli', 'bag',
+                        'dukkan', 'magaza', 'ofis', 'buro', 'fabrika', 'depo',
+                        'apart', 'otel', 'motel', 'pansiyon'
+                    ]
+                    
                     if len(parts) >= 4:
-                        # Eğer son parça sayıya benziyorsa (timestamp), 4. pozisyonu al
-                        if len(parts) >= 6 and parts[-1].isdigit():
-                            city_slug = parts[3]  # hepsiemlak_satilik_konut_SEHIR_...
-                        else:
-                            city_slug = parts[-1]  # Eski format
-                        city = city_slug.replace('-', ' ').title()
+                        # Format: platform_listing_type_category_[subtype]_city_date_time
+                        # Index: 0       1            2         3        4    5    6
+                        
+                        # Kategori pozisyonunu bul
+                        category_index = -1
+                        for i, part in enumerate(parts):
+                            if part in category_keywords and i >= 2:
+                                category_index = i
+                                break
+                        
+                        if category_index >= 0 and category_index + 1 < len(parts):
+                            next_part = parts[category_index + 1]
+                            
+                            # Subtype var mı kontrol et (timestamp değilse ve subtype keyword'üne uyuyorsa)
+                            if not next_part.isdigit():
+                                # Subtype olabilir mi kontrol et
+                                is_potential_subtype = False
+                                for kw in subtype_keywords:
+                                    if kw in next_part:
+                                        is_potential_subtype = True
+                                        break
+                                
+                                if is_potential_subtype:
+                                    subtype = next_part.replace('_', ' ').replace('-', ' ').title()
+                                    city_index = category_index + 2
+                                else:
+                                    # Subtype yok, bu şehir olabilir
+                                    city_index = category_index + 1
+                            else:
+                                city_index = category_index + 1
+                            
+                            # Şehri al
+                            if city_index < len(parts):
+                                city_slug = parts[city_index]
+                                if not city_slug.isdigit():
+                                    city = city_slug.replace('-', ' ').title()
+                        
+                        # Fallback: eğer hala bulunamadıysa
+                        if city == "Bilinmiyor" and len(parts) >= 4:
+                            if parts[-1].isdigit() and len(parts) >= 5:
+                                potential_city = parts[-3] if len(parts) >= 6 else parts[-2]
+                                if not potential_city.isdigit() and potential_city not in category_keywords:
+                                    city = potential_city.replace('-', ' ').title()
                     
                     # Get real record count and average price from Excel file
                     count = 0
                     avg_price = None
                     if filename.endswith('.xlsx'):
                         try:
-                            import openpyxl
-                            wb = openpyxl.load_workbook(file_path, read_only=True)
+                            from openpyxl import load_workbook
+                            import json as json_module
+                            wb = load_workbook(file_path, read_only=True, data_only=True)
                             ws = wb.active
-                            count = ws.max_row - 1 if ws.max_row else 0  # Subtract header
                             
-                            # Find price column (Fiyat)
-                            # Find price column (Fiyat)
+                            # Row count (excluding header)
+                            count = ws.max_row - 1 if ws.max_row else 0
+                            
+                            # Find price column
                             price_col_idx = None
                             headers = []
                             # Use iter_rows for header to be safe in read_only
@@ -513,61 +697,51 @@ async def get_results():
                                 val = str(cell.value).strip() if cell.value else ""
                                 headers.append(val)
                                 val_lower = val.lower()
-                                # Priority 1: Exact "fiyat"
                                 if val_lower == "fiyat":
                                     price_col_idx = idx
-                                    break # Found exact match, stop searching
-                                # Priority 2: Contains "fiyat" but NOT "metrekare" (if no exact match found yet)
+                                    break
                                 elif "fiyat" in val_lower and "metrekare" not in val_lower:
-                                    if price_col_idx is None: # Only set if not set already
+                                    if price_col_idx is None:
                                         price_col_idx = idx
 
                             # Calculate average price
                             if price_col_idx is not None:
                                 prices = []
-                                # Iterate all rows (starting from row 2)
                                 for row in ws.iter_rows(min_row=2):
                                     cell = row[price_col_idx]
                                     if cell.value:
                                         try:
-                                            # Robust price cleaning
                                             import re
                                             val_str = str(cell.value).strip()
-                                            # Remove all whitespace (including \xa0) and currency symbols
                                             val_str = re.sub(r'\s+', '', val_str)
                                             val_str = val_str.replace('TL', '').replace('₺', '')
                                             
-                                            # Handle 1.234,56 format -> 1234.56
                                             if ',' in val_str and '.' in val_str:
                                                 val_str = val_str.replace('.', '').replace(',', '.')
                                             elif '.' in val_str and val_str.count('.') > 1: 
-                                                # Multiple dots like 1.234.567 -> 1234567
                                                 val_str = val_str.replace('.', '')
                                             elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
-                                                # Likely thousands separator 45.000 -> 45000
                                                 val_str = val_str.replace('.', '')
                                             elif ',' in val_str:
-                                                # Likely decimal separator or thousands (ambiguous, assume decimal if at end?)
-                                                # In TR, comma is decimal. 15,5 -> 15.5
                                                 val_str = val_str.replace(',', '.')
                                             
                                             price = float(val_str)
                                             if price > 0:
                                                 prices.append(price)
-                                        except Exception:
+                                        except:
                                             pass
                                 
                                 if prices:
-                                    avg_price = round(sum(prices) / len(prices), 2)
+                                    avg_price = sum(prices) / len(prices)
                             
                             wb.close()
                         except Exception as e:
-                            logger.warning(f"Could not read Excel data for {filename}: {e}")
+                            logger.warning(f"Could not read Excel file stats: {e}")
                     elif filename.endswith('.json'):
                         try:
-                            import json
+                            import json as json_module
                             with open(file_path, 'r', encoding='utf-8') as f:
-                                data = json.load(f)
+                                data = json_module.load(f)
                                 count = len(data) if isinstance(data, list) else 0
                         except:
                             pass
@@ -576,6 +750,7 @@ async def get_results():
                         "id": filename,
                         "platform": platform,
                         "category": category,
+                        "subtype": subtype,
                         "listing_type": listing_type,
                         "city": city,
                         "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),

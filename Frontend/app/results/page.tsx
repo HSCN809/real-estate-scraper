@@ -66,6 +66,7 @@ export default function ResultsPage() {
     const [platformFilter, setPlatformFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [listingTypeFilter, setListingTypeFilter] = useState<string>('all');
+    const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
 
     // Preview Modal
     const [previewData, setPreviewData] = useState<any>(null);
@@ -153,6 +154,19 @@ export default function ResultsPage() {
         }
     };
 
+    const deleteResult = async (filename: string) => {
+        if (!confirm(`"${filename}" dosyasını silmek istediğinize emin misiniz?`)) return;
+
+        try {
+            const res = await fetch(`http://localhost:8000/api/v1/results/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            if (res.ok) {
+                setResults(results.filter(r => r.files?.[0]?.name !== filename));
+            }
+        } catch (err) {
+            console.error('Delete failed:', err);
+        }
+    };
+
     const openPreview = async (filename: string) => {
         setPreviewFile(filename);
         setPreviewLoading(true);
@@ -187,6 +201,7 @@ export default function ResultsPage() {
         if (platformFilter !== 'all' && r.platform !== platformFilter) return false;
         if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
         if (listingTypeFilter !== 'all' && r.listing_type !== listingTypeFilter) return false;
+        if (subtypeFilter !== 'all' && r.subtype !== subtypeFilter) return false;
         return true;
     });
 
@@ -196,10 +211,11 @@ export default function ResultsPage() {
     const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
     const latestDate = results.length > 0 ? results[0].date : '-';
 
-    // Unique platforms, categories, and listing types for filters
+    // Unique platforms, categories, listing types and subtypes for filters
     const platforms = [...new Set(results.map(r => r.platform))];
     const categories = [...new Set(results.map(r => r.category))];
     const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
+    const subtypes = [...new Set(results.map(r => r.subtype).filter(Boolean))];
 
     return (
         <motion.div
@@ -364,6 +380,27 @@ export default function ResultsPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* Subtype Filter (Alt Kategori) - Custom Dropdown */}
+                {subtypes.length > 0 && (
+                    <div className="relative">
+                        <select
+                            value={subtypeFilter}
+                            onChange={(e) => setSubtypeFilter(e.target.value)}
+                            className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none pr-8 cursor-pointer"
+                        >
+                            <option value="all">Alt Kategori: Tümü</option>
+                            {subtypes.map(st => (
+                                <option key={st} value={st}>{st}</option>
+                            ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
+                )}
             </motion.div>
 
             {/* Content */}
@@ -483,6 +520,13 @@ export default function ResultsPage() {
                                                 >
                                                     <Download className="w-4 h-4 text-emerald-400" />
                                                 </a>
+                                                <button
+                                                    onClick={() => deleteResult(result.files?.[0]?.name || '')}
+                                                    className="p-2 rounded-lg hover:bg-red-600/20 transition-colors"
+                                                    title="Sil"
+                                                >
+                                                    <Trash2 className="w-4 h-4 text-red-400" />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

@@ -3,6 +3,8 @@
 export interface ScrapeRequest {
   category: string;
   listing_type: string;
+  subtype?: string;       // Alt tip ID'si
+  subtype_path?: string;  // Alt tip URL path'i
   cities?: string[];
   districts?: string[];
   max_pages: number;
@@ -29,6 +31,8 @@ export interface ScrapeResult {
   platform: string;
   category: string;
   listing_type?: string;
+  subtype?: string;         // Alt kategori adı
+  subtype_path?: string;    // Alt kategori path'i
   city?: string;
   date: string;
   count: number;
@@ -45,32 +49,15 @@ export interface ScrapeResult {
 
 export const CATEGORIES: Record<Platform, Record<ListingType, Category[]>> = {
   emlakjet: {
-    satilik: [
-      { id: 'konut', name: 'Konut' },
-      { id: 'arsa', name: 'Arsa' },
-      { id: 'isyeri', name: 'İşyeri' },
-      { id: 'turistik_tesis', name: 'Turistik Tesis' },
-    ],
-    kiralik: [
-      { id: 'konut', name: 'Konut' },
-      { id: 'arsa', name: 'Arsa' },
-      { id: 'isyeri', name: 'İşyeri' },
-    ],
+    satilik: [],
+    kiralik: [],
   },
   hepsiemlak: {
-    satilik: [
-      { id: 'konut', name: 'Konut' },
-      { id: 'arsa', name: 'Arsa' },
-      { id: 'isyeri', name: 'İşyeri' },
-      { id: 'devremulk', name: 'Devremülk' },
-    ],
-    kiralik: [
-      { id: 'konut', name: 'Konut' },
-      { id: 'arsa', name: 'Arsa' },
-      { id: 'isyeri', name: 'İşyeri' },
-    ],
+    satilik: [],
+    kiralik: [],
   },
 };
+
 
 export const TURKISH_CITIES = [
   'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Aksaray', 'Amasya', 'Ankara', 'Antalya',

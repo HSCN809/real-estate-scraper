@@ -45,3 +45,48 @@ export async function getResults(): Promise<ScrapeResult[]> {
     }
     return response.json();
 }
+
+export interface Category {
+    id: string;
+    name: string;
+}
+
+export interface CategoriesResponse {
+    emlakjet: {
+        satilik: Category[];
+        kiralik: Category[];
+    };
+    hepsiemlak: {
+        satilik: Category[];
+        kiralik: Category[];
+    };
+}
+
+export async function getCategories(): Promise<CategoriesResponse> {
+    const response = await fetch(`${API_BASE_URL}/config/categories`);
+    if (!response.ok) {
+        throw new Error('Kategoriler alınamadı');
+    }
+    return response.json();
+}
+
+// Subtype (alt kategori) için API
+export interface Subtype {
+    id: string;
+    name: string;
+    path: string;
+}
+
+export interface SubtypesResponse {
+    subtypes: Subtype[];
+    cached: boolean;
+    error?: string;
+}
+
+export async function getSubtypes(listingType: string, category: string): Promise<SubtypesResponse> {
+    const response = await fetch(`${API_BASE_URL}/config/subtypes?listing_type=${listingType}&category=${category}`);
+    if (!response.ok) {
+        throw new Error('Alt kategoriler alınamadı');
+    }
+    return response.json();
+}

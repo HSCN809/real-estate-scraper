@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArtCard } from '@/components/ui/ArtCard';
 import { Select } from '@/components/ui/Select';
@@ -11,8 +11,9 @@ import { ProgressModal } from '@/components/ui/ProgressModal';
 import { motion } from 'framer-motion';
 import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { startScrape } from '@/lib/api';
-import { CATEGORIES, type Platform, type ListingType } from '@/types';
+import { startScrape, getCategories, getSubtypes } from '@/lib/api';
+import type { Platform, ListingType, Category } from '@/types';
+import type { Subtype } from '@/lib/api';
 
 export default function PlatformScraperPage() {
     const params = useParams();
@@ -28,12 +29,74 @@ export default function PlatformScraperPage() {
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
 
+    // Dynamic categories from API
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+    // Dynamic subtypes from API (HepsiEmlak only)
+    const [subtypes, setSubtypes] = useState<Subtype[]>([]);
+    const [selectedSubtype, setSelectedSubtype] = useState<Subtype | null>(null);
+    const [subtypesLoading, setSubtypesLoading] = useState(false);
+
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const platformIcon = platform === 'emlakjet' ? '🔵' : '🟢';
     const platformGradient = platform === 'emlakjet' ? 'gradient-art-blue' : 'gradient-art-pink';
     const platformColor = platform === 'emlakjet' ? 'blue' : 'pink';
 
-    const categories = CATEGORIES[platform]?.[listingType] || [];
+    // Fetch categories from API on mount and when platform/listingType changes
+    useEffect(() => {
+        const fetchCategories = async () => {
+            setCategoriesLoading(true);
+            try {
+                const response = await getCategories();
+                const platformCategories = response[platform]?.[listingType] || [];
+                setCategories(platformCategories);
+
+                // Reset category selection if current category not in new list
+                if (platformCategories.length > 0) {
+                    const currentCategoryExists = platformCategories.some(c => c.id === category);
+                    if (!currentCategoryExists) {
+                        setCategory(platformCategories[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch categories:', error);
+                setCategories([]);
+            } finally {
+                setCategoriesLoading(false);
+            }
+        };
+
+        fetchCategories();
+    }, [platform, listingType]);
+
+    // Fetch subtypes when category changes (HepsiEmlak only)
+    useEffect(() => {
+        const fetchSubtypesData = async () => {
+            // Only for HepsiEmlak and specific categories that have subtypes
+            if (platform !== 'hepsiemlak') {
+                setSubtypes([]);
+                setSelectedSubtype(null);
+                return;
+            }
+
+            setSubtypesLoading(true);
+            setSelectedSubtype(null);
+
+            try {
+                const response = await getSubtypes(listingType, category);
+                setSubtypes(response.subtypes || []);
+            } catch (error) {
+                console.error('Failed to fetch subtypes:', error);
+                setSubtypes([]);
+            } finally {
+                setSubtypesLoading(false);
+            }
+        };
+
+        fetchSubtypesData();
+    }, [platform, listingType, category]);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,6 +118,8 @@ export default function PlatformScraperPage() {
             const response = await startScrape(platform, {
                 category,
                 listing_type: listingType,
+                subtype: selectedSubtype?.id,
+                subtype_path: selectedSubtype?.path,
                 cities: selectedCities,
                 max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
@@ -119,9 +184,45 @@ export default function PlatformScraperPage() {
                             label="Kategori"
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
-                            options={categories.map((c) => ({ value: c.id, label: `🏠 ${c.name}` }))}
+                            options={categoriesLoading
+                                ? [{ value: '', label: '⏳ Yükleniyor...' }]
+                                : categories.map((c) => ({ value: c.id, label: `🏠 ${c.name}` }))
+                            }
+                            disabled={categoriesLoading}
                         />
                     </div>
+
+                    {/* Subcategory - Only for HepsiEmlak when subtypes exist */}
+                    {platform === 'hepsiemlak' && (
+                        <div>
+                            <Select
+                                label="📋 Alt Kategori (Opsiyonel)"
+                                value={selectedSubtype?.id || ''}
+                                onChange={(e) => {
+                                    const selected = subtypes.find(s => s.id === e.target.value);
+                                    setSelectedSubtype(selected || null);
+                                }}
+                                options={[
+                                    {
+                                        value: '',
+                                        label: subtypesLoading
+                                            ? '⏳ Alt kategoriler yükleniyor...'
+                                            : subtypes.length === 0
+                                                ? '🔄 Alt kategori bulunamadı'
+                                                : '🔄 Tümü (Alt kategori seçme)'
+                                    },
+                                    ...subtypes.map((s) => ({ value: s.id, label: `📋 ${s.name}` }))
+                                ]}
+                                disabled={subtypesLoading || subtypes.length === 0}
+                            />
+                            {subtypesLoading && (
+                                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Alt kategoriler alınıyor...
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Cities */}
                     <div>

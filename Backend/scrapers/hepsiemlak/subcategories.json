@@ -1,0 +1,911 @@
+{
+  "satilik": {
+    "konut": [
+      {
+        "id": "daire",
+        "name": "Daire",
+        "path": "/satilik/daire"
+      },
+      {
+        "id": "villa",
+        "name": "Villa",
+        "path": "/satilik/villa"
+      },
+      {
+        "id": "mustakil_ev",
+        "name": "Müstakil Ev",
+        "path": "/satilik/mustakil-ev"
+      },
+      {
+        "id": "prefabrik",
+        "name": "Prefabrik",
+        "path": "/satilik/prefabrik"
+      },
+      {
+        "id": "bina",
+        "name": "Bina",
+        "path": "/satilik/bina"
+      },
+      {
+        "id": "residence",
+        "name": "Residence",
+        "path": "/satilik/residence"
+      },
+      {
+        "id": "bungalov",
+        "name": "Bungalov",
+        "path": "/satilik/bungalov"
+      },
+      {
+        "id": "yazlik",
+        "name": "Yazlık",
+        "path": "/satilik/yazlik"
+      },
+      {
+        "id": "koy_evi",
+        "name": "Köy Evi",
+        "path": "/satilik/koy-evi"
+      },
+      {
+        "id": "ciftlik_evi",
+        "name": "Çiftlik Evi",
+        "path": "/satilik/ciftlik-evi"
+      },
+      {
+        "id": "kosk",
+        "name": "Köşk",
+        "path": "/satilik/kosk"
+      },
+      {
+        "id": "yali_dairesi",
+        "name": "Yalı Dairesi",
+        "path": "/satilik/yali-dairesi"
+      },
+      {
+        "id": "yali",
+        "name": "Yalı",
+        "path": "/satilik/yali"
+      },
+      {
+        "id": "dag_evi",
+        "name": "Dağ Evi",
+        "path": "/satilik/dag-evi"
+      },
+      {
+        "id": "loft_daire",
+        "name": "Loft Daire",
+        "path": "/satilik/loft-daire"
+      },
+      {
+        "id": "kooperatif",
+        "name": "Kooperatif",
+        "path": "/satilik/kooperatif"
+      }
+    ],
+    "arsa": [
+      {
+        "id": "tarla",
+        "name": "Tarla",
+        "path": "/satilik/tarla"
+      },
+      {
+        "id": "imarli_konut",
+        "name": "İmarlı - Konut",
+        "path": "/satilik/imarli-konut"
+      },
+      {
+        "id": "bahce",
+        "name": "Bahçe",
+        "path": "/satilik/bahce"
+      },
+      {
+        "id": "zeytinlik",
+        "name": "Zeytinlik",
+        "path": "/satilik/zeytinlik"
+      },
+      {
+        "id": "muhtelif_arsa",
+        "name": "Muhtelif Arsa",
+        "path": "/satilik/muhtelif-arsa"
+      },
+      {
+        "id": "imarli_ticari",
+        "name": "İmarlı - Ticari",
+        "path": "/satilik/imarli-ticari"
+      },
+      {
+        "id": "konutticaret",
+        "name": "Konut+Ticaret",
+        "path": "/satilik/konutticaret"
+      },
+      {
+        "id": "bag",
+        "name": "Bağ",
+        "path": "/satilik/bag"
+      },
+      {
+        "id": "imarli_sanayi",
+        "name": "İmarlı - Sanayi",
+        "path": "/satilik/imarli-sanayi"
+      },
+      {
+        "id": "arsa_ciftlik",
+        "name": "Çiftlik",
+        "path": "/satilik/arsa-ciftlik"
+      },
+      {
+        "id": "turistik_arsa",
+        "name": "Turistik Arsa",
+        "path": "/satilik/turistik-arsa"
+      },
+      {
+        "id": "ozel_kullanim",
+        "name": "Özel Kullanım",
+        "path": "/satilik/ozel-kullanim"
+      },
+      {
+        "id": "depo_antrepo_izinli",
+        "name": "Depo, Antrepo İzinli",
+        "path": "/satilik/depo-antrepo-izinli"
+      },
+      {
+        "id": "sit_alani",
+        "name": "Sit Alanı",
+        "path": "/satilik/sit-alani"
+      },
+      {
+        "id": "toplu_konut_icin_tahsis",
+        "name": "Toplu Konut için Tahsis",
+        "path": "/satilik/toplu-konut-icin-tahsis"
+      },
+      {
+        "id": "okul_egitim_tesisi",
+        "name": "Okul (Eğitim Tesisi)",
+        "path": "/satilik/okul-egitim-tesisi"
+      },
+      {
+        "id": "hastane_saglik_tesisi",
+        "name": "Hastane (Sağlık Tesisi)",
+        "path": "/satilik/hastane-saglik-tesisi"
+      },
+      {
+        "id": "maden_ocagi",
+        "name": "Maden Ocağı",
+        "path": "/satilik/maden-ocagi"
+      },
+      {
+        "id": "imarli_villa",
+        "name": "İmarlı - Villa",
+        "path": "/satilik/imarli-villa"
+      }
+    ],
+    "isyeri": [
+      {
+        "id": "dukkan_magaza",
+        "name": "Dükkan & Mağaza",
+        "path": "/satilik/dukkan-magaza"
+      },
+      {
+        "id": "restoran_lokanta",
+        "name": "Restoran & Lokanta",
+        "path": "/satilik/restoran-lokanta"
+      },
+      {
+        "id": "cafe_bar",
+        "name": "Cafe & Bar",
+        "path": "/satilik/cafe-bar"
+      },
+      {
+        "id": "bufe",
+        "name": "Büfe",
+        "path": "/satilik/bufe"
+      },
+      {
+        "id": "pastane_firin_tatlici",
+        "name": "Pastane, Fırın & Tatlıcı",
+        "path": "/satilik/pastane-firin-tatlici"
+      },
+      {
+        "id": "ofis",
+        "name": "Ofis",
+        "path": "/satilik/ofis"
+      },
+      {
+        "id": "buro",
+        "name": "Büro",
+        "path": "/satilik/buro"
+      },
+      {
+        "id": "oto_yikama_kuafor",
+        "name": "Oto Yıkama & Kuaför",
+        "path": "/satilik/oto-yikama-kuafor"
+      },
+      {
+        "id": "atolye",
+        "name": "Atölye",
+        "path": "/satilik/atolye"
+      },
+      {
+        "id": "fabrika",
+        "name": "Fabrika",
+        "path": "/satilik/fabrika"
+      },
+      {
+        "id": "spor_tesisi",
+        "name": "Spor Tesisi",
+        "path": "/satilik/spor-tesisi"
+      },
+      {
+        "id": "imalathane",
+        "name": "İmalathane",
+        "path": "/satilik/imalathane"
+      },
+      {
+        "id": "saglik_merkezi",
+        "name": "Sağlık Merkezi",
+        "path": "/satilik/saglik-merkezi"
+      },
+      {
+        "id": "dugun_salonu",
+        "name": "Düğün Salonu",
+        "path": "/satilik/dugun-salonu"
+      },
+      {
+        "id": "kiraathane",
+        "name": "Kıraathane",
+        "path": "/satilik/kiraathane"
+      },
+      {
+        "id": "spa_hamam_sauna",
+        "name": "SPA, Hamam & Sauna",
+        "path": "/satilik/spa-hamam-sauna"
+      },
+      {
+        "id": "isyeri_ciftlik",
+        "name": "Çiftlik",
+        "path": "/satilik/isyeri-ciftlik"
+      },
+      {
+        "id": "kir_kahvalti_bahcesi",
+        "name": "Kır & Kahvaltı Bahçesi",
+        "path": "/satilik/kir-kahvalti-bahcesi"
+      },
+      {
+        "id": "depo",
+        "name": "Depo",
+        "path": "/satilik/depo"
+      },
+      {
+        "id": "benzin_istasyonu",
+        "name": "Benzin İstasyonu",
+        "path": "/satilik/benzin-istasyonu"
+      },
+      {
+        "id": "plaza_kati",
+        "name": "Plaza Katı",
+        "path": "/satilik/plaza-kati"
+      },
+      {
+        "id": "otopark_garaj",
+        "name": "Otopark / Garaj",
+        "path": "/satilik/otopark-garaj"
+      },
+      {
+        "id": "pazar_yeri",
+        "name": "Pazar Yeri",
+        "path": "/satilik/pazar-yeri"
+      },
+      {
+        "id": "isyeri_apartman_dairesi",
+        "name": "Apartman Dairesi",
+        "path": "/satilik/isyeri-apartman-dairesi"
+      },
+      {
+        "id": "is_hani_kati",
+        "name": "İş Hanı Katı",
+        "path": "/satilik/is-hani-kati"
+      },
+      {
+        "id": "kantin",
+        "name": "Kantin",
+        "path": "/satilik/kantin"
+      },
+      {
+        "id": "is_hani",
+        "name": "İş Hanı",
+        "path": "/satilik/is-hani"
+      },
+      {
+        "id": "plaza",
+        "name": "Plaza",
+        "path": "/satilik/plaza"
+      },
+      {
+        "id": "radyo_istasyonu_tv_kanali",
+        "name": "Radyo İstasyonu & TV Kanalı",
+        "path": "/satilik/radyo-istasyonu-tv-kanali"
+      },
+      {
+        "id": "sinema_konferans_salonu",
+        "name": "Sinema & Konferans Salonu",
+        "path": "/satilik/sinema-konferans-salonu"
+      },
+      {
+        "id": "isyeri_maden_ocagi",
+        "name": "Maden Ocağı",
+        "path": "/satilik/isyeri-maden-ocagi"
+      },
+      {
+        "id": "isyeri_bina",
+        "name": "Bina",
+        "path": "/satilik/isyeri-bina"
+      },
+      {
+        "id": "genel",
+        "name": "Genel",
+        "path": "/satilik/genel"
+      },
+      {
+        "id": "isyeri_turistik_isletme",
+        "name": "Turistik İşletme",
+        "path": "/satilik/isyeri-turistik-isletme"
+      },
+      {
+        "id": "isyeri_villa",
+        "name": "Villa",
+        "path": "/satilik/isyeri-villa"
+      },
+      {
+        "id": "villa_kati",
+        "name": "Villa Katı",
+        "path": "/satilik/villa-kati"
+      },
+      {
+        "id": "hastane",
+        "name": "Hastane",
+        "path": "/satilik/hastane"
+      }
+    ],
+    "devremulk": [
+      {
+        "id": "devremulk_apartman_dairesi",
+        "name": "Apartman Dairesi",
+        "path": "/satilik/devremulk-apartman-dairesi"
+      },
+      {
+        "id": "devremulk_villa",
+        "name": "Villa",
+        "path": "/satilik/devremulk-villa"
+      },
+      {
+        "id": "dublex",
+        "name": "Dublex",
+        "path": "/satilik/dublex"
+      },
+      {
+        "id": "triplex",
+        "name": "Triplex",
+        "path": "/satilik/triplex"
+      }
+    ],
+    "turistik_isletme": [
+      {
+        "id": "apart",
+        "name": "Apart",
+        "path": "/satilik/apart"
+      },
+      {
+        "id": "butik_otel",
+        "name": "Butik Otel",
+        "path": "/satilik/butik-otel"
+      },
+      {
+        "id": "kaplica_tesisi",
+        "name": "Kaplıca Tesisi",
+        "path": "/satilik/kaplica-tesisi"
+      },
+      {
+        "id": "mocamp",
+        "name": "Mocamp",
+        "path": "/satilik/mocamp"
+      },
+      {
+        "id": "motel",
+        "name": "Motel",
+        "path": "/satilik/motel"
+      },
+      {
+        "id": "otel",
+        "name": "Otel",
+        "path": "/satilik/otel"
+      },
+      {
+        "id": "pansiyon",
+        "name": "Pansiyon",
+        "path": "/satilik/pansiyon"
+      },
+      {
+        "id": "tatil_koyu",
+        "name": "Tatil Köyü",
+        "path": "/satilik/tatil-koyu"
+      }
+    ]
+  },
+  "kiralik": {
+    "konut": [
+      {
+        "id": "daire",
+        "name": "Daire",
+        "path": "/kiralik/daire"
+      },
+      {
+        "id": "villa",
+        "name": "Villa",
+        "path": "/kiralik/villa"
+      },
+      {
+        "id": "mustakil_ev",
+        "name": "Müstakil Ev",
+        "path": "/kiralik/mustakil-ev"
+      },
+      {
+        "id": "prefabrik",
+        "name": "Prefabrik",
+        "path": "/kiralik/prefabrik"
+      },
+      {
+        "id": "bina",
+        "name": "Bina",
+        "path": "/kiralik/bina"
+      },
+      {
+        "id": "residence",
+        "name": "Residence",
+        "path": "/kiralik/residence"
+      },
+      {
+        "id": "bungalov",
+        "name": "Bungalov",
+        "path": "/kiralik/bungalov"
+      },
+      {
+        "id": "yazlik",
+        "name": "Yazlık",
+        "path": "/kiralik/yazlik"
+      },
+      {
+        "id": "koy_evi",
+        "name": "Köy Evi",
+        "path": "/kiralik/koy-evi"
+      },
+      {
+        "id": "ciftlik_evi",
+        "name": "Çiftlik Evi",
+        "path": "/kiralik/ciftlik-evi"
+      },
+      {
+        "id": "kosk",
+        "name": "Köşk",
+        "path": "/kiralik/kosk"
+      },
+      {
+        "id": "yali_dairesi",
+        "name": "Yalı Dairesi",
+        "path": "/kiralik/yali-dairesi"
+      },
+      {
+        "id": "yali",
+        "name": "Yalı",
+        "path": "/kiralik/yali"
+      },
+      {
+        "id": "dag_evi",
+        "name": "Dağ Evi",
+        "path": "/kiralik/dag-evi"
+      },
+      {
+        "id": "loft_daire",
+        "name": "Loft Daire",
+        "path": "/kiralik/loft-daire"
+      },
+      {
+        "id": "kooperatif",
+        "name": "Kooperatif",
+        "path": "/kiralik/kooperatif"
+      }
+    ],
+    "arsa": [
+      {
+        "id": "tarla",
+        "name": "Tarla",
+        "path": "/kiralik/tarla"
+      },
+      {
+        "id": "imarli_konut",
+        "name": "İmarlı - Konut",
+        "path": "/kiralik/imarli-konut"
+      },
+      {
+        "id": "bahce",
+        "name": "Bahçe",
+        "path": "/kiralik/bahce"
+      },
+      {
+        "id": "zeytinlik",
+        "name": "Zeytinlik",
+        "path": "/kiralik/zeytinlik"
+      },
+      {
+        "id": "muhtelif_arsa",
+        "name": "Muhtelif Arsa",
+        "path": "/kiralik/muhtelif-arsa"
+      },
+      {
+        "id": "imarli_ticari",
+        "name": "İmarlı - Ticari",
+        "path": "/kiralik/imarli-ticari"
+      },
+      {
+        "id": "konutticaret",
+        "name": "Konut+Ticaret",
+        "path": "/kiralik/konutticaret"
+      },
+      {
+        "id": "bag",
+        "name": "Bağ",
+        "path": "/kiralik/bag"
+      },
+      {
+        "id": "imarli_sanayi",
+        "name": "İmarlı - Sanayi",
+        "path": "/kiralik/imarli-sanayi"
+      },
+      {
+        "id": "arsa_ciftlik",
+        "name": "Çiftlik",
+        "path": "/kiralik/arsa-ciftlik"
+      },
+      {
+        "id": "turistik_arsa",
+        "name": "Turistik Arsa",
+        "path": "/kiralik/turistik-arsa"
+      },
+      {
+        "id": "ozel_kullanim",
+        "name": "Özel Kullanım",
+        "path": "/kiralik/ozel-kullanim"
+      },
+      {
+        "id": "depo_antrepo_izinli",
+        "name": "Depo, Antrepo İzinli",
+        "path": "/kiralik/depo-antrepo-izinli"
+      },
+      {
+        "id": "sit_alani",
+        "name": "Sit Alanı",
+        "path": "/kiralik/sit-alani"
+      },
+      {
+        "id": "toplu_konut_icin_tahsis",
+        "name": "Toplu Konut için Tahsis",
+        "path": "/kiralik/toplu-konut-icin-tahsis"
+      },
+      {
+        "id": "okul_egitim_tesisi",
+        "name": "Okul (Eğitim Tesisi)",
+        "path": "/kiralik/okul-egitim-tesisi"
+      },
+      {
+        "id": "hastane_saglik_tesisi",
+        "name": "Hastane (Sağlık Tesisi)",
+        "path": "/kiralik/hastane-saglik-tesisi"
+      },
+      {
+        "id": "maden_ocagi",
+        "name": "Maden Ocağı",
+        "path": "/kiralik/maden-ocagi"
+      },
+      {
+        "id": "imarli_villa",
+        "name": "İmarlı - Villa",
+        "path": "/kiralik/imarli-villa"
+      }
+    ],
+    "isyeri": [
+      {
+        "id": "dukkan_magaza",
+        "name": "Dükkan & Mağaza",
+        "path": "/kiralik/dukkan-magaza"
+      },
+      {
+        "id": "restoran_lokanta",
+        "name": "Restoran & Lokanta",
+        "path": "/kiralik/restoran-lokanta"
+      },
+      {
+        "id": "cafe_bar",
+        "name": "Cafe & Bar",
+        "path": "/kiralik/cafe-bar"
+      },
+      {
+        "id": "kuafor_guzellik_merkezi",
+        "name": "Kuaför & Güzellik Merkezi",
+        "path": "/kiralik/kuafor-guzellik-merkezi"
+      },
+      {
+        "id": "market",
+        "name": "Market",
+        "path": "/kiralik/market"
+      },
+      {
+        "id": "bufe",
+        "name": "Büfe",
+        "path": "/kiralik/bufe"
+      },
+      {
+        "id": "pastane_firin_tatlici",
+        "name": "Pastane, Fırın & Tatlıcı",
+        "path": "/kiralik/pastane-firin-tatlici"
+      },
+      {
+        "id": "ofis",
+        "name": "Ofis",
+        "path": "/kiralik/ofis"
+      },
+      {
+        "id": "buro",
+        "name": "Büro",
+        "path": "/kiralik/buro"
+      },
+      {
+        "id": "oto_yikama_kuafor",
+        "name": "Oto Yıkama & Kuaför",
+        "path": "/kiralik/oto-yikama-kuafor"
+      },
+      {
+        "id": "atolye",
+        "name": "Atölye",
+        "path": "/kiralik/atolye"
+      },
+      {
+        "id": "fabrika",
+        "name": "Fabrika",
+        "path": "/kiralik/fabrika"
+      },
+      {
+        "id": "spor_tesisi",
+        "name": "Spor Tesisi",
+        "path": "/kiralik/spor-tesisi"
+      },
+      {
+        "id": "imalathane",
+        "name": "İmalathane",
+        "path": "/kiralik/imalathane"
+      },
+      {
+        "id": "saglik_merkezi",
+        "name": "Sağlık Merkezi",
+        "path": "/kiralik/saglik-merkezi"
+      },
+      {
+        "id": "eczane",
+        "name": "Eczane",
+        "path": "/kiralik/eczane"
+      },
+      {
+        "id": "muayenehane",
+        "name": "Muayenehane",
+        "path": "/kiralik/muayenehane"
+      },
+      {
+        "id": "dugun_salonu",
+        "name": "Düğün Salonu",
+        "path": "/kiralik/dugun-salonu"
+      },
+      {
+        "id": "kiraathane",
+        "name": "Kıraathane",
+        "path": "/kiralik/kiraathane"
+      },
+      {
+        "id": "spa_hamam_sauna",
+        "name": "SPA, Hamam & Sauna",
+        "path": "/kiralik/spa-hamam-sauna"
+      },
+      {
+        "id": "isyeri_ciftlik",
+        "name": "Çiftlik",
+        "path": "/kiralik/isyeri-ciftlik"
+      },
+      {
+        "id": "okul_kurs",
+        "name": "Okul & Kurs",
+        "path": "/kiralik/okul-kurs"
+      },
+      {
+        "id": "tamirhane",
+        "name": "Tamirhane",
+        "path": "/kiralik/tamirhane"
+      },
+      {
+        "id": "kir_kahvalti_bahcesi",
+        "name": "Kır & Kahvaltı Bahçesi",
+        "path": "/kiralik/kir-kahvalti-bahcesi"
+      },
+      {
+        "id": "depo",
+        "name": "Depo",
+        "path": "/kiralik/depo"
+      },
+      {
+        "id": "taksi_duragi",
+        "name": "Taksi Durağı",
+        "path": "/kiralik/taksi-duragi"
+      },
+      {
+        "id": "benzin_istasyonu",
+        "name": "Benzin İstasyonu",
+        "path": "/kiralik/benzin-istasyonu"
+      },
+      {
+        "id": "plaza_kati",
+        "name": "Plaza Katı",
+        "path": "/kiralik/plaza-kati"
+      },
+      {
+        "id": "otopark_garaj",
+        "name": "Otopark / Garaj",
+        "path": "/kiralik/otopark-garaj"
+      },
+      {
+        "id": "pazar_yeri",
+        "name": "Pazar Yeri",
+        "path": "/kiralik/pazar-yeri"
+      },
+      {
+        "id": "isyeri_apartman_dairesi",
+        "name": "Apartman Dairesi",
+        "path": "/kiralik/isyeri-apartman-dairesi"
+      },
+      {
+        "id": "fotograf_studyosu",
+        "name": "Fotoğraf Stüdyosu",
+        "path": "/kiralik/fotograf-studyosu"
+      },
+      {
+        "id": "is_hani_kati",
+        "name": "İş Hanı Katı",
+        "path": "/kiralik/is-hani-kati"
+      },
+      {
+        "id": "kantin",
+        "name": "Kantin",
+        "path": "/kiralik/kantin"
+      },
+      {
+        "id": "is_hani",
+        "name": "İş Hanı",
+        "path": "/kiralik/is-hani"
+      },
+      {
+        "id": "plaza",
+        "name": "Plaza",
+        "path": "/kiralik/plaza"
+      },
+      {
+        "id": "radyo_istasyonu_tv_kanali",
+        "name": "Radyo İstasyonu & TV Kanalı",
+        "path": "/kiralik/radyo-istasyonu-tv-kanali"
+      },
+      {
+        "id": "sinema_konferans_salonu",
+        "name": "Sinema & Konferans Salonu",
+        "path": "/kiralik/sinema-konferans-salonu"
+      },
+      {
+        "id": "isyeri_maden_ocagi",
+        "name": "Maden Ocağı",
+        "path": "/kiralik/isyeri-maden-ocagi"
+      },
+      {
+        "id": "isyeri_bina",
+        "name": "Bina",
+        "path": "/kiralik/isyeri-bina"
+      },
+      {
+        "id": "genel",
+        "name": "Genel",
+        "path": "/kiralik/genel"
+      },
+      {
+        "id": "sanal_hazir_ofis",
+        "name": "Sanal & Hazır Ofis",
+        "path": "/kiralik/sanal-hazir-ofis"
+      },
+      {
+        "id": "isyeri_turistik_isletme",
+        "name": "Turistik İşletme",
+        "path": "/kiralik/isyeri-turistik-isletme"
+      },
+      {
+        "id": "isyeri_villa",
+        "name": "Villa",
+        "path": "/kiralik/isyeri-villa"
+      },
+      {
+        "id": "villa_kati",
+        "name": "Villa Katı",
+        "path": "/kiralik/villa-kati"
+      },
+      {
+        "id": "hastane",
+        "name": "Hastane",
+        "path": "/kiralik/hastane"
+      }
+    ],
+    "devremulk": [
+      {
+        "id": "devremulk_apartman_dairesi",
+        "name": "Apartman Dairesi",
+        "path": "/kiralik/devremulk-apartman-dairesi"
+      },
+      {
+        "id": "devremulk_villa",
+        "name": "Villa",
+        "path": "/kiralik/devremulk-villa"
+      },
+      {
+        "id": "dublex",
+        "name": "Dublex",
+        "path": "/kiralik/dublex"
+      },
+      {
+        "id": "triplex",
+        "name": "Triplex",
+        "path": "/kiralik/triplex"
+      }
+    ],
+    "turistik_isletme": [
+      {
+        "id": "apart",
+        "name": "Apart",
+        "path": "/kiralik/apart"
+      },
+      {
+        "id": "butik_otel",
+        "name": "Butik Otel",
+        "path": "/kiralik/butik-otel"
+      },
+      {
+        "id": "kaplica_tesisi",
+        "name": "Kaplıca Tesisi",
+        "path": "/kiralik/kaplica-tesisi"
+      },
+      {
+        "id": "mocamp",
+        "name": "Mocamp",
+        "path": "/kiralik/mocamp"
+      },
+      {
+        "id": "motel",
+        "name": "Motel",
+        "path": "/kiralik/motel"
+      },
+      {
+        "id": "otel",
+        "name": "Otel",
+        "path": "/kiralik/otel"
+      },
+      {
+        "id": "pansiyon",
+        "name": "Pansiyon",
+        "path": "/kiralik/pansiyon"
+      },
+      {
+        "id": "tatil_koyu",
+        "name": "Tatil Köyü",
+        "path": "/kiralik/tatil-koyu"
+      }
+    ]
+  }
+}

@@ -22,6 +22,7 @@ webdriver-manager==4.0.1
 selenium-stealth==1.0.6
 selenium-wire==5.1.0
 undetected-chromedriver>=3.5.0  # Cloudflare, Turnstile bypass
+cloudscraper
 
 # Security & Utilities
 python-dotenv==1.0.0

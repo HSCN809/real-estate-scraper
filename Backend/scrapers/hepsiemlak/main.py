@@ -48,10 +48,18 @@ class HepsiemlakScraper(BaseScraper):
         driver: WebDriver,
         listing_type: str = "satilik",  # 'satilik' or 'kiralik'
         category: str = "konut",
+        subtype_path: Optional[str] = None,  # Yeni: Alt kategori URL path'i
         selected_cities: Optional[List[str]] = None
     ):
         base_config = get_hepsiemlak_config()
-        category_path = base_config.categories.get(listing_type, {}).get(category, '')
+        
+        # Subtype path varsa onu kullan, yoksa ana kategori
+        if subtype_path:
+            category_path = subtype_path
+            logger.info(f"Using subtype path: {subtype_path}")
+        else:
+            category_path = base_config.categories.get(listing_type, {}).get(category, '')
+        
         base_url = base_config.base_url + category_path
         
         super().__init__(driver, base_url, "hepsiemlak", category)
@@ -59,6 +67,7 @@ class HepsiemlakScraper(BaseScraper):
         self.listing_type = listing_type
         self.hepsiemlak_config = base_config
         self.selected_cities = selected_cities or []
+        self.subtype_path = subtype_path  # Kaydet
         # Output: Outputs/HepsiEmlak Output/{category}/
         self.exporter = DataExporter(output_dir=f"Outputs/HepsiEmlak Output/{category}")
         self.current_category = category
@@ -66,6 +75,22 @@ class HepsiemlakScraper(BaseScraper):
         # Initialize the appropriate parser
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
+    
+    @property
+    def subtype_name(self) -> Optional[str]:
+        """Extract subtype name from subtype_path for file naming"""
+        if self.subtype_path:
+            # /satilik/daire -> daire
+            parts = self.subtype_path.strip('/').split('/')
+            if len(parts) >= 2:
+                return parts[-1].replace('-', '_')
+        return None
+    
+    def get_file_prefix(self) -> str:
+        """Generate file prefix with subtype if available"""
+        if self.subtype_name:
+            return f"hepsiemlak_{self.listing_type}_{self.category}_{self.subtype_name}"
+        return f"hepsiemlak_{self.listing_type}_{self.category}"
     
     def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
         """Use the category parser to extract listing data"""
@@ -288,11 +313,39 @@ class HepsiemlakScraper(BaseScraper):
             
             city_slug = city_slug.replace(' ', '-')
             
-            # Doğrudan şehir sayfasına git
-            # listing_type: satilik veya kiralik
-            city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
+            # Subtype path varsa onu kullan, yoksa kategori path'ini config'den al
+            if self.subtype_path:
+                # Subtype path: /kiralik/tarla -> tarla
+                # Şehir URL: eskisehir-kiralik/tarla
+                path_parts = self.subtype_path.split('/')
+                # path_parts: ['', 'kiralik', 'tarla']
+                if len(path_parts) >= 3:
+                    category_suffix = "/" + path_parts[2]  # /tarla
+                else:
+                    category_suffix = ""
+                print(f"DEBUG: Using subtype_path: {self.subtype_path} -> category_suffix: {category_suffix}")
+            else:
+                # Kategori path'ini config'den al
+                # Örnek: /kiralik/turistik-isletme -> /turistik-isletme (sadece kategori kısmı)
+                category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
+                
+                # Category path'ten listing_type'ı çıkar (zaten URL'de olacak)
+                # /kiralik/turistik-isletme -> /turistik-isletme
+                # /satilik/arsa -> /arsa
+                # /kiralik -> "" (konut için)
+                category_suffix = ""
+                if category_path:
+                    # "/kiralik/arsa" -> ["", "kiralik", "arsa"] -> "arsa"
+                    # "/kiralik" -> ["", "kiralik"] -> "" (konut)
+                    parts = category_path.split('/')
+                    if len(parts) > 2:
+                        category_suffix = "/" + parts[2]  # /arsa, /isyeri, /turistik-isletme vb.
+            
+            # Doğrudan şehir + kategori sayfasına git
+            # Örnek: https://www.hepsiemlak.com/eskisehir-kiralik/turistik-isletme
+            city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}{category_suffix}"
             print(f"Şehir URL'sine gidiliyor: {city_url}")
-            print(f"DEBUG: listing_type = {self.listing_type}")
+            print(f"DEBUG: listing_type = {self.listing_type}, category = {self.current_category}, subtype_path = {self.subtype_path}")
             
             self.driver.get(city_url)
             time.sleep(5)  # Sayfa tam yüklensin
@@ -338,49 +391,36 @@ class HepsiemlakScraper(BaseScraper):
             return False
     
     def get_total_pages(self) -> int:
-        """Get total number of pages from pagination - ŞEHİR SAYFASINDA ÇAĞRILMALI"""
+        """Get total number of pages from pagination"""
         try:
-            current_url = self.driver.current_url
-            # URL'den şehir slug'ını çıkar (örn: bilecik-satilik -> bilecik)
-            url_path = current_url.split("hepsiemlak.com")[-1].split("?")[0]
-            city_slug = url_path.replace("/", "").replace("-satilik", "").replace("-kiralik", "")
+            # Pagination linklerini bul (retry mekanizması ile)
+            max_retries = 3
+            page_links = []
             
-            print(f"DEBUG: URL={current_url}, city_slug={city_slug}")
-            
-            # Şehir bazlı pagination yüklenene kadar bekle (max 10 saniye)
-            max_wait = 10
-            for wait_count in range(max_wait):
-                time.sleep(1)
-                
+            for retry in range(max_retries):
                 page_links = self.driver.find_elements(
                     By.CSS_SELECTOR, 
                     "ul.he-pagination__links li.he-pagination__item a.he-pagination__link"
                 )
                 
-                if not page_links:
-                    continue
-                
-                # İlk linkin href'inde şehir adı var mı kontrol et
-                first_href = page_links[0].get_attribute("href") or ""
-                if city_slug in first_href:
-                    print(f"DEBUG: Şehir pagination bulundu! ({wait_count+1} saniye)")
+                if page_links:
                     break
-                else:
-                    print(f"DEBUG: Bekleniyor... ({wait_count+1}/{max_wait}) - href: {first_href}")
+                elif retry < max_retries - 1:
+                    print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
+                    time.sleep(2)
             
-            # Şimdi sayfa sayısını bul
+            # Sayfa sayısını bul - en büyük sayıyı al
             max_page = 1
             for link in page_links:
-                href = link.get_attribute("href") or ""
                 text = link.text.strip()
                 
-                # Sadece şehir bazlı linkleri say
-                if city_slug in href and text.isdigit():
+                # Sadece rakam olan linkleri kontrol et (1, 2, 3, ..., 421 gibi)
+                if text.isdigit():
                     page_num = int(text)
                     if page_num > max_page:
                         max_page = page_num
             
-            print(f"DEBUG: Final max_page = {max_page}")
+            print(f"DEBUG: max_page = {max_page}")
             return max_page
             
         except Exception as e:
@@ -538,7 +578,7 @@ class HepsiemlakScraper(BaseScraper):
             if all_results:
                 self.exporter.save_by_city(
                     all_results,
-                    prefix=f"hepsiemlak_{self.listing_type}_{self.category}",
+                    prefix=self.get_file_prefix(),
                     format="excel"
                 )
                 
@@ -583,7 +623,7 @@ class HepsiemlakScraper(BaseScraper):
             if all_results:
                 self.exporter.save_by_city(
                     all_results,
-                    prefix=f"hepsiemlak_{self.listing_type}_{self.category}",
+                    prefix=self.get_file_prefix(),
                     format="excel"
                 )
                 
@@ -597,7 +637,7 @@ class HepsiemlakScraper(BaseScraper):
             if all_results:
                 self.exporter.save_by_city(
                     all_results,
-                    prefix=f"hepsiemlak_{self.listing_type}_{self.category}_partial",
+                    prefix=f"{self.get_file_prefix()}_partial",
                     format="excel"
                 )
                 total = sum(len(v) for v in all_results.values())

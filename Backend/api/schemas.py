@@ -4,6 +4,8 @@ from typing import List, Optional, Any
 class ScrapeRequest(BaseModel):
     category: str = "konut"  # konut, arsa, isyeri
     listing_type: str = "satilik"  # satilik, kiralik
+    subtype: Optional[str] = None  # Alt tip ID'si (örn: "tarla")
+    subtype_path: Optional[str] = None  # Alt tip URL path'i (örn: "/kiralik/tarla")
     cities: Optional[List[str]] = None
     districts: Optional[List[str]] = None
     max_pages: int = 1

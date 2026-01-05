@@ -100,6 +100,8 @@ class HepsiemlakConfig:
             "turistik_isletme": "/kiralik/turistik-isletme"
         }
     })
+    # Not: Subcategories artık dinamik olarak websiteden çekiliyor
+    # Bkz: scrapers/hepsiemlak/subtype_fetcher.py
 
 
 # Global config instance
