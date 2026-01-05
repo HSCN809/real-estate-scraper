@@ -470,6 +470,7 @@ export default function ResultsPage() {
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Şehir</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Platform</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Kategori</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">Alt Kategori</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Tür</th>
                                     <th className="text-right py-4 px-4 text-gray-400 font-medium">İlan</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Tarih</th>
@@ -498,6 +499,15 @@ export default function ResultsPage() {
                                                 }`}>
                                                 {result.category}
                                             </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            {result.subtype ? (
+                                                <span className="px-2 py-0.5 rounded text-xs bg-pink-500/20 text-pink-300">
+                                                    {result.subtype}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-600 text-xs">-</span>
+                                            )}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`px-2 py-0.5 rounded text-xs ${result.listing_type === 'Satılık' ? 'bg-amber-500/20 text-amber-300' : 'bg-orange-500/20 text-orange-300'}`}>
