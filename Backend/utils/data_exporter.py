@@ -24,15 +24,38 @@ class DataExporter:
     """
     Export scraped data to various formats (JSON, CSV, Excel).
     """
-    
-    def __init__(self, output_dir: str = "outputs"):
+
+    def __init__(
+        self,
+        output_dir: str = "outputs",
+        listing_type: Optional[str] = None,  # satilik/kiralik
+        category: Optional[str] = None,      # konut/arsa/isyeri vb.
+        subtype: Optional[str] = None        # daire/villa vb.
+    ):
         """
-        Initialize the exporter.
-        
+        Initialize the exporter with hierarchical folder structure.
+
         Args:
             output_dir: Base directory for output files
+            listing_type: Type of listing (satilik/kiralik)
+            category: Category (konut/arsa/isyeri etc.)
+            subtype: Subcategory (daire/villa etc.)
         """
-        self.output_dir = output_dir
+        self.base_output_dir = output_dir
+        self.listing_type = listing_type
+        self.category = category
+        self.subtype = subtype
+
+        # Build hierarchical path: base/listing_type/category/subtype
+        path_parts = [output_dir]
+        if listing_type:
+            path_parts.append(listing_type)
+        if category:
+            path_parts.append(category)
+        if subtype:
+            path_parts.append(subtype)
+
+        self.output_dir = os.path.join(*path_parts)
         self._ensure_output_dir()
     
     def _ensure_output_dir(self):
@@ -121,33 +144,49 @@ class DataExporter:
         self,
         data: Dict[str, List[Dict[str, Any]]],
         prefix: str = "data",
-        format: str = "excel"
+        format: str = "excel",
+        city_district_map: Optional[Dict[str, List[str]]] = None  # Şehir -> İlçeler mapping
     ) -> Dict[str, str]:
         """
-        Save data grouped by city to separate files.
-        
+        Save data grouped by city to separate files with hierarchical folder structure.
+
         Args:
             data: Dictionary of city -> list of listings
             prefix: File name prefix
             format: Output format ('json', 'csv', 'excel')
-            
+            city_district_map: Optional mapping of city -> districts for folder structure
+
         Returns:
             Dictionary of city -> filepath
         """
         results = {}
-        
+
         for city, listings in data.items():
             if not listings:
                 continue
-            
-            city_prefix = f"{prefix}_{city.lower().replace(' ', '_')}"
-            
+
+            # Şehir klasörü oluştur
+            city_slug = city.lower().replace(' ', '_').replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+
+            # İlçe bilgisi var mı kontrol et
+            if city_district_map and city in city_district_map:
+                districts = city_district_map[city]
+                # Eğer ilçe varsa, her ilçe için ayrı klasör
+                # Ama listings içindeki ilanların hangi ilçeye ait olduğunu bilmiyoruz
+                # Bu yüzden tek dosyaya kaydedip şehir klasörüne koyalım
+                subfolder = city_slug
+                city_prefix = f"{prefix}_{city_slug}_{'_'.join([d.lower().replace(' ', '_') for d in districts[:3]])}"  # İlk 3 ilçeyi prefix'e ekle
+            else:
+                # İlçe yoksa sadece şehir klasörü
+                subfolder = city_slug
+                city_prefix = f"{prefix}_{city_slug}"
+
             try:
-                # Only Excel format is supported
-                results[city] = self.save_excel(listings, city_prefix, True)
+                # Excel'i şehir klasörüne kaydet
+                results[city] = self.save_excel(listings, city_prefix, True, subfolder=subfolder)
             except Exception as e:
                 logger.error(f"Failed to save data for {city}: {e}")
-        
+
         return results
 
 

@@ -116,6 +116,14 @@ HEPSIEMLAK_SELECTORS = {
         "city_item": "li.he-select__list-item, li.he-select-base__list-item",
         "city_link": "a.js-city-filter__list-link, span.he-select-base__text",
         "city_radio": "div.he-radio, input[type='radio']",
+
+        # District dropdown
+        "county_section": "section.filter-item-wrap.locationCountySec",
+        "county_dropdown": "div.js-county-filter div.he-select-base__container",
+        "county_placeholder": "span.he-select-base__placeholder",
+        "county_list": "div.he-select__list, div.he-select-base__list",
+        "county_item": "li.he-select__list-item, li.he-select-base__list-item",
+        "county_text": "span.he-select-base__text",
         
         # Search button
         "search_buttons": [

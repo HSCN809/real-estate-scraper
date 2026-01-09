@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Download, Eye, X, Building2, BarChart3, TrendingUp } from 'lucide-react';
+import { X, Building2, BarChart3, TrendingUp } from 'lucide-react';
 import { ScrapeResult } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
 
@@ -74,19 +74,20 @@ interface FileStats {
         percentage: number;
     }>;
     total_listings: number;
+    districts?: string[];  // Şehir bazlı aggregation için ilçeler listesi
+    files_count?: number;  // Kaç dosya işlendi
 }
 
 interface ResultsMapProps {
     results: ScrapeResult[];
-    onPreview: (filename: string) => void;
 }
 
-export function ResultsMap({ results, onPreview }: ResultsMapProps) {
-    const [selectedCity, setSelectedCity] = useState<ScrapeResult | null>(null);
+export function ResultsMap({ results }: ResultsMapProps) {
+    const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
     const [hoveredCity, setHoveredCity] = useState<string | null>(null);
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
     const [geoData, setGeoData] = useState<GeoFeature[]>([]);
-    const [fileStats, setFileStats] = useState<FileStats | null>(null);
+    const [cityStats, setCityStats] = useState<FileStats | null>(null);
     const [statsLoading, setStatsLoading] = useState(false);
 
     // GeoJSON yükle
@@ -97,22 +98,41 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
             .catch(err => console.error('GeoJSON yüklenemedi:', err));
     }, []);
 
-    // Şehir seçildiğinde istatistikleri yükle
+    // Türkçe karakterleri ASCII'ye çevir (helper function)
+    const normalizeTurkish = (text: string) => {
+        return text
+            .replace(/İ/g, 'i').replace(/I/g, 'i')
+            .replace(/Ş/g, 's').replace(/ş/g, 's')
+            .replace(/Ğ/g, 'g').replace(/ğ/g, 'g')
+            .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+            .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+            .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+            .toLowerCase();
+    };
+
+    // Şehir seçildiğinde o şehrin tüm ilçe verilerini aggregated olarak yükle
     useEffect(() => {
-        if (selectedCity?.files?.[0]?.name) {
+        if (selectedCityName) {
             setStatsLoading(true);
-            setFileStats(null);
-            fetch(`http://localhost:8000/api/v1/analytics/file-stats/${selectedCity.files[0].name}`)
+            setCityStats(null);
+
+            const cityNameNormalized = normalizeTurkish(selectedCityName);
+            console.log('Fetching city analytics for:', selectedCityName, '-> normalized:', cityNameNormalized);
+
+            fetch(`http://localhost:8000/api/v1/analytics/city/${cityNameNormalized}`)
                 .then(res => res.json())
                 .then(data => {
+                    console.log('City analytics response:', data);
                     if (data.stats) {
-                        setFileStats(data);
+                        setCityStats(data);
+                    } else {
+                        console.warn('No stats in response:', data);
                     }
                 })
-                .catch(err => console.error('Stats yüklenemedi:', err))
+                .catch(err => console.error('City stats yüklenemedi:', err))
                 .finally(() => setStatsLoading(false));
         }
-    }, [selectedCity]);
+    }, [selectedCityName]);
 
     // Şehir verilerini map'e dönüştür
     const cityDataMap = useMemo(() => {
@@ -138,7 +158,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
 
     const handleCityClick = useCallback((cityName: string) => {
         const result = cityDataMap.get(cityName.toLowerCase());
-        if (result) setSelectedCity(result);
+        if (result) setSelectedCityName(cityName);
     }, [cityDataMap]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -192,43 +212,51 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                 <div className="flex items-center gap-2"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#059669' }}></div><span>1000+ İlan</span></div>
             </div>
 
-            {selectedCity && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedCity(null)}>
+            {selectedCityName && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedCityName(null)}>
                     <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-emerald-500/20 rounded-lg"><Building2 className="w-6 h-6 text-emerald-400" /></div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{selectedCity.city}</h3>
+                                    <h3 className="text-xl font-bold text-white">{selectedCityName}</h3>
                                     <p className="text-sm text-gray-400">
-                                        {selectedCity.platform} • {selectedCity.category}
-                                        {selectedCity.subtype && ` • ${selectedCity.subtype}`}
-                                        {selectedCity.listing_type && ` • ${selectedCity.listing_type}`}
+                                        Şehir Bazlı Toplu İstatistikler
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={() => setSelectedCity(null)} className="p-2 hover:bg-slate-800 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-                        </div>
-
-                        {/* Tarih ve Dosya Boyutu */}
-                        <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
-                            {selectedCity.date && <span>📅 {selectedCity.date}</span>}
-                            {selectedCity.file_size_mb && <span>📁 {selectedCity.file_size_mb.toFixed(2)} MB</span>}
+                            <button onClick={() => setSelectedCityName(null)} className="p-2 hover:bg-slate-800 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
                         </div>
 
                         {/* Basic Stats Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             <div className="bg-slate-800/50 rounded-xl p-4">
                                 <p className="text-gray-400 text-sm mb-1">Toplam İlan</p>
-                                <p className="text-2xl font-bold text-emerald-400">{(selectedCity.count || 0).toLocaleString()}</p>
+                                <p className="text-2xl font-bold text-emerald-400">
+                                    {cityStats?.total_listings ? cityStats.total_listings.toLocaleString() : '0'}
+                                </p>
                             </div>
                             <div className="bg-slate-800/50 rounded-xl p-4">
                                 <p className="text-gray-400 text-sm mb-1">Ortalama Fiyat</p>
                                 <p className="text-2xl font-bold text-blue-400">
-                                    {selectedCity.avg_price ? `${formatPrice(selectedCity.avg_price)} ₺` : 'Veri yok'}
+                                    {cityStats?.stats?.mean ? `${formatPrice(cityStats.stats.mean)} ₺` : 'Veri yok'}
                                 </p>
                             </div>
                         </div>
+
+                        {/* İlçeler listesi */}
+                        {cityStats?.districts && cityStats.districts.length > 0 && (
+                            <div className="mb-6">
+                                <p className="text-gray-400 text-sm mb-2">İlçeler ({cityStats.districts.length})</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {cityStats.districts.map((district, idx) => (
+                                        <span key={idx} className="px-3 py-1 bg-slate-800/50 rounded-lg text-xs text-gray-300">
+                                            {district}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Descriptive Statistics */}
                         {statsLoading ? (
@@ -236,7 +264,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                 <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
                                 <span className="ml-3 text-gray-400">İstatistikler yükleniyor...</span>
                             </div>
-                        ) : fileStats?.stats ? (
+                        ) : cityStats?.stats ? (
                             <>
                                 {/* Describe Stats */}
                                 <div className="mb-6">
@@ -247,31 +275,31 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                     <div className="grid grid-cols-4 gap-2 text-sm">
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Min</p>
-                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.min)} ₺</p>
+                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.min)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Q1</p>
-                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.q25)} ₺</p>
+                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.q25)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Medyan</p>
-                                            <p className="text-amber-400 font-semibold">{formatPrice(fileStats.stats.median)} ₺</p>
+                                            <p className="text-amber-400 font-semibold">{formatPrice(cityStats.stats.median)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Q3</p>
-                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.q75)} ₺</p>
+                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.q75)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Max</p>
-                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.max)} ₺</p>
+                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.max)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                                             <p className="text-gray-500 text-xs">Ortalama</p>
-                                            <p className="text-blue-400 font-semibold">{formatPrice(fileStats.stats.mean)} ₺</p>
+                                            <p className="text-blue-400 font-semibold">{formatPrice(cityStats.stats.mean)} ₺</p>
                                         </div>
                                         <div className="bg-slate-800/50 rounded-lg p-3 text-center col-span-2">
                                             <p className="text-gray-500 text-xs">Std. Sapma</p>
-                                            <p className="text-white font-semibold">{formatPrice(fileStats.stats.std)} ₺</p>
+                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.std)} ₺</p>
                                         </div>
                                     </div>
                                 </div>
@@ -283,7 +311,7 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                         <h4 className="text-lg font-semibold text-white">Fiyat Aralığı Dağılımı</h4>
                                     </div>
                                     <div className="space-y-2">
-                                        {fileStats.price_ranges.map((range, idx) => (
+                                        {cityStats.price_ranges.map((range, idx) => (
                                             <div key={idx} className="flex items-center gap-3">
                                                 <div className="w-32 text-xs text-gray-400 truncate" title={range.range}>{range.range}</div>
                                                 <div className="flex-1 h-6 bg-slate-800 rounded-full overflow-hidden">
@@ -302,17 +330,6 @@ export function ResultsMap({ results, onPreview }: ResultsMapProps) {
                                 </div>
                             </>
                         ) : null}
-
-                        {selectedCity.files?.length > 0 && (
-                            <div className="flex gap-3">
-                                <button onClick={() => onPreview(selectedCity.files[0].name)} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-gray-300">
-                                    <Eye className="w-4 h-4" /> Önizle
-                                </button>
-                                <a href={`http://localhost:8000/api/v1/download/${selectedCity.files[0].name}`} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white">
-                                    <Download className="w-4 h-4" /> İndir
-                                </a>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}

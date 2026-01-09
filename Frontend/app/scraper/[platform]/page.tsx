@@ -22,6 +22,7 @@ export default function PlatformScraperPage() {
     const [listingType, setListingType] = useState<ListingType>('satilik');
     const [category, setCategory] = useState('konut');
     const [selectedCities, setSelectedCities] = useState<string[]>([]);
+    const [selectedDistricts, setSelectedDistricts] = useState<Record<string, string[]>>({});
     const [maxPages, setMaxPages] = useState(1);
     const [scrapeAllPages, setScrapeAllPages] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -121,6 +122,7 @@ export default function PlatformScraperPage() {
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
                 cities: selectedCities,
+                districts: selectedDistricts,  // İlçe verilerini gönder
                 max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
 
@@ -239,23 +241,55 @@ export default function PlatformScraperPage() {
                         </button>
                         {selectedCities.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-4">
-                                {selectedCities.slice(0, 8).map((city) => (
-                                    <motion.span
-                                        key={city}
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm font-medium"
-                                    >
-                                        {city}
-                                        <button
-                                            type="button"
-                                            onClick={() => removeCity(city)}
-                                            className="hover:text-red-400 transition-colors"
+                                {selectedCities.slice(0, 8).map((city) => {
+                                    const cityDistricts = selectedDistricts[city] || [];
+                                    const hasDistricts = cityDistricts.length > 0;
+
+                                    return (
+                                        <motion.div
+                                            key={city}
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className="inline-flex flex-col gap-1"
                                         >
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </motion.span>
-                                ))}
+                                            {/* Şehir Badge */}
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm font-medium">
+                                                <span className="font-semibold">{city}</span>
+                                                {hasDistricts && (
+                                                    <span className="text-xs bg-emerald-500/30 px-1.5 py-0.5 rounded-full">
+                                                        {cityDistricts.length}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeCity(city)}
+                                                    className="hover:text-red-400 transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+
+                                            {/* İlçeler */}
+                                            {hasDistricts && (
+                                                <div className="flex flex-wrap gap-1 ml-2">
+                                                    {cityDistricts.slice(0, 3).map((district) => (
+                                                        <span
+                                                            key={district}
+                                                            className="text-xs px-2 py-0.5 rounded bg-sky-500/20 border border-sky-500/30 text-sky-300"
+                                                        >
+                                                            {district}
+                                                        </span>
+                                                    ))}
+                                                    {cityDistricts.length > 3 && (
+                                                        <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-400">
+                                                            +{cityDistricts.length - 3}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    );
+                                })}
                                 {selectedCities.length > 8 && (
                                     <span className="px-3 py-1.5 rounded-full bg-slate-700 text-slate-300 text-sm">
                                         +{selectedCities.length - 8} daha
@@ -274,6 +308,8 @@ export default function PlatformScraperPage() {
                         onClose={() => setIsMapModalOpen(false)}
                         selectedCities={selectedCities}
                         onCitiesChange={setSelectedCities}
+                        selectedDistricts={selectedDistricts}
+                        onDistrictsChange={setSelectedDistricts}
                     />
 
                     {/* Progress Modal */}

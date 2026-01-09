@@ -6,7 +6,7 @@ export interface ScrapeRequest {
   subtype?: string;       // Alt tip ID'si
   subtype_path?: string;  // Alt tip URL path'i
   cities?: string[];
-  districts?: string[];
+  districts?: Record<string, string[]>;  // İl -> [İlçeler] mapping
   max_pages: number;
 }
 
@@ -34,6 +34,7 @@ export interface ScrapeResult {
   subtype?: string;         // Alt kategori adı
   subtype_path?: string;    // Alt kategori path'i
   city?: string;
+  district?: string;        // İlçe adı
   date: string;
   count: number;
   avg_price?: number | null;

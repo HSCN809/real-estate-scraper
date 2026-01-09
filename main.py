@@ -187,11 +187,39 @@ def run_api_server():
         print(f"❌ Server hatası: {e}")
 
 
+def kill_existing_node_processes():
+    """Kill existing node processes to prevent lock conflicts"""
+    if sys.platform == "win32":
+        try:
+            # Check if any node process is running
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq node.exe"],
+                capture_output=True,
+                text=True,
+                shell=True
+            )
+            
+            if "node.exe" in result.stdout:
+                print("🔄 Mevcut node process'leri durduruluyor...")
+                subprocess.run(
+                    ["taskkill", "/f", "/im", "node.exe"],
+                    capture_output=True,
+                    shell=True
+                )
+                print("✅ Eski node process'leri temizlendi.")
+        except Exception as e:
+            logger.warning(f"Node process temizleme hatası: {e}")
+
+
 def run_frontend():
     """Run Next.js frontend dev server"""
     print("\n" + "=" * 60)
     print("🌐 FRONTEND SERVER")
     print("=" * 60)
+    
+    # Kill existing node processes to prevent lock conflicts
+    kill_existing_node_processes()
+    
     print("Frontend başlatılıyor... (Durdurmak için CTRL+C)")
     print("URL: http://localhost:3000")
     print("-" * 60)
@@ -213,6 +241,10 @@ def run_full_stack():
     print("\n" + "=" * 60)
     print("🔄 FULL STACK MODE")
     print("=" * 60)
+    
+    # Kill existing node processes to prevent lock conflicts
+    kill_existing_node_processes()
+    
     print("API + Frontend başlatılıyor... (Durdurmak için CTRL+C)")
     print("API: http://localhost:8000")
     print("Frontend: http://localhost:3000")

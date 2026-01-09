@@ -96,8 +96,9 @@ def run_emlakjet_task(request: ScrapeRequest):
             driver=driver,
             base_url=base_url,
             category=request.category,
+            listing_type=request.listing_type  # Klasör yapısı için
             # We will add a new init param or method to set simple mode
-            # simple_mode=True 
+            # simple_mode=True
         )
         
         # For now, we need to handle the interactive parts or bypass them.
@@ -139,7 +140,8 @@ def run_hepsiemlak_task(request: ScrapeRequest):
             listing_type=request.listing_type,
             category=request.category,
             subtype_path=request.subtype_path,  # Yeni: Alt kategori path'i
-            selected_cities=request.cities
+            selected_cities=request.cities,
+            selected_districts=request.districts  # YENİ: İlçe filtreleme
         )
         
         # DEBUG: Log received parameters
@@ -175,11 +177,24 @@ async def scrape_emlakjet(request: ScrapeRequest, background_tasks: BackgroundTa
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
 async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: BackgroundTasks):
+    # Validate cities
+    if not request.cities or len(request.cities) == 0:
+        raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
+
+    # Validate districts if provided
+    if request.districts:
+        for city, districts in request.districts.items():
+            if city not in request.cities:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok"
+                )
+
     # Status'u HEMEN ayarla - frontend ilk sorguladığında hazır olsun
     task_status.reset()
     task_status.set_running(True)
     task_status.update("HepsiEmlak taraması başlatılıyor...", progress=0)
-    
+
     background_tasks.add_task(run_hepsiemlak_task, request)
     return ScrapeResponse(
         status="accepted",
@@ -310,6 +325,229 @@ async def get_price_analytics(
     }
     
     return {"prices": all_prices, "summary": summary}
+
+@router.get("/analytics/city/{city_name}")
+async def get_city_analytics(
+    city_name: str,
+    platform: str = None,
+    category: str = None,
+    listing_type: str = None,
+    subtype: str = None
+):
+    """Belirli bir şehrin tüm ilçelerindeki ilanları topla ve detaylı istatistik döndür"""
+    import os
+    import re
+    import statistics
+
+    current_file = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+
+    output_dir = os.path.join(project_root, "outputs")
+    if not os.path.exists(output_dir):
+        output_dir = os.path.join(project_root, "Outputs")
+
+    if not os.path.exists(output_dir):
+        return {"error": "Outputs directory not found", "data": None}
+
+    # Normalize city name for comparison (Turkish -> ASCII)
+    def normalize_turkish(text):
+        """Türkçe karakterleri ASCII'ye çevir"""
+        replacements = {
+            'ı': 'i', 'İ': 'i', 'ş': 's', 'Ş': 's', 'ğ': 'g', 'Ğ': 'g',
+            'ü': 'u', 'Ü': 'u', 'ö': 'o', 'Ö': 'o', 'ç': 'c', 'Ç': 'c'
+        }
+        for tr_char, ascii_char in replacements.items():
+            text = text.replace(tr_char, ascii_char)
+        return text.lower().replace(' ', '')
+
+    city_normalized = normalize_turkish(city_name)
+
+    all_prices = []
+    total_listings = 0
+    districts = set()
+    files_processed = []
+
+    # Walk through all files in output directory
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.lower().endswith('.xlsx'):
+                continue
+
+            file_path = os.path.join(root, filename)
+
+            # Check if this file belongs to the requested city
+            # Normalize both path and city name for comparison
+            path_normalized = normalize_turkish(file_path)
+
+            if city_normalized not in path_normalized:
+                continue
+
+            # Extract metadata from path
+            lower_name = filename.lower()
+            file_platform = "HepsiEmlak" if "hepsiemlak" in lower_name else "Emlakjet" if "emlakjet" in lower_name else "Unknown"
+            file_category = "Konut" if "konut" in lower_name else "Arsa" if "arsa" in lower_name else "İşyeri" if "isyeri" in lower_name else "Genel"
+            file_listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
+
+            # Apply filters
+            if platform and platform != "all" and file_platform != platform:
+                continue
+            if category and category != "all" and file_category != category:
+                continue
+            if listing_type and listing_type != "all" and file_listing_type != listing_type:
+                continue
+
+            # Extract district from path
+            relative_path = os.path.relpath(file_path, output_dir)
+            path_parts = relative_path.split(os.sep)
+
+            # Skip platform folder
+            start_idx = 0
+            if len(path_parts) > 0 and ('output' in path_parts[0].lower() or 'emlak' in path_parts[0].lower()):
+                start_idx = 1
+
+            adjusted_parts = path_parts[start_idx:] if start_idx < len(path_parts) else path_parts
+
+            district_name = None
+            if len(adjusted_parts) >= 6:  # listing/category/subtype/city/district/file
+                district_slug = adjusted_parts[4]
+                if not district_slug.endswith('.xlsx'):
+                    district_name = district_slug.replace('_', ' ').replace('-', ' ').title()
+
+            # Read Excel file and extract prices
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True)
+                ws = wb.active
+
+                # Find price column
+                price_col_idx = None
+                header_row = next(ws.iter_rows(min_row=1, max_row=1))
+
+                for idx, cell in enumerate(header_row):
+                    val = str(cell.value).strip().lower() if cell.value else ""
+                    if val == "fiyat":
+                        price_col_idx = idx
+                        break
+                    elif "fiyat" in val and "metrekare" not in val:
+                        if price_col_idx is None:
+                            price_col_idx = idx
+
+                file_listing_count = ws.max_row - 1 if ws.max_row else 0
+                total_listings += file_listing_count
+
+                if district_name:
+                    districts.add(district_name)
+
+                if price_col_idx is not None:
+                    for row in ws.iter_rows(min_row=2):
+                        cell = row[price_col_idx]
+                        if cell.value:
+                            try:
+                                val_str = str(cell.value).strip()
+                                val_str = re.sub(r'\s+', '', val_str)
+                                val_str = val_str.replace('TL', '').replace('₺', '')
+
+                                if ',' in val_str and '.' in val_str:
+                                    val_str = val_str.replace('.', '').replace(',', '.')
+                                elif '.' in val_str and val_str.count('.') > 1:
+                                    val_str = val_str.replace('.', '')
+                                elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
+                                    val_str = val_str.replace('.', '')
+                                elif ',' in val_str:
+                                    val_str = val_str.replace(',', '.')
+
+                                price = float(val_str)
+                                if price > 0:
+                                    all_prices.append(price)
+                            except:
+                                pass
+
+                wb.close()
+                files_processed.append(filename)
+            except Exception as e:
+                logger.warning(f"Could not read prices from {filename}: {e}")
+
+    if not all_prices:
+        return {
+            "city": city_name,
+            "total_listings": total_listings,
+            "districts": list(districts),
+            "files_count": len(files_processed),
+            "error": "No price data found",
+            "stats": None,
+            "price_ranges": []
+        }
+
+    # Calculate descriptive statistics
+    sorted_prices = sorted(all_prices)
+    n = len(sorted_prices)
+
+    def percentile(data, p):
+        k = (len(data) - 1) * p / 100
+        f = int(k)
+        c = f + 1 if f + 1 < len(data) else f
+        return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
+
+    stats = {
+        "count": n,
+        "mean": round(statistics.mean(all_prices), 2),
+        "std": round(statistics.stdev(all_prices), 2) if n > 1 else 0,
+        "min": round(min(all_prices), 2),
+        "q25": round(percentile(sorted_prices, 25), 2),
+        "median": round(statistics.median(all_prices), 2),
+        "q75": round(percentile(sorted_prices, 75), 2),
+        "max": round(max(all_prices), 2)
+    }
+
+    # Price range distribution (5 bins)
+    num_bins = 5
+    bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
+
+    # Ensure unique edges
+    unique_edges = []
+    for e in bin_edges:
+        if not unique_edges or e > unique_edges[-1]:
+            unique_edges.append(e)
+
+    if len(unique_edges) < 3:
+        min_p, max_p = min(all_prices), max(all_prices)
+        bin_width = (max_p - min_p) / num_bins
+        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
+
+    price_ranges = []
+    for i in range(len(unique_edges) - 1):
+        low = unique_edges[i]
+        high = unique_edges[i + 1]
+
+        def format_price(p):
+            if p >= 1000000:
+                return f"{p/1000000:.1f}M"
+            elif p >= 1000:
+                return f"{p/1000:.0f}K"
+            else:
+                return f"{p:.0f}"
+
+        label = f"{format_price(low)} - {format_price(high)}"
+
+        if i == len(unique_edges) - 2:
+            count = sum(1 for p in all_prices if low <= p <= high)
+        else:
+            count = sum(1 for p in all_prices if low <= p < high)
+
+        price_ranges.append({
+            "range": label,
+            "count": count,
+            "percentage": round(count / n * 100, 1)
+        })
+
+    return {
+        "city": city_name,
+        "total_listings": total_listings,
+        "districts": sorted(list(districts)),
+        "files_count": len(files_processed),
+        "stats": stats,
+        "price_ranges": price_ranges
+    }
 
 @router.get("/analytics/file-stats/{filename}")
 async def get_file_statistics(filename: str):
@@ -611,68 +849,145 @@ async def get_results():
                     # Listing type detection
                     listing_type = "Satılık" if "satilik" in lower_name else "Kiralık" if "kiralik" in lower_name else "Genel"
                     
-                    # City name and subtype from filename
+                    # City name and subtype from filename OR folder structure
                     # Format: hepsiemlak_satilik_konut_daire_istanbul_20251221_172252.xlsx
                     # Or: hepsiemlak_satilik_konut_istanbul_20251221_172252.xlsx (no subtype)
+                    # Folder: .../satilik/konut/daire/istanbul/kadikoy/file.xlsx
                     city = "Bilinmiyor"
+                    district = None
                     subtype = None
-                    parts = filename.replace('.xlsx', '').replace('.json', '').split('_')
-                    
-                    # Bilinen kategori anahtar kelimeleri
-                    category_keywords = ['konut', 'arsa', 'isyeri', 'devremulk', 'isletme', 'tesis', 'kiralik']
-                    
-                    # Bilinen alt kategori anahtar kelimeleri (örnekler)
-                    subtype_keywords = [
-                        'daire', 'villa', 'mustakil', 'residence', 'yazlik', 'bina',
-                        'tarla', 'bahce', 'zeytinlik', 'imarli', 'bag',
-                        'dukkan', 'magaza', 'ofis', 'buro', 'fabrika', 'depo',
-                        'apart', 'otel', 'motel', 'pansiyon'
-                    ]
-                    
-                    if len(parts) >= 4:
-                        # Format: platform_listing_type_category_[subtype]_city_date_time
-                        # Index: 0       1            2         3        4    5    6
-                        
-                        # Kategori pozisyonunu bul
-                        category_index = -1
-                        for i, part in enumerate(parts):
-                            if part in category_keywords and i >= 2:
-                                category_index = i
-                                break
-                        
-                        if category_index >= 0 and category_index + 1 < len(parts):
-                            next_part = parts[category_index + 1]
-                            
-                            # Subtype var mı kontrol et (timestamp değilse ve subtype keyword'üne uyuyorsa)
-                            if not next_part.isdigit():
-                                # Subtype olabilir mi kontrol et
-                                is_potential_subtype = False
-                                for kw in subtype_keywords:
-                                    if kw in next_part:
-                                        is_potential_subtype = True
-                                        break
-                                
-                                if is_potential_subtype:
-                                    subtype = next_part.replace('_', ' ').replace('-', ' ').title()
-                                    city_index = category_index + 2
-                                else:
-                                    # Subtype yok, bu şehir olabilir
-                                    city_index = category_index + 1
+
+                    # ÖNCELİKLE: Klasör yapısından şehir ve ilçe adını al
+                    # Actual path: outputs/HepsiEmlak Output/satilik/konut/daire/istanbul/basaksehir/file.xlsx
+                    # Relative:    HepsiEmlak Output/satilik/konut/daire/istanbul/basaksehir/file.xlsx
+                    # İndeksler:   0                 1       2     3     4        5           6
+                    # Platform klasörü atlayıp (0 or 1), asıl yapıya bakacağız: listing_type/category/subtype/city/district
+                    relative_path = os.path.relpath(file_path, output_dir)
+                    path_parts_list = relative_path.split(os.sep)
+
+                    # Platform klasörünü atla (Emlakjet Output, HepsiEmlak Output gibi)
+                    start_idx = 0
+                    if len(path_parts_list) > 0 and ('output' in path_parts_list[0].lower() or 'emlak' in path_parts_list[0].lower()):
+                        start_idx = 1
+
+                    # Yeni indeksler: listing_type(0), category(1), subtype(2), city(3), district(4), file(5)
+                    adjusted_parts = path_parts_list[start_idx:] if start_idx < len(path_parts_list) else path_parts_list
+
+                    # Helper function for proper Turkish title case
+                    def turkish_title(text):
+                        """Türkçe karakterleri koruyarak title case uygular"""
+                        # İlk önce _ ve - karakterlerini boşluğa çevir
+                        text = text.replace('_', ' ').replace('-', ' ')
+
+                        # Özel Türkçe harfleri için mapping
+                        turkish_map = {
+                            'i': 'İ', 'ı': 'I', 'ş': 'Ş', 'ğ': 'Ğ', 'ü': 'Ü', 'ö': 'Ö', 'ç': 'Ç',
+                            'İ': 'İ', 'I': 'I', 'Ş': 'Ş', 'Ğ': 'Ğ', 'Ü': 'Ü', 'Ö': 'Ö', 'Ç': 'Ç'
+                        }
+
+                        words = text.split()
+                        result = []
+                        for word in words:
+                            if not word:
+                                continue
+                            # İlk karakteri büyük yap
+                            first_char = word[0]
+                            if first_char in turkish_map:
+                                first_char = turkish_map[first_char]
                             else:
-                                city_index = category_index + 1
-                            
-                            # Şehri al
-                            if city_index < len(parts):
-                                city_slug = parts[city_index]
-                                if not city_slug.isdigit():
-                                    city = city_slug.replace('-', ' ').title()
-                        
-                        # Fallback: eğer hala bulunamadıysa
-                        if city == "Bilinmiyor" and len(parts) >= 4:
-                            if parts[-1].isdigit() and len(parts) >= 5:
-                                potential_city = parts[-3] if len(parts) >= 6 else parts[-2]
-                                if not potential_city.isdigit() and potential_city not in category_keywords:
-                                    city = potential_city.replace('-', ' ').title()
+                                first_char = first_char.upper()
+                            result.append(first_char + word[1:].lower())
+
+                        return ' '.join(result)
+
+                    # Şimdi düzgün parse edelim
+                    # Folder structure: listing_type/category/subtype/city/district/file.xlsx
+                    if len(adjusted_parts) >= 6:  # Full structure: listing/category/subtype/city/district/file
+                        subtype = turkish_title(adjusted_parts[2])
+                        city = turkish_title(adjusted_parts[3])
+                        district_slug = adjusted_parts[4]
+                        if not district_slug.endswith('.xlsx') and not district_slug.endswith('.json'):
+                            district = turkish_title(district_slug)
+                    elif len(adjusted_parts) >= 5:  # listing/category/subtype/city/file (no district)
+                        # subtype var, district yok
+                        potential_subtype = adjusted_parts[2]
+                        # Eğer bu bir şehir değilse subtype'tır
+                        if potential_subtype.lower() not in ['konut', 'arsa', 'isyeri']:
+                            subtype = turkish_title(potential_subtype)
+                            city = turkish_title(adjusted_parts[3])
+                        else:
+                            # subtype yok, city at index 2
+                            city = turkish_title(adjusted_parts[2])
+                    elif len(adjusted_parts) >= 4:  # listing/category/city/file (no subtype, no district)
+                        city = turkish_title(adjusted_parts[2])
+
+                    # FALLBACK: Dosya adından şehir çıkar (klasörden bulunamadıysa)
+                    if city == "Bilinmiyor":
+                        parts = filename.replace('.xlsx', '').replace('.json', '').split('_')
+
+                        # Bilinen kategori anahtar kelimeleri
+                        category_keywords = ['konut', 'arsa', 'isyeri', 'devremulk', 'isletme', 'tesis', 'kiralik']
+
+                        # Bilinen alt kategori anahtar kelimeleri (örnekler)
+                        subtype_keywords = [
+                            'daire', 'villa', 'mustakil', 'residence', 'yazlik', 'bina',
+                            'tarla', 'bahce', 'zeytinlik', 'imarli', 'bag',
+                            'dukkan', 'magaza', 'ofis', 'buro', 'fabrika', 'depo',
+                            'apart', 'otel', 'motel', 'pansiyon'
+                        ]
+
+                        if len(parts) >= 4:
+                            # Format: platform_listing_type_category_[subtype]_city_date_time
+                            # Index: 0       1            2         3        4    5    6
+
+                            # Kategori pozisyonunu bul
+                            category_index = -1
+                            for i, part in enumerate(parts):
+                                if part in category_keywords and i >= 2:
+                                    category_index = i
+                                    break
+
+                            if category_index >= 0 and category_index + 1 < len(parts):
+                                next_part = parts[category_index + 1]
+
+                                # Subtype var mı kontrol et (timestamp değilse ve subtype keyword'üne uyuyorsa)
+                                if not next_part.isdigit():
+                                    # Subtype olabilir mi kontrol et
+                                    is_potential_subtype = False
+                                    for kw in subtype_keywords:
+                                        if kw in next_part:
+                                            is_potential_subtype = True
+                                            break
+
+                                    if is_potential_subtype:
+                                        city_index = category_index + 2
+                                    else:
+                                        # Subtype yok, bu şehir olabilir
+                                        city_index = category_index + 1
+                                else:
+                                    city_index = category_index + 1
+
+                                # Şehri al
+                                if city_index < len(parts):
+                                    city_slug = parts[city_index]
+                                    if not city_slug.isdigit():
+                                        city = city_slug.replace('-', ' ').title()
+
+                            # Fallback: eğer hala bulunamadıysa
+                            if city == "Bilinmiyor" and len(parts) >= 4:
+                                if parts[-1].isdigit() and len(parts) >= 5:
+                                    potential_city = parts[-3] if len(parts) >= 6 else parts[-2]
+                                    if not potential_city.isdigit() and potential_city not in category_keywords:
+                                        city = potential_city.replace('-', ' ').title()
+
+                    # Subtype zaten yukarıda klasör yapısından alındı, burada sadece fallback kontrolü
+                    # Eğer hala subtype yoksa ve klasör yapısı uygunsa kontrol et
+                    if subtype is None and len(adjusted_parts) >= 4:
+                        potential_subtype = adjusted_parts[2]
+                        if potential_subtype and potential_subtype.lower() not in ['konut', 'arsa', 'isyeri'] and not potential_subtype.replace('_', '').isdigit():
+                            city_lower = city.lower().replace(' ', '_').replace(' ', '-')
+                            if potential_subtype.lower() != city_lower:
+                                subtype = potential_subtype.replace('_', ' ').replace('-', ' ').title()
                     
                     # Get real record count and average price from Excel file
                     count = 0
@@ -753,6 +1068,7 @@ async def get_results():
                         "subtype": subtype,
                         "listing_type": listing_type,
                         "city": city,
+                        "district": district,
                         "date": datetime.fromtimestamp(stats.st_mtime).strftime('%d.%m.%Y %H:%M'),
                         "count": count,
                         "avg_price": avg_price,

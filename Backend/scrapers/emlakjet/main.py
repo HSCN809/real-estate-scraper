@@ -50,14 +50,22 @@ class EmlakJetScraper(BaseScraper):
         driver: WebDriver,
         base_url: str = "https://www.emlakjet.com",
         category: str = "konut",
-        selected_locations: Optional[Dict] = None
+        selected_locations: Optional[Dict] = None,
+        listing_type: Optional[str] = None  # satilik/kiralik
     ):
         super().__init__(driver, base_url, "emlakjet", category, selected_locations)
-        
+
         self.emlakjet_config = get_emlakjet_config()
-        # Output: Outputs/EmlakJet Output/{category}/
-        self.exporter = DataExporter(output_dir=f"Outputs/EmlakJet Output/{category}")
-        
+        self.listing_type = listing_type  # Kaydet
+
+        # Hiyerarşik klasör yapısı: Outputs/EmlakJet Output/{listing_type}/{category}/
+        self.exporter = DataExporter(
+            output_dir="Outputs/EmlakJet Output",
+            listing_type=listing_type,
+            category=category,
+            subtype=None  # EmlakJet'te subtype yok şimdilik
+        )
+
         # Initialize the appropriate parser
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
@@ -318,59 +326,66 @@ class EmlakJetScraper(BaseScraper):
         else:
             return [district]  # Fallback to district
     
-    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[List[str]] = None, max_pages: int = 1, progress_callback=None):
+    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_pages: int = 1, progress_callback=None):
         """API entry point for scraping without user interaction"""
         print(f"\n🚀 API: EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
-        
+
         if progress_callback:
             progress_callback(f"{self.category.capitalize()} taraması başlatılıyor...", 0, 100, 0)
-        
+
         try:
             # Map city names to indices if possible, or search logic?
             # Existing select_provinces logic is index based on scraping "all cities" list.
             # We need to find indices matching names.
-            
+
             print("Getting province list...")
             all_provinces = self.get_location_options("İller", self.base_url)
-            
+
             api_indices = []
             if cities:
                 for idx, p in enumerate(all_provinces, 1):
                      if p['name'] in cities:
                          api_indices.append(idx)
-            
+
             # Step 1: Select provinces
-            provinces = self.select_provinces(api_indices=api_indices if cities else None) 
+            provinces = self.select_provinces(api_indices=api_indices if cities else None)
             # If no cities provided, maybe scraping all is too much?
-            # For safety, if no cities, return or error? 
-            # In select_provinces logic above, if api_indices is None (but arg passed), it asks user? 
+            # For safety, if no cities, return or error?
+            # In select_provinces logic above, if api_indices is None (but arg passed), it asks user?
             # No, we modified it to check `if api_indices:`
             if not provinces and not cities:
                  # If cities empty and api call, maybe we shouldn't ask user.
                  logger.error("No cities provided for API scrape")
                  return
-            
+
             user_max_pages = max_pages
-            
+
             # Step 2: Process each province sequentially
             for prov_idx, province in enumerate(provinces, 1):
                 # Get listing count for this province
                 listing_count = self.get_listing_count(province['url'])
-                
+
                 print("\n" + "=" * 70)
                 print(f"🏙️  İL {prov_idx}/{len(provinces)}: {province['name']} (Toplam İlan: {listing_count})")
                 print("=" * 70)
-                
+
                 if progress_callback:
                     base_progress = ((prov_idx - 1) / len(provinces)) * 100
                     progress_callback(f"İşleniyor: {province['name']}...", prov_idx, len(provinces), base_progress)
-                
+
+                # İlçe filtreleme var mı kontrol et
+                province_name = province['name']
+                api_districts_for_province = None
+                if districts and province_name in districts:
+                    api_districts_for_province = districts[province_name]
+                    logger.info(f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}")
+
                 # Select districts for this province
                 # We pass api_mode=True
                 selected_districts, process_neighborhoods = self.select_districts_for_province(
-                    province, 
-                    api_mode=True, 
-                    api_districts=districts
+                    province,
+                    api_mode=True,
+                    api_districts=api_districts_for_province
                 )
                 
                 if not selected_districts:

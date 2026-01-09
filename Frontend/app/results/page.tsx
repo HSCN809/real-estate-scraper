@@ -468,6 +468,7 @@ export default function ResultsPage() {
                             <thead>
                                 <tr className="border-b border-slate-700">
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Şehir</th>
+                                    <th className="text-left py-4 px-4 text-gray-400 font-medium">İlçe</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Platform</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Kategori</th>
                                     <th className="text-left py-4 px-4 text-gray-400 font-medium">Alt Kategori</th>
@@ -485,6 +486,13 @@ export default function ResultsPage() {
                                                 <MapPin className="w-4 h-4 text-sky-400" />
                                                 <span className="text-white font-medium">{result.city || 'Bilinmiyor'}</span>
                                             </div>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            {result.district ? (
+                                                <span className="text-gray-300 text-sm">{result.district}</span>
+                                            ) : (
+                                                <span className="text-gray-600 text-xs">-</span>
+                                            )}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`px-2 py-0.5 rounded text-xs ${result.platform === 'Emlakjet' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'

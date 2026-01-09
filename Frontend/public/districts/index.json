@@ -1,0 +1,1461 @@
+{
+  "Adana": {
+    "file": "adana.json",
+    "count": 15,
+    "districts": [
+      "Aladağ",
+      "Ceyhan",
+      "Feke",
+      "Karaisalı",
+      "Karataş",
+      "Kozan",
+      "Pozantı",
+      "Saimbeyli",
+      "Sarıçam",
+      "Seyhan",
+      "Tufanbeyli",
+      "Yumurtalık",
+      "Yüreğir",
+      "Çukurova",
+      "İmamoğlu"
+    ]
+  },
+  "Adıyaman": {
+    "file": "adiyaman.json",
+    "count": 9,
+    "districts": [
+      "Adıyaman Merkez",
+      "Besni",
+      "Gerger",
+      "Gölbaşı",
+      "Kahta",
+      "Samsat",
+      "Sincik",
+      "Tut",
+      "Çelikhan"
+    ]
+  },
+  "Afyonkarahisar": {
+    "file": "afyonkarahisar.json",
+    "count": 18,
+    "districts": [
+      "Afyonkarahisar Merkez",
+      "Bayat",
+      "Başmakçı",
+      "Bolvadin",
+      "Dazkırı",
+      "Dinar",
+      "Emirdağ",
+      "Evciler",
+      "Hocalar",
+      "Kızılören",
+      "Sandıklı",
+      "Sinanpaşa",
+      "Sultandağı",
+      "Çay",
+      "Çobanlar",
+      "İhsaniye",
+      "İscehisar",
+      "Şuhut"
+    ]
+  },
+  "Aksaray": {
+    "file": "aksaray.json",
+    "count": 8,
+    "districts": [
+      "Aksaray Merkez",
+      "Ağaçören",
+      "Eskil",
+      "Gülağaç",
+      "Güzelyurt",
+      "Ortaköy",
+      "Sarıyahşi",
+      "Sultanhani"
+    ]
+  },
+  "Amasya": {
+    "file": "amasya.json",
+    "count": 7,
+    "districts": [
+      "Amasya Merkez",
+      "Göynücek",
+      "Gümüşhacıköy",
+      "Hamamözü",
+      "Merzifon",
+      "Suluova",
+      "Taşova"
+    ]
+  },
+  "Ankara": {
+    "file": "ankara.json",
+    "count": 25,
+    "districts": [
+      "Akyurt",
+      "Altındağ",
+      "Ayaş",
+      "Bala",
+      "Beypazarı",
+      "Elmadağ",
+      "Etimesgut",
+      "Evren",
+      "Gölbaşı",
+      "Güdül",
+      "Haymana",
+      "Kahramankazan",
+      "Kalecik",
+      "Keçiören",
+      "Kızılcahamam",
+      "Mamak",
+      "Nallıhan",
+      "Polatlı",
+      "Pursaklar",
+      "Sincan",
+      "Yenimahalle",
+      "Çamlıdere",
+      "Çankaya",
+      "Çubuk",
+      "Şereflikoçhisar"
+    ]
+  },
+  "Antalya": {
+    "file": "antalya.json",
+    "count": 19,
+    "districts": [
+      "Akseki",
+      "Aksu",
+      "Alanya",
+      "Demre",
+      "Döşemealtı",
+      "Elmalı",
+      "Finike",
+      "Gazipaşa",
+      "Gündoğmuş",
+      "Kaş",
+      "Kemer",
+      "Kepez",
+      "Konyaaltı",
+      "Korkuteli",
+      "Kumluca",
+      "Manavgat",
+      "Muratpaşa",
+      "Serik",
+      "İbradı"
+    ]
+  },
+  "Ardahan": {
+    "file": "ardahan.json",
+    "count": 6,
+    "districts": [
+      "Ardahan Merkez",
+      "Damal",
+      "Göle",
+      "Hanak",
+      "Posof",
+      "Çıldır"
+    ]
+  },
+  "Artvin": {
+    "file": "artvin.json",
+    "count": 9,
+    "districts": [
+      "Ardanuç",
+      "Arhavi",
+      "Artvin Merkez",
+      "Borçka",
+      "Hopa",
+      "KEMALPAŞA",
+      "Murgul",
+      "Yusufeli",
+      "Şavşat"
+    ]
+  },
+  "Aydın": {
+    "file": "aydin.json",
+    "count": 17,
+    "districts": [
+      "Bozdoğan",
+      "Buharkent",
+      "Didim",
+      "Efeler",
+      "Germencik",
+      "Karacasu",
+      "Karpuzlu",
+      "Koçarlı",
+      "Kuyucak",
+      "Kuşadası",
+      "Köşk",
+      "Nazilli",
+      "Sultanhisar",
+      "Söke",
+      "Yenipazar",
+      "Çine",
+      "İncirliova"
+    ]
+  },
+  "Ağrı": {
+    "file": "agri.json",
+    "count": 8,
+    "districts": [
+      "Ağrı Merkez",
+      "Diyadin",
+      "Doğubayazıt",
+      "Eleşkirt",
+      "Hamur",
+      "Patnos",
+      "Taşlıçay",
+      "Tutak"
+    ]
+  },
+  "Balıkesir": {
+    "file": "balikesir.json",
+    "count": 20,
+    "districts": [
+      "Altıeylül",
+      "Ayvalık",
+      "Balya",
+      "Bandırma",
+      "Bigadiç",
+      "Burhaniye",
+      "Dursunbey",
+      "Edremit",
+      "Erdek",
+      "Gömeç",
+      "Gönen",
+      "Havran",
+      "Karesi",
+      "Kepsut",
+      "Manyas",
+      "Marmara",
+      "Savaştepe",
+      "Susurluk",
+      "Sındırgı",
+      "İvrindi"
+    ]
+  },
+  "Bartın": {
+    "file": "bartin.json",
+    "count": 4,
+    "districts": [
+      "Amasra",
+      "Bartın Merkez",
+      "Kurucaşile",
+      "Ulus"
+    ]
+  },
+  "Batman": {
+    "file": "batman.json",
+    "count": 6,
+    "districts": [
+      "Batman Merkez",
+      "Beşiri",
+      "Gercüş",
+      "Hasankeyf",
+      "Kozluk",
+      "Sason"
+    ]
+  },
+  "Bayburt": {
+    "file": "bayburt.json",
+    "count": 3,
+    "districts": [
+      "Aydıntepe",
+      "Bayburt Merkez",
+      "Demirözü"
+    ]
+  },
+  "Bilecik": {
+    "file": "bilecik.json",
+    "count": 8,
+    "districts": [
+      "Bilecik Merkez",
+      "Bozüyük",
+      "Gölpazarı",
+      "Osmaneli",
+      "Pazaryeri",
+      "Söğüt",
+      "Yenipazar",
+      "İnhisar"
+    ]
+  },
+  "Bingöl": {
+    "file": "bingol.json",
+    "count": 8,
+    "districts": [
+      "Adaklı",
+      "Bingöl Merkez",
+      "Genç",
+      "Karlıova",
+      "Kiğı",
+      "Solhan",
+      "Yayladere",
+      "Yedisu"
+    ]
+  },
+  "Bitlis": {
+    "file": "bitlis.json",
+    "count": 7,
+    "districts": [
+      "Adilcevaz",
+      "Ahlat",
+      "Bitlis Merkez",
+      "Güroymak",
+      "Hizan",
+      "Mutki",
+      "Tatvan"
+    ]
+  },
+  "Bolu": {
+    "file": "bolu.json",
+    "count": 9,
+    "districts": [
+      "Bolu Merkez",
+      "Dörtdivan",
+      "Gerede",
+      "Göynük",
+      "Kıbrıscık",
+      "Mengen",
+      "Mudurnu",
+      "Seben",
+      "Yeniçağa"
+    ]
+  },
+  "Burdur": {
+    "file": "burdur.json",
+    "count": 11,
+    "districts": [
+      "Altınyayla",
+      "Ağlasun",
+      "Bucak",
+      "Burdur Merkez",
+      "Gölhisar",
+      "Karamanlı",
+      "Kemer",
+      "Tefenni",
+      "Yeşilova",
+      "Çavdır",
+      "Çeltikçi"
+    ]
+  },
+  "Bursa": {
+    "file": "bursa.json",
+    "count": 17,
+    "districts": [
+      "Büyükorhan",
+      "Gemlik",
+      "Gürsu",
+      "Harmancık",
+      "Karacabey",
+      "Keles",
+      "Kestel",
+      "Mudanya",
+      "Mustafakemalpaşa",
+      "Nilüfer",
+      "Orhaneli",
+      "Orhangazi",
+      "Osmangazi",
+      "Yenişehir",
+      "Yıldırım",
+      "İnegöl",
+      "İznik"
+    ]
+  },
+  "Denizli": {
+    "file": "denizli.json",
+    "count": 19,
+    "districts": [
+      "Acıpayam",
+      "Babadağ",
+      "Baklan",
+      "Bekilli",
+      "Beyağaç",
+      "Bozkurt",
+      "Buldan",
+      "Güney",
+      "Honaz",
+      "Kale",
+      "Merkezefendi",
+      "Pamukkale",
+      "Sarayköy",
+      "Serinhisar",
+      "Tavas",
+      "Çal",
+      "Çameli",
+      "Çardak",
+      "Çivril"
+    ]
+  },
+  "Diyarbakır": {
+    "file": "diyarbakir.json",
+    "count": 17,
+    "districts": [
+      "Bağlar",
+      "Bismil",
+      "Dicle",
+      "Ergani",
+      "Eğil",
+      "Hani",
+      "Hazro",
+      "Kayapınar",
+      "Kocaköy",
+      "Kulp",
+      "Lice",
+      "Silvan",
+      "Sur",
+      "Yenişehir",
+      "Çermik",
+      "Çüngüş",
+      "Çınar"
+    ]
+  },
+  "Düzce": {
+    "file": "duzce.json",
+    "count": 8,
+    "districts": [
+      "Akçakoca",
+      "Cumayeri",
+      "Düzce Merkez",
+      "Gölyaka",
+      "Gümüşova",
+      "Kaynaşlı",
+      "Yığılca",
+      "Çilimli"
+    ]
+  },
+  "Edirne": {
+    "file": "edirne.json",
+    "count": 9,
+    "districts": [
+      "Edirne Merkez",
+      "Enez",
+      "Havsa",
+      "Keşan",
+      "Lalapaşa",
+      "Meriç",
+      "Süloğlu",
+      "Uzunköprü",
+      "İpsala"
+    ]
+  },
+  "Elazığ": {
+    "file": "elazig.json",
+    "count": 11,
+    "districts": [
+      "Alacakaya",
+      "Arıcak",
+      "Ağın",
+      "Baskil",
+      "Elazığ Merkez",
+      "Karakoçan",
+      "Keban",
+      "Kovancılar",
+      "Maden",
+      "Palu",
+      "Sivrice"
+    ]
+  },
+  "Erzincan": {
+    "file": "erzincan.json",
+    "count": 9,
+    "districts": [
+      "Erzincan Merkez",
+      "Kemah",
+      "Kemaliye",
+      "Otlukbeli",
+      "Refahiye",
+      "Tercan",
+      "Çayırlı",
+      "Üzümlü",
+      "İliç"
+    ]
+  },
+  "Erzurum": {
+    "file": "erzurum.json",
+    "count": 20,
+    "districts": [
+      "Aziziye",
+      "Aşkale",
+      "Horasan",
+      "Hınıs",
+      "Karayazı",
+      "Karaçoban",
+      "Köprüköy",
+      "Narman",
+      "Oltu",
+      "Olur",
+      "Palandöken",
+      "Pasinler",
+      "Pazaryolu",
+      "Tekman",
+      "Tortum",
+      "Uzundere",
+      "Yakutiye",
+      "Çat",
+      "İspir",
+      "Şenkaya"
+    ]
+  },
+  "Eskişehir": {
+    "file": "eskisehir.json",
+    "count": 14,
+    "districts": [
+      "Alpu",
+      "Beylikova",
+      "Günyüzü",
+      "Han",
+      "Mahmudiye",
+      "Mihalgazi",
+      "Mihalıcçık",
+      "Odunpazarı",
+      "Sarıcakaya",
+      "Seyitgazi",
+      "Sivrihisar",
+      "Tepebaşı",
+      "Çifteler",
+      "İnönü"
+    ]
+  },
+  "Gaziantep": {
+    "file": "gaziantep.json",
+    "count": 9,
+    "districts": [
+      "Araban",
+      "Karkamış",
+      "Nizip",
+      "Nurdağı",
+      "Oğuzeli",
+      "Yavuzeli",
+      "İslahiye",
+      "Şahinbey",
+      "Şehitkamil"
+    ]
+  },
+  "Giresun": {
+    "file": "giresun.json",
+    "count": 16,
+    "districts": [
+      "Alucra",
+      "Bulancak",
+      "Dereli",
+      "Doğankent",
+      "Espiye",
+      "Eynesil",
+      "Giresun Merkez",
+      "Görele",
+      "Güce",
+      "Keşap",
+      "Piraziz",
+      "Tirebolu",
+      "Yağlıdere",
+      "Çamoluk",
+      "Çanakçı",
+      "Şebinkarahisar"
+    ]
+  },
+  "Gümüşhane": {
+    "file": "gumushane.json",
+    "count": 6,
+    "districts": [
+      "Gümüşhane Merkez",
+      "Kelkit",
+      "Köse",
+      "Kürtün",
+      "Torul",
+      "Şiran"
+    ]
+  },
+  "Hakkari": {
+    "file": "hakkari.json",
+    "count": 5,
+    "districts": [
+      "Derecik",
+      "Hakkari Merkez",
+      "Yüksekova",
+      "Çukurca",
+      "Şemdinli"
+    ]
+  },
+  "Hatay": {
+    "file": "hatay.json",
+    "count": 15,
+    "districts": [
+      "Altınözü",
+      "Antakya",
+      "Arsuz",
+      "Belen",
+      "Defne",
+      "Dörtyol",
+      "Erzin",
+      "Hassa",
+      "Kumlu",
+      "Kırıkhan",
+      "Payas",
+      "Reyhanlı",
+      "Samandağ",
+      "Yayladağı",
+      "İskenderun"
+    ]
+  },
+  "Isparta": {
+    "file": "isparta.json",
+    "count": 13,
+    "districts": [
+      "Aksu",
+      "Atabey",
+      "Eğirdir",
+      "Gelendost",
+      "Gönen",
+      "Isparta Merkez",
+      "Keçiborlu",
+      "Senirkent",
+      "Sütçüler",
+      "Uluborlu",
+      "Yalvaç",
+      "Yenişarbademli",
+      "Şarkikaraağaç"
+    ]
+  },
+  "Iğdır": {
+    "file": "igdir.json",
+    "count": 4,
+    "districts": [
+      "Aralık",
+      "Iğdır Merkez",
+      "Karakoyunlu",
+      "Tuzluca"
+    ]
+  },
+  "Kahramanmaraş": {
+    "file": "kahramanmaras.json",
+    "count": 11,
+    "districts": [
+      "Afşin",
+      "Andırın",
+      "Dulkadiroğlu",
+      "Ekinözü",
+      "Elbistan",
+      "Göksun",
+      "Nurhak",
+      "Onikişubat",
+      "Pazarcık",
+      "Türkoğlu",
+      "Çağlayancerit"
+    ]
+  },
+  "Karabük": {
+    "file": "karabuk.json",
+    "count": 6,
+    "districts": [
+      "Eflani",
+      "Eskipazar",
+      "Karabük Merkez",
+      "Ovacık",
+      "Safranbolu",
+      "Yenice"
+    ]
+  },
+  "Karaman": {
+    "file": "karaman.json",
+    "count": 6,
+    "districts": [
+      "Ayrancı",
+      "Başyayla",
+      "Ermenek",
+      "Karaman Merkez",
+      "Kazımkarabekir",
+      "Sarıveliler"
+    ]
+  },
+  "Kars": {
+    "file": "kars.json",
+    "count": 8,
+    "districts": [
+      "Akyaka",
+      "Arpaçay",
+      "Digor",
+      "Kars Merkez",
+      "Kağızman",
+      "Sarıkamış",
+      "Selim",
+      "Susuz"
+    ]
+  },
+  "Kastamonu": {
+    "file": "kastamonu.json",
+    "count": 20,
+    "districts": [
+      "Abana",
+      "Araç",
+      "Azdavay",
+      "Ağlı",
+      "Bozkurt",
+      "Cide",
+      "Daday",
+      "Devrekani",
+      "Doğanyurt",
+      "Hanönü",
+      "Kastamonu Merkez",
+      "Küre",
+      "Pınarbaşı",
+      "Seydiler",
+      "Taşköprü",
+      "Tosya",
+      "Çatalzeytin",
+      "İhsangazi",
+      "İnebolu",
+      "Şenpazar"
+    ]
+  },
+  "Kayseri": {
+    "file": "kayseri.json",
+    "count": 16,
+    "districts": [
+      "Akkışla",
+      "Bünyan",
+      "Develi",
+      "Felahiye",
+      "Hacılar",
+      "Kocasinan",
+      "Melikgazi",
+      "Pınarbaşı",
+      "Sarıoğlan",
+      "Sarız",
+      "Talas",
+      "Tomarza",
+      "Yahyalı",
+      "Yeşilhisar",
+      "Özvatan",
+      "İncesu"
+    ]
+  },
+  "Kilis": {
+    "file": "kilis.json",
+    "count": 4,
+    "districts": [
+      "Elbeyli",
+      "Kilis Merkez",
+      "Musabeyli",
+      "Polateli"
+    ]
+  },
+  "Kocaeli": {
+    "file": "kocaeli.json",
+    "count": 12,
+    "districts": [
+      "Başiskele",
+      "Darıca",
+      "Derince",
+      "Dilovası",
+      "Gebze",
+      "Gölcük",
+      "Kandıra",
+      "Karamürsel",
+      "Kartepe",
+      "Körfez",
+      "Çayırova",
+      "İzmit"
+    ]
+  },
+  "Konya": {
+    "file": "konya.json",
+    "count": 31,
+    "districts": [
+      "Ahırlı",
+      "Akören",
+      "Akşehir",
+      "Altınekin",
+      "Beyşehir",
+      "Bozkır",
+      "Cihanbeyli",
+      "Derbent",
+      "Derebucak",
+      "Doğanhisar",
+      "Emirgazi",
+      "Ereğli",
+      "Güneysınır",
+      "Hadim",
+      "Halkapınar",
+      "Hüyük",
+      "Ilgın",
+      "Kadınhanı",
+      "Karapınar",
+      "Karatay",
+      "Kulu",
+      "Meram",
+      "Sarayönü",
+      "Selçuklu",
+      "Seydişehir",
+      "Taşkent",
+      "Tuzlukçu",
+      "Yalıhüyük",
+      "Yunak",
+      "Çeltik",
+      "Çumra"
+    ]
+  },
+  "Kütahya": {
+    "file": "kutahya.json",
+    "count": 13,
+    "districts": [
+      "Altıntaş",
+      "Aslanapa",
+      "Domaniç",
+      "Dumlupınar",
+      "Emet",
+      "Gediz",
+      "Hisarcık",
+      "Kütahya Merkez",
+      "Pazarlar",
+      "Simav",
+      "Tavşanlı",
+      "Çavdarhisar",
+      "Şaphane"
+    ]
+  },
+  "Kırklareli": {
+    "file": "kirklareli.json",
+    "count": 8,
+    "districts": [
+      "Babaeski",
+      "Demirköy",
+      "Kofçaz",
+      "Kırklareli Merkez",
+      "Lüleburgaz",
+      "Pehlivanköy",
+      "Pınarhisar",
+      "Vize"
+    ]
+  },
+  "Kırıkkale": {
+    "file": "kirikkale.json",
+    "count": 9,
+    "districts": [
+      "Bahşili",
+      "Balışeyh",
+      "Delice",
+      "Karakeçili",
+      "Keskin",
+      "Kırıkkale Merkez",
+      "Sulakyurt",
+      "Yahşihan",
+      "Çelebi"
+    ]
+  },
+  "Kırşehir": {
+    "file": "kirsehir.json",
+    "count": 7,
+    "districts": [
+      "Akpınar",
+      "Akçakent",
+      "Boztepe",
+      "Kaman",
+      "Kırşehir Merkez",
+      "Mucur",
+      "Çiçekdağı"
+    ]
+  },
+  "Malatya": {
+    "file": "malatya.json",
+    "count": 13,
+    "districts": [
+      "Akçadağ",
+      "Arapgir",
+      "Arguvan",
+      "Battalgazi",
+      "Darende",
+      "Doğanyol",
+      "Doğanşehir",
+      "Hekimhan",
+      "Kale",
+      "Kuluncak",
+      "Pütürge",
+      "Yazıhan",
+      "Yeşilyurt"
+    ]
+  },
+  "Manisa": {
+    "file": "manisa.json",
+    "count": 17,
+    "districts": [
+      "Ahmetli",
+      "Akhisar",
+      "Alaşehir",
+      "Demirci",
+      "Gölmarmara",
+      "Gördes",
+      "Kula",
+      "Köprübaşı",
+      "Kırkağaç",
+      "Salihli",
+      "Saruhanlı",
+      "Sarıgöl",
+      "Selendi",
+      "Soma",
+      "Turgutlu",
+      "Yunusemre",
+      "Şehzadeler"
+    ]
+  },
+  "Mardin": {
+    "file": "mardin.json",
+    "count": 10,
+    "districts": [
+      "Artuklu",
+      "Dargeçit",
+      "Derik",
+      "Kızıltepe",
+      "Mazıdağı",
+      "Midyat",
+      "Nusaybin",
+      "Savur",
+      "Yeşilli",
+      "Ömerli"
+    ]
+  },
+  "Mersin": {
+    "file": "mersin.json",
+    "count": 13,
+    "districts": [
+      "Akdeniz",
+      "Anamur",
+      "Aydıncık",
+      "Bozyazı",
+      "Erdemli",
+      "Gülnar",
+      "Mezitli",
+      "Mut",
+      "Silifke",
+      "Tarsus",
+      "Toroslar",
+      "Yenişehir",
+      "Çamlıyayla"
+    ]
+  },
+  "Muğla": {
+    "file": "mugla.json",
+    "count": 13,
+    "districts": [
+      "Bodrum",
+      "Dalaman",
+      "Datça",
+      "Fethiye",
+      "Kavaklıdere",
+      "Köyceğiz",
+      "Marmaris",
+      "Menteşe",
+      "Milas",
+      "Ortaca",
+      "Seydikemer",
+      "Ula",
+      "Yatağan"
+    ]
+  },
+  "Muş": {
+    "file": "mus.json",
+    "count": 6,
+    "districts": [
+      "Bulanık",
+      "Hasköy",
+      "Korkut",
+      "Malazgirt",
+      "Muş Merkez",
+      "Varto"
+    ]
+  },
+  "Nevşehir": {
+    "file": "nevsehir.json",
+    "count": 8,
+    "districts": [
+      "Acıgöl",
+      "Avanos",
+      "Derinkuyu",
+      "Gülşehir",
+      "Hacıbektaş",
+      "Kozaklı",
+      "Nevşehir Merkez",
+      "Ürgüp"
+    ]
+  },
+  "Niğde": {
+    "file": "nigde.json",
+    "count": 6,
+    "districts": [
+      "Altunhisar",
+      "Bor",
+      "Niğde Merkez",
+      "Ulukışla",
+      "Çamardı",
+      "Çiftlik"
+    ]
+  },
+  "Ordu": {
+    "file": "ordu.json",
+    "count": 19,
+    "districts": [
+      "Akkuş",
+      "Altınordu",
+      "Aybastı",
+      "Fatsa",
+      "Gölköy",
+      "Gülyalı",
+      "Gürgentepe",
+      "Kabadüz",
+      "Kabataş",
+      "Korgan",
+      "Kumru",
+      "Mesudiye",
+      "Perşembe",
+      "Ulubey",
+      "Çamaş",
+      "Çatalpınar",
+      "Çaybaşı",
+      "Ünye",
+      "İkizce"
+    ]
+  },
+  "Osmaniye": {
+    "file": "osmaniye.json",
+    "count": 7,
+    "districts": [
+      "Bahçe",
+      "Düziçi",
+      "Hasanbeyli",
+      "Kadirli",
+      "Osmaniye Merkez",
+      "Sumbas",
+      "Toprakkale"
+    ]
+  },
+  "Rize": {
+    "file": "rize.json",
+    "count": 12,
+    "districts": [
+      "Ardeşen",
+      "Derepazarı",
+      "Fındıklı",
+      "Güneysu",
+      "Hemşin",
+      "Kalkandere",
+      "Pazar",
+      "Rize Merkez",
+      "Çamlıhemşin",
+      "Çayeli",
+      "İkizdere",
+      "İyidere"
+    ]
+  },
+  "Sakarya": {
+    "file": "sakarya.json",
+    "count": 16,
+    "districts": [
+      "Adapazarı",
+      "Akyazı",
+      "Arifiye",
+      "Erenler",
+      "Ferizli",
+      "Geyve",
+      "Hendek",
+      "Karapürçek",
+      "Karasu",
+      "Kaynarca",
+      "Kocaali",
+      "Pamukova",
+      "Sapanca",
+      "Serdivan",
+      "Söğütlü",
+      "Taraklı"
+    ]
+  },
+  "Samsun": {
+    "file": "samsun.json",
+    "count": 17,
+    "districts": [
+      "Alaçam",
+      "Asarcık",
+      "Atakum",
+      "Ayvacık",
+      "Bafra",
+      "Canik",
+      "Havza",
+      "Kavak",
+      "Ladik",
+      "Ondokuzmayıs",
+      "Salıpazarı",
+      "Tekkeköy",
+      "Terme",
+      "Vezirköprü",
+      "Yakakent",
+      "Çarşamba",
+      "İlkadım"
+    ]
+  },
+  "Siirt": {
+    "file": "siirt.json",
+    "count": 7,
+    "districts": [
+      "Baykan",
+      "Eruh",
+      "Kurtalan",
+      "Pervari",
+      "Siirt Merkez",
+      "Tillo",
+      "Şirvan"
+    ]
+  },
+  "Sinop": {
+    "file": "sinop.json",
+    "count": 9,
+    "districts": [
+      "Ayancık",
+      "Boyabat",
+      "Dikmen",
+      "Durağan",
+      "Erfelek",
+      "Gerze",
+      "Saraydüzü",
+      "Sinop Merkez",
+      "Türkeli"
+    ]
+  },
+  "Sivas": {
+    "file": "sivas.json",
+    "count": 17,
+    "districts": [
+      "Akıncılar",
+      "Altınyayla",
+      "Divriği",
+      "Doğanşar",
+      "Gemerek",
+      "Gölova",
+      "Gürün",
+      "Hafik",
+      "Kangal",
+      "Koyulhisar",
+      "Sivas Merkez",
+      "Suşehri",
+      "Ulaş",
+      "Yıldızeli",
+      "Zara",
+      "İmranlı",
+      "Şarkışla"
+    ]
+  },
+  "Tekirdağ": {
+    "file": "tekirdag.json",
+    "count": 11,
+    "districts": [
+      "Ergene",
+      "Hayrabolu",
+      "Kapaklı",
+      "Malkara",
+      "Marmaraereğlisi",
+      "Muratlı",
+      "Saray",
+      "Süleymanpaşa",
+      "Çerkezköy",
+      "Çorlu",
+      "Şarköy"
+    ]
+  },
+  "Tokat": {
+    "file": "tokat.json",
+    "count": 12,
+    "districts": [
+      "Almus",
+      "Artova",
+      "Başçiftlik",
+      "Erbaa",
+      "Niksar",
+      "Pazar",
+      "Reşadiye",
+      "Sulusaray",
+      "Tokat Merkez",
+      "Turhal",
+      "Yeşilyurt",
+      "Zile"
+    ]
+  },
+  "Trabzon": {
+    "file": "trabzon.json",
+    "count": 18,
+    "districts": [
+      "Akçaabat",
+      "Araklı",
+      "Arsin",
+      "Beşikdüzü",
+      "Dernekpazarı",
+      "Düzköy",
+      "Hayrat",
+      "Köprübaşı",
+      "Maçka",
+      "Of",
+      "Ortahisar",
+      "Sürmene",
+      "Tonya",
+      "Vakfıkebir",
+      "Yomra",
+      "Çarşıbaşı",
+      "Çaykara",
+      "Şalpazarı"
+    ]
+  },
+  "Tunceli": {
+    "file": "tunceli.json",
+    "count": 8,
+    "districts": [
+      "Hozat",
+      "Mazgirt",
+      "Nazımiye",
+      "Ovacık",
+      "Pertek",
+      "Pülümür",
+      "Tunceli Merkez",
+      "Çemişgezek"
+    ]
+  },
+  "Uşak": {
+    "file": "usak.json",
+    "count": 6,
+    "districts": [
+      "Banaz",
+      "Eşme",
+      "Karahallı",
+      "Sivaslı",
+      "Ulubey",
+      "Uşak Merkez"
+    ]
+  },
+  "Van": {
+    "file": "van.json",
+    "count": 13,
+    "districts": [
+      "Bahçesaray",
+      "Başkale",
+      "Edremit",
+      "Erciş",
+      "Gevaş",
+      "Gürpınar",
+      "Muradiye",
+      "Saray",
+      "Tuşba",
+      "Çaldıran",
+      "Çatak",
+      "Özalp",
+      "İpekyolu"
+    ]
+  },
+  "Yalova": {
+    "file": "yalova.json",
+    "count": 6,
+    "districts": [
+      "Altınova",
+      "Armutlu",
+      "Termal",
+      "Yalova Merkez",
+      "Çiftlikköy",
+      "Çınarcık"
+    ]
+  },
+  "Yozgat": {
+    "file": "yozgat.json",
+    "count": 14,
+    "districts": [
+      "Akdağmadeni",
+      "Aydıncık",
+      "Boğazlıyan",
+      "Kadışehri",
+      "Saraykent",
+      "Sarıkaya",
+      "Sorgun",
+      "Yenifakılı",
+      "Yerköy",
+      "Yozgat Merkez",
+      "Çandır",
+      "Çayıralan",
+      "Çekerek",
+      "Şefaatli"
+    ]
+  },
+  "Zonguldak": {
+    "file": "zonguldak.json",
+    "count": 8,
+    "districts": [
+      "Alaplı",
+      "Devrek",
+      "Ereğli",
+      "Gökçebey",
+      "Kilimli",
+      "Kozlu",
+      "Zonguldak Merkez",
+      "Çaycuma"
+    ]
+  },
+  "Çanakkale": {
+    "file": "canakkale.json",
+    "count": 12,
+    "districts": [
+      "Ayvacık",
+      "Bayramiç",
+      "Biga",
+      "Bozcaada",
+      "Eceabat",
+      "Ezine",
+      "Gelibolu",
+      "Gökçeada",
+      "Lapseki",
+      "Yenice",
+      "Çan",
+      "Çanakkale Merkez"
+    ]
+  },
+  "Çankırı": {
+    "file": "cankiri.json",
+    "count": 12,
+    "districts": [
+      "Atkaracalar",
+      "Bayramören",
+      "Eldivan",
+      "Ilgaz",
+      "Korgun",
+      "Kurşunlu",
+      "Kızılırmak",
+      "Orta",
+      "Yapraklı",
+      "Çankırı Merkez",
+      "Çerkeş",
+      "Şabanözü"
+    ]
+  },
+  "Çorum": {
+    "file": "corum.json",
+    "count": 14,
+    "districts": [
+      "Alaca",
+      "Bayat",
+      "Boğazkale",
+      "Dodurga",
+      "Kargı",
+      "Laçin",
+      "Mecitözü",
+      "Ortaköy",
+      "Osmancık",
+      "Oğuzlar",
+      "Sungurlu",
+      "Uğurludağ",
+      "Çorum Merkez",
+      "İskilip"
+    ]
+  },
+  "İstanbul": {
+    "file": "istanbul.json",
+    "count": 39,
+    "districts": [
+      "Adalar",
+      "Arnavutköy",
+      "Ataşehir",
+      "Avcılar",
+      "Bahçelievler",
+      "Bakırköy",
+      "Bayrampaşa",
+      "Bağcılar",
+      "Başakşehir",
+      "Beykoz",
+      "Beylikdüzü",
+      "Beyoğlu",
+      "Beşiktaş",
+      "Büyükçekmece",
+      "Esenler",
+      "Esenyurt",
+      "Eyüpsultan",
+      "Fatih",
+      "Gaziosmanpaşa",
+      "Güngören",
+      "Kadıköy",
+      "Kartal",
+      "Kağıthane",
+      "Küçükçekmece",
+      "Maltepe",
+      "Pendik",
+      "Sancaktepe",
+      "Sarıyer",
+      "Silivri",
+      "Sultanbeyli",
+      "Sultangazi",
+      "Tuzla",
+      "Zeytinburnu",
+      "Çatalca",
+      "Çekmeköy",
+      "Ümraniye",
+      "Üsküdar",
+      "Şile",
+      "Şişli"
+    ]
+  },
+  "İzmir": {
+    "file": "izmir.json",
+    "count": 30,
+    "districts": [
+      "Aliağa",
+      "Balçova",
+      "Bayraklı",
+      "Bayındır",
+      "Bergama",
+      "Beydağ",
+      "Bornova",
+      "Buca",
+      "Dikili",
+      "Foça",
+      "Gaziemir",
+      "Güzelbahçe",
+      "Karabağlar",
+      "Karaburun",
+      "Karşıyaka",
+      "Kemalpaşa",
+      "Kiraz",
+      "Konak",
+      "Kınık",
+      "Menderes",
+      "Menemen",
+      "Narlıdere",
+      "Seferihisar",
+      "Selçuk",
+      "Tire",
+      "Torbalı",
+      "Urla",
+      "Çeşme",
+      "Çiğli",
+      "Ödemiş"
+    ]
+  },
+  "Şanlıurfa": {
+    "file": "sanliurfa.json",
+    "count": 13,
+    "districts": [
+      "Akçakale",
+      "Birecik",
+      "Bozova",
+      "Ceylanpınar",
+      "Eyyübiye",
+      "Halfeti",
+      "Haliliye",
+      "Harran",
+      "Hilvan",
+      "Karaköprü",
+      "Siverek",
+      "Suruç",
+      "Viranşehir"
+    ]
+  },
+  "Şırnak": {
+    "file": "sirnak.json",
+    "count": 7,
+    "districts": [
+      "Beytüşşebap",
+      "Cizre",
+      "Güçlükonak",
+      "Silopi",
+      "Uludere",
+      "İdil",
+      "Şırnak Merkez"
+    ]
+  }
+}

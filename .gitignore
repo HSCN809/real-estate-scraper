@@ -20,3 +20,6 @@ outputs/
 
 # Cleanup Script
 cleanup.ps1
+
+# 
+ilce_sinirlari.geojson
