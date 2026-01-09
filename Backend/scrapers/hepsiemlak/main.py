@@ -21,6 +21,7 @@ from core.base_scraper import BaseScraper
 from core.driver_manager import DriverManager
 from core.selectors import get_selectors, get_common_selectors
 from core.config import get_hepsiemlak_config
+from core.failed_pages_tracker import FailedPagesTracker, FailedPageInfo, failed_pages_tracker
 from utils.logger import get_logger
 from utils.data_exporter import DataExporter
 
@@ -480,21 +481,55 @@ class HepsiemlakScraper(BaseScraper):
     def get_total_pages(self) -> int:
         """Get total number of pages from pagination"""
         try:
-            # Pagination linklerini bul (retry mekanizması ile)
-            max_retries = 3
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            
+            # Önce toplam ilan sayısını kontrol et - 24 veya daha az ise pagination olmaz
+            try:
+                listing_count_element = self.driver.find_element(
+                    By.CSS_SELECTOR, "span.applied-filters__count"
+                )
+                count_text = listing_count_element.text.strip()
+                # "için 20 ilan bulundu" -> 20
+                import re
+                match = re.search(r'(\d+)', count_text)
+                if match:
+                    total_listings = int(match.group(1))
+                    if total_listings <= 24:
+                        print(f"📊 Toplam {total_listings} ilan - tek sayfa (pagination yok)")
+                        return 1
+            except Exception:
+                pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
+            
+            # Pagination kontrolü
+            pagination_selector = "ul.he-pagination__links"
+            max_retries = 5
             page_links = []
             
             for retry in range(max_retries):
-                page_links = self.driver.find_elements(
-                    By.CSS_SELECTOR, 
-                    "ul.he-pagination__links li.he-pagination__item a.he-pagination__link"
-                )
-                
-                if page_links:
-                    break
-                elif retry < max_retries - 1:
-                    print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
-                    time.sleep(2)
+                try:
+                    # WebDriverWait ile pagination'ın yüklenmesini bekle
+                    wait = WebDriverWait(self.driver, 10)  # 10 saniye bekle
+                    pagination_container = wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, pagination_selector))
+                    )
+                    
+                    # Pagination bulundu, linkleri al
+                    page_links = self.driver.find_elements(
+                        By.CSS_SELECTOR, 
+                        "ul.he-pagination__links li.he-pagination__item a.he-pagination__link"
+                    )
+                    
+                    if page_links:
+                        break
+                        
+                except Exception as wait_error:
+                    if retry < max_retries - 1:
+                        print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
+                        time.sleep(3)
+                    else:
+                        # Son denemede hala bulunamadıysa, tek sayfa varsay
+                        print(f"⚠️ Pagination bulunamadı - tek sayfa varsayılıyor")
             
             # Sayfa sayısını bul - en büyük sayıyı al
             max_page = 1
@@ -570,6 +605,12 @@ class HepsiemlakScraper(BaseScraper):
             
             # Scrape pages
             for page in range(1, pages_to_scrape + 1):
+                # Durdurma kontrolü - her sayfa başında kontrol et
+                from api.status import task_status
+                if task_status.is_stop_requested():
+                    print(f"\n⚠️ Durdurma isteği alındı! {len(city_listings)} ilan kaydediliyor...")
+                    break
+                
                 print(f"\n📄 Sayfa {page}/{pages_to_scrape} taranıyor...")
 
                 if progress_callback:
@@ -579,18 +620,51 @@ class HepsiemlakScraper(BaseScraper):
                     page_progress = int((completed_pages / pages_to_scrape) * 100)
                     progress_callback(f"{city} - Sayfa {page}/{pages_to_scrape} taranıyor...", current=page, total=pages_to_scrape, progress=page_progress)
 
+                page_url = self.driver.current_url.split('?')[0]
                 if page > 1:
                     # Şehir URL'ini kullan (base_url değil!)
-                    current_city_url = self.driver.current_url.split('?')[0]
-                    page_url = f"{current_city_url}?page={page}"
+                    page_url = f"{page_url}?page={page}"
                     self.driver.get(page_url)
                     self.random_long_wait()  # Stealth: sayfa geçişi
-                    self.wait_for_element(self.common_selectors.get("listing_results"))
+                    
+                # Wait for results - track timeout failures
+                result_element = self.wait_for_element(self.common_selectors.get("listing_results"))
+                
+                if result_element is None:
+                    # Timeout - sayfa yüklenemedi, başarısız sayfa olarak kaydet
+                    print(f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi")
+                    failed_pages_tracker.add_failed_page(FailedPageInfo(
+                        url=page_url if page > 1 else self.driver.current_url,
+                        page_number=page,
+                        city=city,
+                        district=None,
+                        error="Timeout waiting for listing results",
+                        max_pages=pages_to_scrape,
+                        listing_type=self.listing_type,
+                        category=self.current_category,
+                        subtype_path=self.subtype_path
+                    ))
+                    continue
 
                 page_listings = self.scrape_current_page()
-                city_listings.extend(page_listings)
-
-                print(f"   ✓ {len(page_listings)} ilan işlendi")
+                
+                # 0 ilan bulunduysa ve bu beklenmiyorsa başarısız sayfa olarak işaretle
+                if len(page_listings) == 0 and page > 1:
+                    print(f"   ⚠️ Sayfa {page}'de 0 ilan - retry listesine eklendi")
+                    failed_pages_tracker.add_failed_page(FailedPageInfo(
+                        url=page_url,
+                        page_number=page,
+                        city=city,
+                        district=None,
+                        error="0 listings found on page",
+                        max_pages=pages_to_scrape,
+                        listing_type=self.listing_type,
+                        category=self.current_category,
+                        subtype_path=self.subtype_path
+                    ))
+                else:
+                    city_listings.extend(page_listings)
+                    print(f"   ✓ {len(page_listings)} ilan işlendi")
 
                 if page < pages_to_scrape:
                     self.random_medium_wait()  # Stealth: sayfalar arası
@@ -632,6 +706,12 @@ class HepsiemlakScraper(BaseScraper):
 
         # Her ilçeyi ayrı ayrı tara
         for idx, district in enumerate(districts, 1):
+            # Durdurma kontrolü - her ilçe başında kontrol et
+            from api.status import task_status
+            if task_status.is_stop_requested():
+                print(f"\n⚠️ Durdurma isteği alındı! {len(all_results)} ilçe kaydedildi.")
+                break
+            
             print(f"\n{'=' * 60}")
             print(f"📍 İLÇE {idx}/{len(districts)}: {district.upper()}")
             print("=" * 60)
@@ -664,6 +744,16 @@ class HepsiemlakScraper(BaseScraper):
 
                 # Scrape pages for this district
                 for page in range(1, pages_to_scrape + 1):
+                    # Durdurma kontrolü - her sayfa başında kontrol et
+                    from api.status import task_status
+                    if task_status.is_stop_requested():
+                        print(f"\n⚠️ Durdurma isteği alındı! {district} için {len(district_listings)} ilan kaydediliyor...")
+                        # Mevcut ilçe verilerini kaydet
+                        if district_listings:
+                            all_results[district] = district_listings
+                            self._save_district_data(city, district, district_listings)
+                        break
+                    
                     print(f"\n📄 Sayfa {page}/{pages_to_scrape} taranıyor...")
 
                     if progress_callback:
@@ -676,17 +766,50 @@ class HepsiemlakScraper(BaseScraper):
                             progress=overall_progress
                         )
 
+                    page_url = self.driver.current_url.split('?')[0]
                     if page > 1:
-                        current_district_url = self.driver.current_url.split('?')[0]
-                        page_url = f"{current_district_url}?page={page}"
+                        page_url = f"{page_url}?page={page}"
                         self.driver.get(page_url)
                         self.random_long_wait()
-                        self.wait_for_element(self.common_selectors.get("listing_results"))
+                    
+                    # Wait for results - track timeout failures
+                    result_element = self.wait_for_element(self.common_selectors.get("listing_results"))
+                    
+                    if result_element is None:
+                        # Timeout - sayfa yüklenemedi, başarısız sayfa olarak kaydet
+                        print(f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi")
+                        failed_pages_tracker.add_failed_page(FailedPageInfo(
+                            url=page_url if page > 1 else self.driver.current_url,
+                            page_number=page,
+                            city=city,
+                            district=district,
+                            error="Timeout waiting for listing results",
+                            max_pages=pages_to_scrape,
+                            listing_type=self.listing_type,
+                            category=self.current_category,
+                            subtype_path=self.subtype_path
+                        ))
+                        continue
 
                     page_listings = self.scrape_current_page()
-                    district_listings.extend(page_listings)
-
-                    print(f"   ✓ {len(page_listings)} ilan işlendi")
+                    
+                    # 0 ilan bulunduysa ve bu beklenmiyorsa başarısız sayfa olarak işaretle
+                    if len(page_listings) == 0 and page > 1:
+                        print(f"   ⚠️ Sayfa {page}'de 0 ilan - retry listesine eklendi")
+                        failed_pages_tracker.add_failed_page(FailedPageInfo(
+                            url=page_url,
+                            page_number=page,
+                            city=city,
+                            district=district,
+                            error="0 listings found on page",
+                            max_pages=pages_to_scrape,
+                            listing_type=self.listing_type,
+                            category=self.current_category,
+                            subtype_path=self.subtype_path
+                        ))
+                    else:
+                        district_listings.extend(page_listings)
+                        print(f"   ✓ {len(page_listings)} ilan işlendi")
 
                     if page < pages_to_scrape:
                         self.random_medium_wait()
@@ -891,6 +1014,157 @@ class HepsiemlakScraper(BaseScraper):
                 print("❌ HİÇ İLAN BULUNAMADI")
                 print("=" * 70)
                 logger.warning("⚠️  Hiç ilan bulunamadı")
+
+            # ============================================================
+            # RETRY MEKANİZMASI - Başarısız sayfaları yeniden dene
+            # ============================================================
+            max_retries = 3
+            retry_round = 0
+            
+            while failed_pages_tracker.has_failed_pages() and retry_round < max_retries:
+                retry_round += 1
+                failed_pages = failed_pages_tracker.get_unretried(max_retry_count=max_retries)
+                
+                if not failed_pages:
+                    break
+                
+                print(f"\n{'=' * 70}")
+                print(f"🔄 YENİDEN DENEME #{retry_round}/{max_retries}")
+                print(f"📊 {len(failed_pages)} başarısız sayfa tekrar taranacak")
+                print("=" * 70)
+                
+                # Status güncelle
+                task_status.is_retrying = True
+                task_status.retry_round = retry_round
+                task_status.failed_pages_count = len(failed_pages)
+                task_status.update(
+                    message=f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
+                    progress=0
+                )
+                
+                # Her başarısız sayfa için yeni tarayıcı ile dene
+                for idx, page_info in enumerate(failed_pages, 1):
+                    # Durdurma kontrolü
+                    if task_status.is_stop_requested():
+                        print(f"\n⚠️ Retry durduruldu!")
+                        break
+                    
+                    print(f"\n🔄 [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}")
+                    
+                    task_status.update(
+                        message=f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
+                        progress=int((idx / len(failed_pages)) * 100)
+                    )
+                    
+                    try:
+                        # Yeni tarayıcı oturumu aç
+                        retry_manager = DriverManager()
+                        retry_driver = retry_manager.start()
+                        
+                        try:
+                            # Doğrudan URL'e git
+                            print(f"   🌐 {page_info.url}")
+                            retry_driver.get(page_info.url)
+                            time.sleep(5)  # Sayfa yüklensin
+                            
+                            # Sonuçları bekle
+                            from selenium.webdriver.support.ui import WebDriverWait
+                            from selenium.webdriver.support import expected_conditions as EC
+                            
+                            wait = WebDriverWait(retry_driver, 30)
+                            try:
+                                wait.until(EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, self.common_selectors.get("listing_results"))
+                                ))
+                                
+                                # İlanları tara
+                                container_sel = self.common_selectors.get("listing_container")
+                                elements = retry_driver.find_elements(By.CSS_SELECTOR, container_sel)
+                                
+                                if elements:
+                                    listings = []
+                                    for element in elements:
+                                        try:
+                                            data = self.parser.extract_listing_data(element)
+                                            if data:
+                                                listings.append(data)
+                                        except:
+                                            continue
+                                    
+                                    if listings:
+                                        print(f"   ✅ {len(listings)} ilan bulundu!")
+                                        
+                                        # Verileri kaydet
+                                        if page_info.district:
+                                            self._save_district_data(page_info.city, page_info.district, listings)
+                                        else:
+                                            self.exporter.save_by_city(
+                                                {page_info.city: listings},
+                                                prefix=f"{self.get_file_prefix()}_retry_{retry_round}",
+                                                format="excel"
+                                            )
+                                        
+                                        # Başarılı olarak işaretle
+                                        failed_pages_tracker.mark_as_success(
+                                            page_info.city, 
+                                            page_info.district, 
+                                            page_info.page_number
+                                        )
+                                        task_status.successful_retries += 1
+                                    else:
+                                        print(f"   ⚠️ 0 ilan - devam ediliyor")
+                                        failed_pages_tracker.increment_retry_count(
+                                            page_info.city, 
+                                            page_info.district, 
+                                            page_info.page_number
+                                        )
+                                else:
+                                    print(f"   ⚠️ Element bulunamadı")
+                                    failed_pages_tracker.increment_retry_count(
+                                        page_info.city, 
+                                        page_info.district, 
+                                        page_info.page_number
+                                    )
+                                    
+                            except Exception as timeout_e:
+                                print(f"   ❌ Timeout: {timeout_e}")
+                                failed_pages_tracker.increment_retry_count(
+                                    page_info.city, 
+                                    page_info.district, 
+                                    page_info.page_number
+                                )
+                                
+                        finally:
+                            # Tarayıcıyı kapat
+                            retry_manager.stop()
+                            
+                    except Exception as e:
+                        logger.error(f"Retry hatası: {e}")
+                        failed_pages_tracker.increment_retry_count(
+                            page_info.city, 
+                            page_info.district, 
+                            page_info.page_number
+                        )
+                    
+                    # Sayfalar arası kısa bekleme
+                    time.sleep(random.uniform(1, 2))
+            
+            # Retry tamamlandı
+            task_status.is_retrying = False
+            
+            # Final özet
+            summary = failed_pages_tracker.get_summary()
+            if summary["failed_count"] > 0 or summary["successful_retries"] > 0:
+                print(f"\n{'=' * 70}")
+                print("📊 RETRY ÖZETİ")
+                print(f"   ✅ Başarılı retry: {summary['successful_retries']}")
+                print(f"   ❌ Kalan başarısız: {summary['failed_count']}")
+                print("=" * 70)
+                
+                if summary["failed_count"] > 0:
+                    logger.warning(f"⚠️ {summary['failed_count']} sayfa retry sonrası hala başarısız")
+                    for fp in summary["failed_pages"]:
+                        logger.warning(f"   - {fp['city']}/{fp['district'] or 'tüm'} Sayfa {fp['page_number']}: {fp['error']}")
 
         except Exception as e:
             logger.error(f"❌ API tarama hatası: {e}")

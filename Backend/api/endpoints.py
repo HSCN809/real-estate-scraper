@@ -122,13 +122,16 @@ def run_emlakjet_task(request: ScrapeRequest):
 
 def run_hepsiemlak_task(request: ScrapeRequest):
     from scrapers.hepsiemlak.main import HepsiemlakScraper
+    from core.failed_pages_tracker import failed_pages_tracker
     
     manager = DriverManager()
     try:
         driver = manager.start()
         
-        # Reset and start status
+        # Reset trackers
         task_status.reset()
+        failed_pages_tracker.reset()  # Yeni tarama için tracker'ı sıfırla
+        
         task_status.set_running(True)
         task_status.update("HepsiEmlak scraper başlatılıyor...", progress=0)
         

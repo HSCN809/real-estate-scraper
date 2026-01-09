@@ -16,6 +16,12 @@ class TaskStatus:
         self.details = ""
         self.should_stop = False  # Durdurma flag'i
         self.stopped_early = False  # Erken durduruldu mu?
+        # Retry mekanizması için
+        self.failed_pages_count = 0
+        self.retry_round = 0
+        self.max_retries = 3
+        self.is_retrying = False
+        self.successful_retries = 0
     
     def update(self, message=None, progress=None, current=None, total=None, details=None):
         if message is not None:
@@ -50,7 +56,12 @@ class TaskStatus:
             "current": self.current,
             "details": self.details,
             "should_stop": self.should_stop,
-            "stopped_early": self.stopped_early
+            "stopped_early": self.stopped_early,
+            "failed_pages_count": self.failed_pages_count,
+            "retry_round": self.retry_round,
+            "max_retries": self.max_retries,
+            "is_retrying": self.is_retrying,
+            "successful_retries": self.successful_retries
         }
 
 # Global instance
