@@ -169,30 +169,94 @@ export default function ResultsPage() {
         }
     };
 
-    const deleteResult = async (filename: string) => {
-        if (!confirm(`"${filename}" dosyasını silmek istediğinize emin misiniz?`)) return;
+    const deleteResult = async (result: RichResult) => {
+        const desc = `${result.city || 'Bilinmiyor'} - ${result.platform} ${result.category} (${result.count} ilan)`;
+        if (!confirm(`"${desc}" grubunu silmek istediğinize emin misiniz?`)) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/api/v1/results/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            const params = new URLSearchParams();
+            if (result.platform) params.append('platform', result.platform);
+            if (result.category) params.append('kategori', result.category);
+            if (result.listing_type) params.append('ilan_tipi', result.listing_type);
+            if (result.city) params.append('city', result.city);
+            if (result.district) params.append('district', result.district);
+            if (result.subtype) params.append('alt_kategori', result.subtype);
+
+            const res = await fetch(`http://localhost:8000/api/v1/listings/group?${params}`, { method: 'DELETE' });
             if (res.ok) {
-                setResults(results.filter(r => r.files?.[0]?.name !== filename));
+                setResults(results.filter(r => r.id !== result.id));
             }
         } catch (err) {
             console.error('Delete failed:', err);
         }
     };
 
-    const openPreview = async (filename: string) => {
-        setPreviewFile(filename);
+    // Preview için seçilen result
+    const [previewResult, setPreviewResult] = useState<RichResult | null>(null);
+
+    const openPreview = async (result: RichResult) => {
+        setPreviewResult(result);
+        setPreviewFile(result.city || 'Preview'); // Sadece başlık için
         setPreviewLoading(true);
         try {
-            const res = await fetch(`http://localhost:8000/api/v1/results/${filename}/preview?limit=20`);
+            // Veritabanından filtrelenmiş önizleme çek
+            const params = new URLSearchParams();
+            if (result.platform) {
+                const platformMap: Record<string, string> = { 'HepsiEmlak': 'hepsiemlak', 'Emlakjet': 'emlakjet' };
+                params.append('platform', platformMap[result.platform] || result.platform.toLowerCase());
+            }
+            if (result.category) {
+                const categoryMap: Record<string, string> = { 'Konut': 'konut', 'Arsa': 'arsa', 'İşyeri': 'isyeri', 'Devremülk': 'devremulk' };
+                params.append('kategori', categoryMap[result.category] || result.category.toLowerCase());
+            }
+            if (result.listing_type) {
+                const typeMap: Record<string, string> = { 'Satılık': 'satilik', 'Kiralık': 'kiralik' };
+                params.append('ilan_tipi', typeMap[result.listing_type] || result.listing_type.toLowerCase());
+            }
+            if (result.city) params.append('city', result.city);
+            if (result.district) params.append('district', result.district);
+            params.append('limit', '20');
+
+            const res = await fetch(`http://localhost:8000/api/v1/listings/preview?${params}`);
             const data = await res.json();
             setPreviewData(data);
         } catch (err) {
             console.error('Preview failed:', err);
         } finally {
             setPreviewLoading(false);
+        }
+    };
+
+    // Excel export fonksiyonu
+    const downloadExcel = async (result: RichResult) => {
+        try {
+            const params: Record<string, string> = {};
+            if (result.platform) {
+                const platformMap: Record<string, string> = { 'HepsiEmlak': 'hepsiemlak', 'Emlakjet': 'emlakjet' };
+                params.platform = platformMap[result.platform] || result.platform.toLowerCase();
+            }
+            if (result.category) {
+                const categoryMap: Record<string, string> = { 'Konut': 'konut', 'Arsa': 'arsa', 'İşyeri': 'isyeri', 'Devremülk': 'devremulk' };
+                params.kategori = categoryMap[result.category] || result.category.toLowerCase();
+            }
+            if (result.listing_type) {
+                const typeMap: Record<string, string> = { 'Satılık': 'satilik', 'Kiralık': 'kiralik' };
+                params.ilan_tipi = typeMap[result.listing_type] || result.listing_type.toLowerCase();
+            }
+            if (result.city) params.city = result.city;
+            if (result.district) params.district = result.district;
+
+            const blob = await exportToExcel(params);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${result.city || result.platform}_${result.category}_export.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err) {
+            console.error('Export failed:', err);
         }
     };
 
@@ -826,19 +890,21 @@ export default function ResultsPage() {
                                         <td className="py-3 px-4 text-right">
                                             <div className="flex justify-end gap-2">
                                                 <button
-                                                    onClick={() => openPreview(result.files?.[0]?.name || '')}
+                                                    onClick={() => openPreview(result)}
                                                     className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
+                                                    title="Önizle"
                                                 >
                                                     <Eye className="w-4 h-4 text-gray-400" />
                                                 </button>
-                                                <a
-                                                    href={`http://localhost:8000/api/v1/download/${result.files?.[0]?.name}`}
+                                                <button
+                                                    onClick={() => downloadExcel(result)}
                                                     className="p-2 rounded-lg hover:bg-emerald-600/20 transition-colors"
+                                                    title="Excel İndir"
                                                 >
                                                     <Download className="w-4 h-4 text-emerald-400" />
-                                                </a>
+                                                </button>
                                                 <button
-                                                    onClick={() => deleteResult(result.files?.[0]?.name || '')}
+                                                    onClick={() => deleteResult(result)}
                                                     className="p-2 rounded-lg hover:bg-red-600/20 transition-colors"
                                                     title="Sil"
                                                 >
@@ -1004,7 +1070,7 @@ export default function ResultsPage() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                        onClick={() => setPreviewFile(null)}
+                        onClick={() => { setPreviewFile(null); setPreviewResult(null); }}
                     >
                         <motion.div
                             initial={{ scale: 0.9, y: 20 }}
@@ -1017,10 +1083,12 @@ export default function ResultsPage() {
                             <div className="flex items-center justify-between p-4 border-b border-slate-700">
                                 <div>
                                     <h3 className="text-lg font-bold text-white">Veri Önizleme</h3>
-                                    <p className="text-sm text-gray-400">{previewFile}</p>
+                                    <p className="text-sm text-gray-400">
+                                        {previewResult ? `${previewResult.city || ''} - ${previewResult.platform} - ${previewResult.category}` : previewFile}
+                                    </p>
                                 </div>
                                 <button
-                                    onClick={() => setPreviewFile(null)}
+                                    onClick={() => { setPreviewFile(null); setPreviewResult(null); }}
                                     className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
                                 >
                                     <X className="w-5 h-5 text-gray-400" />
@@ -1069,18 +1137,21 @@ export default function ResultsPage() {
                             {/* Modal Footer */}
                             <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
                                 <button
-                                    onClick={() => setPreviewFile(null)}
+                                    onClick={() => {
+                                        setPreviewFile(null);
+                                        setPreviewResult(null);
+                                    }}
                                     className="px-4 py-2 rounded-lg bg-slate-800 text-gray-300 hover:bg-slate-700"
                                 >
                                     Kapat
                                 </button>
-                                <a
-                                    href={`http://localhost:8000/api/v1/download/${previewFile}`}
+                                <button
+                                    onClick={() => previewResult && downloadExcel(previewResult)}
                                     className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"
                                 >
                                     <Download className="w-4 h-4" />
                                     Tümünü İndir
-                                </a>
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>

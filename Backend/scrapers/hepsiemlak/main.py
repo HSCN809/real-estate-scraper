@@ -377,37 +377,35 @@ class HepsiemlakScraper(BaseScraper):
             
             city_slug = city_slug.replace(' ', '-')
             
-            # Subtype path varsa onu kullan, yoksa kategori path'ini config'den al
-            # HepsiEmlak URL formatı: istanbul-kiralik-daire (tire ile birleşik)
+            # HepsiEmlak URL formatı: ayas-kiralik/mustakil-ev (şehir-tip/subtype)
+            # Subtype path varsa: şehir-tip/subtype
+            # Subtype yoksa: şehir-tip (konut ana kategori) veya şehir-tip/arsa
             if self.subtype_path:
-                # Subtype path: /kiralik/daire -> daire
-                # Şehir URL: istanbul-kiralik-daire
+                # Subtype path: /kiralik/mustakil-ev -> mustakil-ev
                 path_parts = self.subtype_path.split('/')
-                # path_parts: ['', 'kiralik', 'daire']
+                # path_parts: ['', 'kiralik', 'mustakil-ev']
                 if len(path_parts) >= 3:
-                    category_suffix = "-" + path_parts[2]  # -daire
+                    subtype_slug = path_parts[2]  # mustakil-ev
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}/{subtype_slug}"
                 else:
-                    category_suffix = ""
-                print(f"DEBUG: Using subtype_path: {self.subtype_path} -> category_suffix: {category_suffix}")
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
             else:
-                # Kategori path'ini config'den al
-                # Örnek: /kiralik/arsa -> -arsa
-                # /kiralik -> "" (konut için)
+                # Ana kategori için config'den path al
                 category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
-
-                category_suffix = ""
+                # /kiralik -> şehir-kiralik (konut)
+                # /kiralik/arsa -> şehir-kiralik/arsa
                 if category_path:
-                    # "/kiralik/arsa" -> ["", "kiralik", "arsa"] -> "-arsa"
-                    # "/kiralik" -> ["", "kiralik"] -> "" (konut)
                     parts = category_path.split('/')
                     if len(parts) > 2:
-                        category_suffix = "-" + parts[2]  # -arsa, -isyeri, -turistik-isletme vb.
+                        # arsa, isyeri, devremulk, turistik-isletme
+                        city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}/{parts[2]}"
+                    else:
+                        # konut (ana kategori)
+                        city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
+                else:
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
 
-            # Doğrudan şehir + kategori sayfasına git
-            # Örnek: https://www.hepsiemlak.com/istanbul-kiralik-daire
-            city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}{category_suffix}"
             print(f"Şehir URL'sine gidiliyor: {city_url}")
-            print(f"DEBUG: listing_type = {self.listing_type}, category = {self.current_category}, subtype_path = {self.subtype_path}")
             
             self.driver.get(city_url)
             time.sleep(5)  # Sayfa tam yüklensin
@@ -462,18 +460,24 @@ class HepsiemlakScraper(BaseScraper):
             # Önce şehir sayfasına git
             city_slug = self._normalize_text(city_name)
             
-            # Base URL with category - HepsiEmlak formatı: istanbul-kiralik-daire
+            # HepsiEmlak URL formatı: sehir-kiralik/subtype
             if self.subtype_path:
-                # /kiralik/daire -> -kiralik-daire
                 path_parts = self.subtype_path.strip('/').split('/')
-                category_suffix = "-" + "-".join(path_parts) if path_parts else ""
-                city_url = f"https://www.hepsiemlak.com/{city_slug}{category_suffix}"
+                if len(path_parts) >= 2:
+                    subtype_slug = path_parts[1]  # kiralik/daire -> daire
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}/{subtype_slug}"
+                else:
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
             else:
                 category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
-                # /kiralik/arsa -> -kiralik-arsa
-                path_parts = category_path.strip('/').split('/') if category_path else []
-                category_suffix = "-" + "-".join(path_parts) if path_parts else ""
-                city_url = f"https://www.hepsiemlak.com/{city_slug}{category_suffix}"
+                if category_path:
+                    parts = category_path.strip('/').split('/')
+                    if len(parts) > 1:
+                        city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}/{parts[1]}"
+                    else:
+                        city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
+                else:
+                    city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}"
             
             print(f"📍 {city_name} sayfasına gidiliyor: {city_url}")
             self.driver.get(city_url)
@@ -567,27 +571,25 @@ class HepsiemlakScraper(BaseScraper):
 
             district_slug = district_slug.replace(' ', '-')
 
-            # Subtype path varsa onu kullan, yoksa kategori path'ini config'den al
-            # HepsiEmlak URL formatı: basaksehir-kiralik-daire (tire ile birleşik)
+            # HepsiEmlak URL formatı: ilce-kiralik/subtype (ilce-tip/subtype)
             if self.subtype_path:
-                # Subtype path: /kiralik/daire -> -daire
                 path_parts = self.subtype_path.split('/')
                 if len(path_parts) >= 3:
-                    category_suffix = "-" + path_parts[2]  # -daire
+                    subtype_slug = path_parts[2]
+                    district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}/{subtype_slug}"
                 else:
-                    category_suffix = ""
+                    district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}"
             else:
-                # Kategori path'ini config'den al
                 category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
-                category_suffix = ""
                 if category_path:
                     parts = category_path.split('/')
                     if len(parts) > 2:
-                        category_suffix = "-" + parts[2]  # -arsa, -isyeri, -turistik-isletme vb.
+                        district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}/{parts[2]}"
+                    else:
+                        district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}"
+                else:
+                    district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}"
 
-            # Doğrudan ilçe + kategori sayfasına git
-            # Örnek: https://www.hepsiemlak.com/basaksehir-kiralik-daire
-            district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}{category_suffix}"
             print(f"📍 İlçe URL'sine gidiliyor: {district_url}")
 
             self.driver.get(district_url)

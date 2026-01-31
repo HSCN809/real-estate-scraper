@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import FileResponse
 from api.schemas import ScrapeRequest, ScrapeResponse
 from core.driver_manager import DriverManager
@@ -375,93 +375,65 @@ async def get_city_analytics(
         ilan_tipi=db_listing_type
     )
 
-@router.get("/analytics/file-stats/{filename}")
-async def get_file_statistics(filename: str):
-    """Dosya bazlı detaylı istatistikler - describe + fiyat aralıkları"""
-    import os
-    import re
+@router.get("/analytics/stats")
+async def get_listing_statistics(
+    platform: str = None,
+    kategori: str = None,
+    ilan_tipi: str = None,
+    city: str = None,
+    district: str = None,
+    db: Session = Depends(get_db)
+):
+    """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
     import statistics
-    
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    
-    output_dir = os.path.join(project_root, "outputs")
-    if not os.path.exists(output_dir):
-        output_dir = os.path.join(project_root, "Outputs")
-    
-    # Find the file
-    file_path = None
-    for root, dirs, files in os.walk(output_dir):
-        if filename in files:
-            file_path = os.path.join(root, filename)
-            break
-    
-    if not file_path or not os.path.exists(file_path):
-        return {"error": "Dosya bulunamadı", "stats": None}
-    
-    prices = []
-    
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(file_path, read_only=True)
-        ws = wb.active
-        
-        # Find price column
-        price_col_idx = None
-        header_row = next(ws.iter_rows(min_row=1, max_row=1))
-        
-        for idx, cell in enumerate(header_row):
-            val = str(cell.value).strip().lower() if cell.value else ""
-            if val == "fiyat":
-                price_col_idx = idx
-                break
-            elif "fiyat" in val and "metrekare" not in val:
-                if price_col_idx is None:
-                    price_col_idx = idx
-        
-        if price_col_idx is not None:
-            for row in ws.iter_rows(min_row=2):
-                cell = row[price_col_idx]
-                if cell.value:
-                    try:
-                        val_str = str(cell.value).strip()
-                        val_str = re.sub(r'\s+', '', val_str)
-                        val_str = val_str.replace('TL', '').replace('₺', '')
-                        
-                        if ',' in val_str and '.' in val_str:
-                            val_str = val_str.replace('.', '').replace(',', '.')
-                        elif '.' in val_str and val_str.count('.') > 1:
-                            val_str = val_str.replace('.', '')
-                        elif '.' in val_str and len(val_str.split('.')[-1]) == 3:
-                            val_str = val_str.replace('.', '')
-                        elif ',' in val_str:
-                            val_str = val_str.replace(',', '.')
-                        
-                        price = float(val_str)
-                        if price > 0:
-                            prices.append(price)
-                    except:
-                        pass
-        
-        wb.close()
-    except Exception as e:
-        logger.error(f"Error reading file stats: {e}")
-        return {"error": str(e), "stats": None}
-    
+
+    # Build query
+    query = db.query(Listing.fiyat).filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
+
+    # Apply filters
+    if platform and platform != "all":
+        platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
+        db_platform = platform_map.get(platform, platform.lower())
+        query = query.filter(Listing.platform == db_platform)
+
+    if kategori and kategori != "all":
+        category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri", "Devremülk": "devremulk"}
+        db_kategori = category_map.get(kategori, kategori.lower())
+        query = query.filter(Listing.kategori == db_kategori)
+
+    if ilan_tipi and ilan_tipi != "all":
+        type_map = {"Satılık": "satilik", "Kiralık": "kiralik"}
+        db_type = type_map.get(ilan_tipi, ilan_tipi.lower())
+        query = query.filter(Listing.ilan_tipi == db_type)
+
+    # City/district filter
+    if city or district:
+        location_query = db.query(Location.id)
+        if city and city != "Belirtilmemiş":
+            location_query = location_query.filter(Location.il == city)
+        if district and district != "Belirtilmemiş":
+            location_query = location_query.filter(Location.ilce == district)
+        location_ids = [loc_id for (loc_id,) in location_query.all()]
+        if location_ids:
+            query = query.filter(Listing.location_id.in_(location_ids))
+
+    # Get prices
+    prices = [p[0] for p in query.all()]
+
     if not prices:
         return {"error": "Fiyat verisi bulunamadı", "stats": None}
-    
+
     # Sort prices for percentile calculations
     sorted_prices = sorted(prices)
     n = len(sorted_prices)
-    
+
     # Calculate percentiles (quartiles)
     def percentile(data, p):
         k = (len(data) - 1) * p / 100
         f = int(k)
         c = f + 1 if f + 1 < len(data) else f
         return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
-    
+
     # Descriptive statistics (like pandas describe)
     describe_stats = {
         "count": n,
@@ -473,30 +445,29 @@ async def get_file_statistics(filename: str):
         "q75": round(percentile(sorted_prices, 75), 2),
         "max": round(max(prices), 2)
     }
-    
-    # Dynamic price range distribution using quantile-based binning (like pandas qcut)
-    # Create 5 bins based on data distribution
+
+    # Dynamic price range distribution using quantile-based binning
     num_bins = 5
     bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
-    
+
     # Ensure unique edges
     unique_edges = []
     for e in bin_edges:
         if not unique_edges or e > unique_edges[-1]:
             unique_edges.append(e)
-    
+
     # If not enough unique edges, fall back to equal-width bins
     if len(unique_edges) < 3:
         min_p, max_p = min(prices), max(prices)
         bin_width = (max_p - min_p) / num_bins
         unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
-    
+
     # Count items in each bin
     price_ranges = []
     for i in range(len(unique_edges) - 1):
         low = unique_edges[i]
         high = unique_edges[i + 1]
-        
+
         # Format the range label
         def format_price(p):
             if p >= 1000000:
@@ -505,21 +476,21 @@ async def get_file_statistics(filename: str):
                 return f"{p/1000:.0f}K"
             else:
                 return f"{p:.0f}"
-        
+
         label = f"{format_price(low)} - {format_price(high)}"
-        
+
         # Count items in range
         if i == len(unique_edges) - 2:  # Last bin includes upper edge
             count = sum(1 for p in prices if low <= p <= high)
         else:
             count = sum(1 for p in prices if low <= p < high)
-        
+
         price_ranges.append({
             "range": label,
             "count": count,
             "percentage": round(count / n * 100, 1)
         })
-    
+
     return {
         "stats": describe_stats,
         "price_ranges": price_ranges,
@@ -527,94 +498,52 @@ async def get_file_statistics(filename: str):
     }
 
 @router.delete("/clear-results")
-async def clear_results():
-    """Outputs klasöründeki tüm sonuç dosyalarını sil"""
+async def clear_results(db: Session = Depends(get_db)):
+    """Veritabanındaki tüm ilanları ve outputs klasöründeki dosyaları sil"""
     import os
     import shutil
-    
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    output_dir = os.path.join(project_root, "outputs")
-    
-    if not os.path.exists(output_dir):
-        output_dir = os.path.join(project_root, "Outputs")
-    
-    if not os.path.exists(output_dir):
-        return {"status": "error", "message": "Outputs klasörü bulunamadı", "deleted_count": 0}
-    
-    deleted_count = 0
-    try:
-        for item in os.listdir(output_dir):
-            item_path = os.path.join(output_dir, item)
-            if os.path.isfile(item_path):
-                os.remove(item_path)
-                deleted_count += 1
-            elif os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-                deleted_count += 1
-        
-        return {"status": "success", "message": f"{deleted_count} dosya/klasör silindi", "deleted_count": deleted_count}
-    except Exception as e:
-        return {"status": "error", "message": str(e), "deleted_count": deleted_count}
 
-@router.delete("/results/{filename:path}")
-async def delete_result(filename: str):
-    """Tek bir sonuç dosyasını sil"""
-    import os
-    import gc
-    import time
-    from urllib.parse import unquote
-    
-    # URL decode the filename (handles Turkish characters)
-    decoded_filename = unquote(filename)
-    logger.info(f"Delete request for: {decoded_filename}")
-    
+    deleted_listings = 0
+    deleted_files = 0
+
+    # 1. Veritabanındaki tüm ilanları sil
+    try:
+        deleted_listings = db.query(Listing).delete()
+        # ScrapeSession'ları da sil
+        db.query(ScrapeSession).delete()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": f"Veritabanı temizleme hatası: {str(e)}", "deleted_listings": 0, "deleted_files": 0}
+
+    # 2. Outputs klasöründeki dosyaları da sil
     current_file = os.path.abspath(__file__)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
     output_dir = os.path.join(project_root, "outputs")
-    
+
     if not os.path.exists(output_dir):
         output_dir = os.path.join(project_root, "Outputs")
-    
-    # Find the file
-    file_path = None
-    for root, dirs, files in os.walk(output_dir):
-        for f in files:
-            if f == decoded_filename:
-                file_path = os.path.join(root, f)
-                break
-        if file_path:
-            break
-    
-    if not file_path or not os.path.exists(file_path):
-        logger.warning(f"File not found: {decoded_filename}")
-        raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {decoded_filename}")
-    
-    # Retry mechanism for Windows file locking
-    max_retries = 3
-    for attempt in range(max_retries):
+
+    if os.path.exists(output_dir):
         try:
-            # Force garbage collection to release any file handles
-            gc.collect()
-            time.sleep(0.1)  # Small delay
-            
-            os.remove(file_path)
-            logger.info(f"Deleted: {file_path}")
-            return {"status": "success", "message": f"{decoded_filename} silindi"}
-        except PermissionError as e:
-            if attempt < max_retries - 1:
-                logger.warning(f"Retry {attempt + 1}/{max_retries} for {decoded_filename}")
-                gc.collect()
-                time.sleep(0.5)  # Wait longer before retry
-            else:
-                logger.error(f"Delete failed after {max_retries} attempts: {e}")
-                raise HTTPException(
-                    status_code=500, 
-                    detail="Dosya başka bir işlem tarafından kullanılıyor. Lütfen biraz bekleyip tekrar deneyin."
-                )
+            for item in os.listdir(output_dir):
+                item_path = os.path.join(output_dir, item)
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                    deleted_files += 1
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    deleted_files += 1
         except Exception as e:
-            logger.error(f"Delete error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.warning(f"Dosya silme hatası: {e}")
+
+    return {
+        "status": "success",
+        "message": f"{deleted_listings} ilan ve {deleted_files} dosya/klasör silindi",
+        "deleted_listings": deleted_listings,
+        "deleted_files": deleted_files
+    }
+
 
 
 @router.get("/results")
@@ -625,65 +554,29 @@ async def get_results(db: Session = Depends(get_db)):
     """
     return crud.get_results_for_frontend(db)
 
-@router.get("/results/{filename}/preview")
-async def get_result_preview(filename: str, limit: int = 20):
-    """Dosyadan ilk N kaydı döndür"""
-    import os
-    from datetime import datetime
-    
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    
-    # Find the file
-    output_dir = os.path.join(project_root, "outputs")
-    if not os.path.exists(output_dir):
-        output_dir = os.path.join(project_root, "Outputs")
-    
-    file_path = None
-    for root, dirs, files in os.walk(output_dir):
-        if filename in files:
-            file_path = os.path.join(root, filename)
-            break
-    
-    if not file_path or not os.path.exists(file_path):
-        return {"error": "Dosya bulunamadı", "data": [], "total": 0}
-    
-    data = []
-    total = 0
-    
-    try:
-        if filename.endswith('.xlsx'):
-            import openpyxl
-            wb = openpyxl.load_workbook(file_path, read_only=True)
-            ws = wb.active
-            
-            # Get headers
-            headers = []
-            for cell in ws[1]:
-                headers.append(cell.value if cell.value else "")
-            
-            # Get data rows
-            total = ws.max_row - 1 if ws.max_row else 0
-            for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=min(limit + 1, ws.max_row)), start=1):
-                row_data = {}
-                for col_idx, cell in enumerate(row):
-                    if col_idx < len(headers):
-                        row_data[headers[col_idx]] = cell.value if cell.value else ""
-                data.append(row_data)
-            
-            wb.close()
-            
-        elif filename.endswith('.json'):
-            import json
-            with open(file_path, 'r', encoding='utf-8') as f:
-                all_data = json.load(f)
-                if isinstance(all_data, list):
-                    total = len(all_data)
-                    data = all_data[:limit]
-    except Exception as e:
-        logger.error(f"Preview error: {e}")
-        return {"error": str(e), "data": [], "total": 0}
-    
+@router.get("/listings/preview")
+async def get_listings_preview(
+    platform: str = None,
+    kategori: str = None,
+    ilan_tipi: str = None,
+    city: str = None,
+    district: str = None,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """Veritabanından filtrelenmiş ilanların önizlemesini döndür"""
+    listings, total = crud.get_listings(
+        db,
+        platform=platform,
+        kategori=kategori,
+        ilan_tipi=ilan_tipi,
+        city=city,
+        district=district,
+        page=1,
+        limit=limit
+    )
+
+    data = [l.to_dict() for l in listings]
     return {"data": data, "total": total, "showing": len(data)}
 
 @router.get("/status")
@@ -695,34 +588,6 @@ async def get_stats(db: Session = Depends(get_db)):
     """Veritabanından genel istatistikleri döndür"""
     return crud.get_stats_summary(db)
 
-@router.get("/download/{filename}")
-async def download_file(filename: str):
-    """Dosyayı indir"""
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-
-    # Find the file
-    output_dir = os.path.join(project_root, "outputs")
-    if not os.path.exists(output_dir):
-        output_dir = os.path.join(project_root, "Outputs")
-
-    file_path = None
-    for root, dirs, files in os.walk(output_dir):
-        if filename in files:
-            file_path = os.path.join(root, filename)
-            break
-
-    if not file_path or not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
-
-    # Determine media type
-    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if filename.endswith('.xlsx') else "application/json"
-
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type=media_type
-    )
 
 
 # ==================== NEW DB-BASED ENDPOINTS ====================
@@ -883,6 +748,70 @@ async def export_to_excel(
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+
+@router.delete("/listings/group")
+async def delete_listing_group(
+    platform: str = Query(default=None),
+    kategori: str = Query(default=None),
+    ilan_tipi: str = Query(default=None),
+    city: str = Query(default=None),
+    district: str = Query(default=None),
+    alt_kategori: str = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Filtrelere göre ilan grubunu sil"""
+    from database.models import Listing, Location
+
+    query = db.query(Listing)
+
+    # Platform filter (convert display name to db name)
+    if platform:
+        platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
+        db_platform = platform_map.get(platform, platform.lower())
+        query = query.filter(Listing.platform == db_platform)
+
+    # Category filter
+    if kategori:
+        category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri",
+                       "Devremülk": "devremulk", "Turistik İşletme": "turistik_isletme"}
+        db_kategori = category_map.get(kategori, kategori.lower())
+        query = query.filter(Listing.kategori == db_kategori)
+
+    # Listing type filter
+    if ilan_tipi:
+        type_map = {"Satılık": "satilik", "Kiralık": "kiralik"}
+        db_type = type_map.get(ilan_tipi, ilan_tipi.lower())
+        query = query.filter(Listing.ilan_tipi == db_type)
+
+    # Alt kategori filter
+    if alt_kategori:
+        # Convert "Cafe Bar" to "cafe_bar"
+        db_alt = alt_kategori.lower().replace(' ', '_')
+        query = query.filter(Listing.alt_kategori == db_alt)
+
+    # City/district filter - get location IDs first
+    if city or district:
+        location_query = db.query(Location.id)
+        if city and city != "Belirtilmemiş":
+            location_query = location_query.filter(Location.il == city)
+        if district and district != "Belirtilmemiş":
+            location_query = location_query.filter(Location.ilce == district)
+        location_ids = [loc_id for (loc_id,) in location_query.all()]
+        if location_ids:
+            query = query.filter(Listing.location_id.in_(location_ids))
+        else:
+            raise HTTPException(status_code=404, detail="Silinecek ilan bulunamadı")
+
+    # Get count and delete
+    count = query.count()
+    if count == 0:
+        raise HTTPException(status_code=404, detail="Silinecek ilan bulunamadı")
+
+    query.delete(synchronize_session=False)
+    db.commit()
+
+    return {"status": "success", "message": f"{count} ilan silindi", "deleted_count": count}
 
 
 @router.delete("/listings/{listing_id}")

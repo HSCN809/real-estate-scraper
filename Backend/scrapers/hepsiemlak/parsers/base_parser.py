@@ -67,11 +67,11 @@ class BaseHepsiemlakParser:
         """
         price_sel = self.common_selectors.get("price", "span.list-view-price")
         title_sel = self.common_selectors.get("title", "h3")
-        location_sel = self.common_selectors.get("location", "span.list-view-location")
+        location_sel = self.common_selectors.get("location", "span.list-view-location address")
         date_sel = self.common_selectors.get("date", "span.list-view-date")
         link_sel = self.common_selectors.get("link", "a.card-link")
         firm_sel = self.common_selectors.get("firm", "p.listing-card--owner-info__firm-name")
-        
+
         price = self.get_element_text(container, price_sel)
         title = self.get_element_text(container, title_sel)
         location_text = self.get_element_text(container, location_sel)
@@ -80,8 +80,8 @@ class BaseHepsiemlakParser:
         firm = self.get_element_text(container, firm_sel)
         
         # Parse location
-        location_parts = [p.strip() for p in location_text.split('/')]
-        
+        location_parts = [p.strip() for p in location_text.split('/') if p.strip()]
+
         return {
             'fiyat': price or "Belirtilmemiş",
             'baslik': title or "Belirtilmemiş",
