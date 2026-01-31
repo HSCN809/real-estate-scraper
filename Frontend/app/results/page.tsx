@@ -28,7 +28,7 @@ import {
     Map,
     BarChart3
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getResults } from '@/lib/api';
 import { ScrapeResult } from '@/types';
 
@@ -67,6 +67,16 @@ export default function ResultsPage() {
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [listingTypeFilter, setListingTypeFilter] = useState<string>('all');
     const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
+
+    // City/District filters for table view
+    const [cityFilter, setCityFilter] = useState<string[]>([]);
+    const [districtFilter, setDistrictFilter] = useState<string[]>([]);
+    const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+    const [districtDropdownOpen, setDistrictDropdownOpen] = useState(false);
+
+    // Refs for click outside detection
+    const cityDropdownRef = useRef<HTMLDivElement>(null);
+    const districtDropdownRef = useRef<HTMLDivElement>(null);
 
     // Preview Modal
     const [previewData, setPreviewData] = useState<any>(null);
@@ -188,6 +198,21 @@ export default function ResultsPage() {
         fetchResults();
     }, []);
 
+    // Click outside to close dropdowns
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (cityDropdownRef.current && !cityDropdownRef.current.contains(event.target as Node)) {
+                setCityDropdownOpen(false);
+            }
+            if (districtDropdownRef.current && !districtDropdownRef.current.contains(event.target as Node)) {
+                setDistrictDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     if (!mounted) {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
@@ -202,6 +227,9 @@ export default function ResultsPage() {
         if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
         if (listingTypeFilter !== 'all' && r.listing_type !== listingTypeFilter) return false;
         if (subtypeFilter !== 'all' && r.subtype !== subtypeFilter) return false;
+        // City/District filters (for table view)
+        if (cityFilter.length > 0 && !cityFilter.includes(r.city || '')) return false;
+        if (districtFilter.length > 0 && !districtFilter.includes(r.district || '')) return false;
         return true;
     });
 
@@ -216,6 +244,53 @@ export default function ResultsPage() {
     const categories = [...new Set(results.map(r => r.category))];
     const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
     const subtypes = [...new Set(results.map(r => r.subtype).filter(Boolean))];
+
+    // Cities and districts for table view filters
+    const cities = [...new Set(results.map(r => r.city).filter(Boolean))].sort() as string[];
+    const availableDistricts = results
+        .filter(r => cityFilter.length === 0 || cityFilter.includes(r.city || ''))
+        .map(r => r.district)
+        .filter(Boolean);
+    const districts = [...new Set(availableDistricts)].sort() as string[];
+
+    // City filter change handler - clear district filter when city changes
+    const handleCityFilterChange = (city: string) => {
+        setCityFilter(prev => {
+            if (prev.includes(city)) {
+                return prev.filter(c => c !== city);
+            } else {
+                return [...prev, city];
+            }
+        });
+        setDistrictFilter([]); // Clear district filter when city changes
+    };
+
+    const handleDistrictFilterChange = (district: string) => {
+        setDistrictFilter(prev => {
+            if (prev.includes(district)) {
+                return prev.filter(d => d !== district);
+            } else {
+                return [...prev, district];
+            }
+        });
+    };
+
+    const toggleAllCities = () => {
+        if (cityFilter.length === cities.length) {
+            setCityFilter([]);
+        } else {
+            setCityFilter([...cities]);
+        }
+        setDistrictFilter([]);
+    };
+
+    const toggleAllDistricts = () => {
+        if (districtFilter.length === districts.length) {
+            setDistrictFilter([]);
+        } else {
+            setDistrictFilter([...districts]);
+        }
+    };
 
     return (
         <motion.div
@@ -463,7 +538,159 @@ export default function ResultsPage() {
                     </motion.div>
                 ) : (
                     /* Table View */
-                    <motion.div variants={itemVariants} className="overflow-x-auto">
+                    <motion.div variants={itemVariants} className="space-y-4">
+                        {/* City/District Filters */}
+                        <div className="flex flex-wrap gap-3 items-center">
+                            <span className="text-sm text-gray-400 flex items-center gap-2">
+                                <MapPin className="w-4 h-4" />
+                                Konum Filtresi:
+                            </span>
+
+                            {/* City Dropdown */}
+                            <div className="relative" ref={cityDropdownRef}>
+                                <button
+                                    onClick={() => {
+                                        setCityDropdownOpen(!cityDropdownOpen);
+                                        setDistrictDropdownOpen(false);
+                                    }}
+                                    className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2 min-w-[160px]"
+                                >
+                                    <span>
+                                        {cityFilter.length === 0 ? 'İl Seçin' :
+                                         cityFilter.length === cities.length ? 'Tüm İller' :
+                                         `${cityFilter.length} İl Seçili`}
+                                    </span>
+                                    <svg className={`w-4 h-4 transition-transform ${cityDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {cityDropdownOpen && (
+                                    <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+                                        {/* Select All */}
+                                        <button
+                                            onClick={toggleAllCities}
+                                            className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
+                                        >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                cityFilter.length === cities.length ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+                                            }`}>
+                                                {cityFilter.length === cities.length && (
+                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <span className="text-white font-medium">Tümünü Seç</span>
+                                        </button>
+
+                                        {/* City List */}
+                                        {cities.map(city => (
+                                            <button
+                                                key={city}
+                                                onClick={() => handleCityFilterChange(city)}
+                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                            >
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                    cityFilter.includes(city) ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+                                                }`}>
+                                                    {cityFilter.includes(city) && (
+                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-gray-300">{city}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* District Dropdown */}
+                            <div className="relative" ref={districtDropdownRef}>
+                                <button
+                                    onClick={() => {
+                                        if (cityFilter.length > 0 && districts.length > 0) {
+                                            setDistrictDropdownOpen(!districtDropdownOpen);
+                                            setCityDropdownOpen(false);
+                                        }
+                                    }}
+                                    disabled={cityFilter.length === 0 || districts.length === 0}
+                                    className={`px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 transition-colors flex items-center gap-2 min-w-[160px] ${
+                                        cityFilter.length === 0 || districts.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-700/50'
+                                    }`}
+                                >
+                                    <span>
+                                        {cityFilter.length === 0 ? 'Önce İl Seçin' :
+                                         districts.length === 0 ? 'İlçe Yok' :
+                                         districtFilter.length === 0 ? 'İlçe Seçin' :
+                                         districtFilter.length === districts.length ? 'Tüm İlçeler' :
+                                         `${districtFilter.length} İlçe Seçili`}
+                                    </span>
+                                    <svg className={`w-4 h-4 transition-transform ${districtDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {districtDropdownOpen && districts.length > 0 && (
+                                    <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+                                        {/* Select All */}
+                                        <button
+                                            onClick={toggleAllDistricts}
+                                            className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
+                                        >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                districtFilter.length === districts.length ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
+                                            }`}>
+                                                {districtFilter.length === districts.length && (
+                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <span className="text-white font-medium">Tümünü Seç</span>
+                                        </button>
+
+                                        {/* District List */}
+                                        {districts.map(district => (
+                                            <button
+                                                key={district}
+                                                onClick={() => handleDistrictFilterChange(district)}
+                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                            >
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                    districtFilter.includes(district) ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
+                                                }`}>
+                                                    {districtFilter.includes(district) && (
+                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-gray-300">{district}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Clear Filters Button */}
+                            {(cityFilter.length > 0 || districtFilter.length > 0) && (
+                                <button
+                                    onClick={() => {
+                                        setCityFilter([]);
+                                        setDistrictFilter([]);
+                                    }}
+                                    className="px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                >
+                                    Temizle
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Table */}
+                        <div className="overflow-x-auto">
                         <table className="w-full border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-700">
@@ -551,6 +778,7 @@ export default function ResultsPage() {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                     </motion.div>
                 )}
             </motion.div>
