@@ -244,20 +244,6 @@ export function ResultsMap({ results }: ResultsMapProps) {
                             </div>
                         </div>
 
-                        {/* İlçeler listesi */}
-                        {cityStats?.districts && cityStats.districts.length > 0 && (
-                            <div className="mb-6">
-                                <p className="text-gray-400 text-sm mb-2">İlçeler ({cityStats.districts.length})</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {cityStats.districts.map((district, idx) => (
-                                        <span key={idx} className="px-3 py-1 bg-slate-800/50 rounded-lg text-xs text-gray-300">
-                                            {district}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
                         {/* Descriptive Statistics */}
                         {statsLoading ? (
                             <div className="flex items-center justify-center py-8">
