@@ -27,7 +27,7 @@ import {
     ChevronsRight
 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
-import { getResults } from '@/lib/api';
+import { getResults, exportToExcel } from '@/lib/api';
 import { ScrapeResult } from '@/types';
 
 
@@ -91,6 +91,9 @@ export default function ResultsPage() {
         filters: { platform: string; category: string; listingType: string };
     }>({ prices: [], filters: { platform: 'all', category: 'all', listingType: 'all' } });
     const [priceDataLoading, setPriceDataLoading] = useState(false);
+
+    // Excel export state
+    const [exporting, setExporting] = useState(false);
 
     // Check if current priceData matches current filters
     const isPriceDataValid =
@@ -369,6 +372,45 @@ export default function ResultsPage() {
                         </button>
                     </div>
 
+                    {/* Excel Export Button */}
+                    <button
+                        onClick={async () => {
+                            setExporting(true);
+                            try {
+                                // Map display names to DB values
+                                const platformMap: Record<string, string> = { 'HepsiEmlak': 'hepsiemlak', 'Emlakjet': 'emlakjet' };
+                                const categoryMap: Record<string, string> = { 'Konut': 'konut', 'Arsa': 'arsa', 'İşyeri': 'isyeri' };
+                                const listingMap: Record<string, string> = { 'Satılık': 'satilik', 'Kiralık': 'kiralik' };
+
+                                const blob = await exportToExcel({
+                                    platform: platformMap[platformFilter] || (platformFilter !== 'all' ? platformFilter : undefined),
+                                    kategori: categoryMap[categoryFilter] || (categoryFilter !== 'all' ? categoryFilter : undefined),
+                                    ilan_tipi: listingMap[listingTypeFilter] || (listingTypeFilter !== 'all' ? listingTypeFilter : undefined),
+                                    city: cityFilter.length === 1 ? cityFilter[0] : undefined,
+                                });
+
+                                // Download file
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                                document.body.appendChild(a);
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                                document.body.removeChild(a);
+                            } catch (err: any) {
+                                alert(err.message || 'Excel export başarısız');
+                            } finally {
+                                setExporting(false);
+                            }
+                        }}
+                        disabled={exporting}
+                        className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
+                        title="Excel'e Aktar"
+                    >
+                        <Download className={`w-5 h-5 text-green-400 ${exporting ? 'animate-pulse' : ''}`} />
+                    </button>
+
                     {results.length > 0 && (
                         <button
                             onClick={() => setShowClearConfirm(true)}
@@ -546,7 +588,7 @@ export default function ResultsPage() {
                 ) : viewMode === 'map' ? (
                     /* Map View */
                     <motion.div variants={itemVariants}>
-                        <ResultsMap results={filteredResults} onPreview={openPreview} />
+                        <ResultsMap results={filteredResults} />
                     </motion.div>
                 ) : viewMode === 'charts' ? (
                     /* Charts View */

@@ -30,6 +30,43 @@ from .parsers import KonutParser, ArsaParser, IsyeriParser, DevremulkParser, Tur
 logger = get_logger(__name__)
 
 
+def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, ilan_tipi: str, alt_kategori: str = None, scrape_session_id: int = None):
+    """
+    Listing listesini veritabanına kaydet.
+    Returns (new_count, duplicate_count)
+    """
+    if not db:
+        return 0, 0
+
+    try:
+        from database import crud
+        new_count = 0
+        duplicate_count = 0
+
+        for data in listings:
+            listing, is_new = crud.create_listing(
+                db,
+                data=data,
+                platform=platform,
+                kategori=kategori,
+                ilan_tipi=ilan_tipi,
+                alt_kategori=alt_kategori,
+                scrape_session_id=scrape_session_id
+            )
+            if is_new:
+                new_count += 1
+            else:
+                duplicate_count += 1
+
+        db.commit()
+        logger.info(f"DB save: {new_count} new, {duplicate_count} duplicates")
+        return new_count, duplicate_count
+    except Exception as e:
+        logger.error(f"DB save error: {e}")
+        db.rollback()
+        return 0, 0
+
+
 class HepsiemlakScraper(BaseScraper):
     """
     Main scraper for HepsiEmlak platform.
@@ -88,7 +125,14 @@ class HepsiemlakScraper(BaseScraper):
             subtype=subtype_name
         )
         self.current_category = category
-        
+
+        # Database support (set by endpoints.py)
+        self.db = None
+        self.scrape_session_id = None
+        self.total_scraped_count = 0
+        self.new_listings_count = 0
+        self.duplicate_count = 0
+
         # Initialize the appropriate parser
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
@@ -1037,6 +1081,22 @@ class HepsiemlakScraper(BaseScraper):
                 subfolder=subfolder
             )
             logger.info(f"💾 {city}/{district} - {len(listings)} ilan kaydedildi")
+
+            # Veritabanına kaydet
+            self.total_scraped_count += len(listings)
+            if self.db:
+                new_c, dup_c = save_listings_to_db(
+                    self.db,
+                    listings,
+                    platform="hepsiemlak",
+                    kategori=self.category,
+                    ilan_tipi=self.listing_type,
+                    alt_kategori=self.subtype_name,
+                    scrape_session_id=self.scrape_session_id
+                )
+                self.new_listings_count += new_c
+                self.duplicate_count += dup_c
+                print(f"   💾 DB: {new_c} yeni, {dup_c} tekrar ilan")
         except Exception as e:
             logger.error(f"❌ {city}/{district} kaydetme hatası: {e}")
 
@@ -1147,6 +1207,7 @@ class HepsiemlakScraper(BaseScraper):
                         # Şehir bazlı kayıt
                         all_results[city] = city_listings
                         total_listings_count += len(city_listings)
+                        self.total_scraped_count += len(city_listings)
 
                         # Şehir bazlı tarama için kaydet
                         print(f"\n💾 {city} verileri kaydediliyor...")
@@ -1155,6 +1216,21 @@ class HepsiemlakScraper(BaseScraper):
                             prefix=self.get_file_prefix(),
                             format="excel"
                         )
+
+                        # Veritabanına kaydet
+                        if self.db:
+                            new_c, dup_c = save_listings_to_db(
+                                self.db,
+                                city_listings,
+                                platform="hepsiemlak",
+                                kategori=self.category,
+                                ilan_tipi=self.listing_type,
+                                alt_kategori=self.subtype_name,
+                                scrape_session_id=self.scrape_session_id
+                            )
+                            self.new_listings_count += new_c
+                            self.duplicate_count += dup_c
+                            print(f"   💾 DB: {new_c} yeni, {dup_c} tekrar ilan")
 
                 self.random_medium_wait()  # Stealth: şehirler arası
 

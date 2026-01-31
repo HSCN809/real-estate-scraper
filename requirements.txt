@@ -24,6 +24,10 @@ selenium-wire==5.1.0
 undetected-chromedriver>=3.5.0  # Cloudflare, Turnstile bypass
 cloudscraper
 
+# Database
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
 # Security & Utilities
 python-dotenv==1.0.0
 cryptography==41.0.7

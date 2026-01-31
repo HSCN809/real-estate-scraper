@@ -1,0 +1,216 @@
+# -*- coding: utf-8 -*-
+"""
+SQLAlchemy ORM models for Real Estate Scraper
+"""
+
+from datetime import datetime
+from typing import Optional, Dict, Any
+from sqlalchemy import (
+    Column, Integer, String, Float, Text, Boolean,
+    ForeignKey, DateTime, Date, JSON, Index, UniqueConstraint
+)
+from sqlalchemy.orm import relationship, declarative_base
+
+Base = declarative_base()
+
+
+class Location(Base):
+    """
+    Normalized location table for il/ilce/mahalle
+    """
+    __tablename__ = "locations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    il = Column(String(100), nullable=False, index=True)
+    ilce = Column(String(100), index=True)
+    mahalle = Column(String(200))
+
+    # Relationships
+    listings = relationship("Listing", back_populates="location")
+
+    __table_args__ = (
+        UniqueConstraint('il', 'ilce', 'mahalle', name='uq_location'),
+        Index('idx_locations_il_ilce', 'il', 'ilce'),
+    )
+
+    def __repr__(self):
+        parts = [self.il]
+        if self.ilce:
+            parts.append(self.ilce)
+        if self.mahalle:
+            parts.append(self.mahalle)
+        return f"<Location({', '.join(parts)})>"
+
+
+class Listing(Base):
+    """
+    Main listings table - stores all real estate listings
+    """
+    __tablename__ = "listings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Basic info
+    baslik = Column(Text, nullable=False)
+    fiyat = Column(Float)  # Numeric price for calculations
+    fiyat_text = Column(String(50))  # Original price text (e.g., "1.500.000 TL")
+
+    # Platform & Category
+    platform = Column(String(20), nullable=False, index=True)  # 'emlakjet' / 'hepsiemlak'
+    kategori = Column(String(50), nullable=False, index=True)  # 'konut', 'arsa', etc.
+    ilan_tipi = Column(String(20), nullable=False, index=True)  # 'satilik' / 'kiralik'
+    alt_kategori = Column(String(50))  # 'daire', 'villa', 'tarla', etc.
+
+    # Location (FK)
+    location_id = Column(Integer, ForeignKey("locations.id"), index=True)
+    location = relationship("Location", back_populates="listings")
+
+    # Listing details
+    ilan_url = Column(Text, unique=True)  # Unique constraint for deduplication
+    ilan_tarihi = Column(Date)
+    emlak_ofisi = Column(String(200))
+    resim_url = Column(Text)
+
+    # Category-specific details stored as JSON
+    details = Column(JSON)
+
+    # Metadata
+    scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    scrape_session = relationship("ScrapeSession", back_populates="listings")
+
+    __table_args__ = (
+        Index('idx_listings_filter', 'platform', 'kategori', 'ilan_tipi', 'location_id'),
+        Index('idx_listings_price', 'fiyat'),
+        Index('idx_listings_created', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<Listing(id={self.id}, baslik='{self.baslik[:30]}...', fiyat={self.fiyat})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert listing to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "baslik": self.baslik,
+            "fiyat": self.fiyat,
+            "fiyat_text": self.fiyat_text,
+            "platform": self.platform,
+            "kategori": self.kategori,
+            "ilan_tipi": self.ilan_tipi,
+            "alt_kategori": self.alt_kategori,
+            "il": self.location.il if self.location else None,
+            "ilce": self.location.ilce if self.location else None,
+            "mahalle": self.location.mahalle if self.location else None,
+            "ilan_url": self.ilan_url,
+            "ilan_tarihi": self.ilan_tarihi.isoformat() if self.ilan_tarihi else None,
+            "emlak_ofisi": self.emlak_ofisi,
+            "resim_url": self.resim_url,
+            "details": self.details,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ScrapeSession(Base):
+    """
+    Tracks scraping sessions/runs
+    """
+    __tablename__ = "scrape_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Scrape parameters
+    platform = Column(String(20), nullable=False, index=True)
+    kategori = Column(String(50), nullable=False)
+    ilan_tipi = Column(String(20), nullable=False)
+    alt_kategori = Column(String(50))
+
+    # Target locations (stored as JSON)
+    target_cities = Column(JSON)  # ["Istanbul", "Ankara"]
+    target_districts = Column(JSON)  # {"Istanbul": ["Kadikoy", "Besiktas"]}
+
+    # Results
+    total_listings = Column(Integer, default=0)
+    new_listings = Column(Integer, default=0)  # New listings (not duplicates)
+    duplicate_listings = Column(Integer, default=0)  # Skipped duplicates
+    successful_pages = Column(Integer, default=0)
+    failed_pages_count = Column(Integer, default=0)
+
+    # Timing
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    duration_seconds = Column(Integer)
+
+    # Status
+    status = Column(String(20), default="running", index=True)  # running, completed, failed, stopped
+    error_message = Column(Text)
+
+    # Relationships
+    listings = relationship("Listing", back_populates="scrape_session")
+    failed_page_records = relationship("FailedPage", back_populates="scrape_session")
+
+    __table_args__ = (
+        Index('idx_sessions_started', 'started_at'),
+    )
+
+    def __repr__(self):
+        return f"<ScrapeSession(id={self.id}, platform={self.platform}, status={self.status})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert session to dictionary for API responses"""
+        return {
+            "id": self.id,
+            "platform": self.platform,
+            "kategori": self.kategori,
+            "ilan_tipi": self.ilan_tipi,
+            "alt_kategori": self.alt_kategori,
+            "target_cities": self.target_cities,
+            "target_districts": self.target_districts,
+            "total_listings": self.total_listings,
+            "new_listings": self.new_listings,
+            "duplicate_listings": self.duplicate_listings,
+            "successful_pages": self.successful_pages,
+            "failed_pages": self.failed_pages_count,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "duration_seconds": self.duration_seconds,
+            "status": self.status,
+            "error_message": self.error_message,
+        }
+
+
+class FailedPage(Base):
+    """
+    Tracks failed page scrapes for retry
+    """
+    __tablename__ = "failed_pages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"), index=True)
+
+    url = Column(Text, nullable=False)
+    page_number = Column(Integer)
+    city = Column(String(100))
+    district = Column(String(100))
+
+    error_message = Column(Text)
+    retry_count = Column(Integer, default=0)
+
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    scrape_session = relationship("ScrapeSession", back_populates="failed_page_records")
+
+    __table_args__ = (
+        Index('idx_failed_resolved', 'resolved'),
+    )
+
+    def __repr__(self):
+        return f"<FailedPage(id={self.id}, url='{self.url[:50]}...', resolved={self.resolved})>"

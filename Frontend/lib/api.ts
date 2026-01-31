@@ -91,3 +91,81 @@ export async function getSubtypes(listingType: string, category: string): Promis
     }
     return response.json();
 }
+
+// DB-based listings endpoint
+export interface ListingsResponse {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+    items: any[];
+}
+
+export async function getListings(params: {
+    platform?: string;
+    kategori?: string;
+    ilan_tipi?: string;
+    city?: string;
+    district?: string;
+    page?: number;
+    limit?: number;
+}): Promise<ListingsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.platform) searchParams.set('platform', params.platform);
+    if (params.kategori) searchParams.set('kategori', params.kategori);
+    if (params.ilan_tipi) searchParams.set('ilan_tipi', params.ilan_tipi);
+    if (params.city) searchParams.set('city', params.city);
+    if (params.district) searchParams.set('district', params.district);
+    if (params.page) searchParams.set('page', params.page.toString());
+    if (params.limit) searchParams.set('limit', params.limit.toString());
+
+    const response = await fetch(`${API_BASE_URL}/listings?${searchParams}`);
+    if (!response.ok) {
+        throw new Error('İlanlar alınamadı');
+    }
+    return response.json();
+}
+
+// Excel export function
+export async function exportToExcel(params: {
+    platform?: string;
+    kategori?: string;
+    ilan_tipi?: string;
+    city?: string;
+    district?: string;
+}): Promise<Blob> {
+    const searchParams = new URLSearchParams();
+    if (params.platform && params.platform !== 'all') searchParams.set('platform', params.platform);
+    if (params.kategori && params.kategori !== 'all') searchParams.set('kategori', params.kategori);
+    if (params.ilan_tipi && params.ilan_tipi !== 'all') searchParams.set('ilan_tipi', params.ilan_tipi);
+    if (params.city) searchParams.set('city', params.city);
+    if (params.district) searchParams.set('district', params.district);
+
+    const response = await fetch(`${API_BASE_URL}/export/excel?${searchParams}`, {
+        method: 'POST',
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Excel export başarısız');
+    }
+
+    return response.blob();
+}
+
+// Cities and districts from DB
+export async function getCities(): Promise<{ cities: string[] }> {
+    const response = await fetch(`${API_BASE_URL}/cities`);
+    if (!response.ok) {
+        throw new Error('Şehirler alınamadı');
+    }
+    return response.json();
+}
+
+export async function getDistricts(city: string): Promise<{ city: string; districts: string[] }> {
+    const response = await fetch(`${API_BASE_URL}/cities/${city}/districts`);
+    if (!response.ok) {
+        throw new Error('İlçeler alınamadı');
+    }
+    return response.json();
+}
