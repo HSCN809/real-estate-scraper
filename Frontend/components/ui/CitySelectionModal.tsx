@@ -150,6 +150,11 @@ export function CitySelectionModal({
         } else {
             if (selectedCities.includes(turkishName)) {
                 onCitiesChange(selectedCities.filter(c => c !== turkishName));
+                // İlgili ilçeleri de temizle
+                if (onDistrictsChange && selectedDistricts[turkishName]) {
+                    const { [turkishName]: _, ...restDistricts } = selectedDistricts;
+                    onDistrictsChange(restDistricts);
+                }
             } else {
                 onCitiesChange([...selectedCities, turkishName]);
             }
@@ -165,6 +170,12 @@ export function CitySelectionModal({
         const allSelected = regionCities.every(city => selectedCities.includes(city));
         if (allSelected) {
             onCitiesChange(selectedCities.filter(city => !regionCities.includes(city)));
+            // Kaldırılan şehirlerin ilçelerini de temizle
+            if (onDistrictsChange) {
+                const newDistricts = { ...selectedDistricts };
+                regionCities.forEach(city => delete newDistricts[city]);
+                onDistrictsChange(newDistricts);
+            }
         } else {
             onCitiesChange([...new Set([...selectedCities, ...regionCities])]);
         }

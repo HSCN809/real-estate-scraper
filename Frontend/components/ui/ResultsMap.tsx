@@ -134,12 +134,23 @@ export function ResultsMap({ results }: ResultsMapProps) {
         }
     }, [selectedCityName]);
 
+    // Türkçe karakterleri normalize et
+    const normalizeCity = (name: string): string => {
+        return name.toLowerCase()
+            .replace(/ı/g, 'i')
+            .replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u')
+            .replace(/ş/g, 's')
+            .replace(/ö/g, 'o')
+            .replace(/ç/g, 'c');
+    };
+
     // Şehir verilerini map'e dönüştür
     const cityDataMap = useMemo(() => {
         const map = new Map<string, ScrapeResult>();
         results.forEach(result => {
             if (result.city) {
-                map.set(result.city.toLowerCase(), result);
+                map.set(normalizeCity(result.city), result);
             }
         });
         return map;
@@ -157,7 +168,7 @@ export function ResultsMap({ results }: ResultsMapProps) {
     }, []);
 
     const handleCityClick = useCallback((cityName: string) => {
-        const result = cityDataMap.get(cityName.toLowerCase());
+        const result = cityDataMap.get(normalizeCity(cityName));
         if (result) setSelectedCityName(cityName);
     }, [cityDataMap]);
 
@@ -172,7 +183,7 @@ export function ResultsMap({ results }: ResultsMapProps) {
                     {geoData.map((feature, i) => {
                         const geoName = feature.properties.name;
                         const dataName = CITY_NAME_MAP[geoName] || geoName;
-                        const result = cityDataMap.get(dataName.toLowerCase());
+                        const result = cityDataMap.get(normalizeCity(dataName));
                         const fillColor = result ? getColorByCount(result.count || 0) : '#334155';
                         const d = pathGenerator(feature.geometry as any) || '';
 

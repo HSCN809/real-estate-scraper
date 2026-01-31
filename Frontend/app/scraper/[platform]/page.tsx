@@ -140,6 +140,9 @@ export default function PlatformScraperPage() {
 
     const removeCity = (city: string) => {
         setSelectedCities(selectedCities.filter((c) => c !== city));
+        // İlgili ilçeleri de temizle
+        const { [city]: _, ...restDistricts } = selectedDistricts;
+        setSelectedDistricts(restDistricts);
     };
 
     return (
