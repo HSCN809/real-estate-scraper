@@ -74,14 +74,17 @@ class Listing(Base):
     # Category-specific details stored as JSON
     details = Column(JSON)
 
+    # Content hash for change detection (excludes price)
+    content_hash = Column(String(32), index=True)  # MD5 hash
+
     # Metadata
     scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_active = Column(Boolean, default=True)
 
     # Relationships
     scrape_session = relationship("ScrapeSession", back_populates="listings")
+    price_history = relationship("PriceHistory", back_populates="listing", order_by="desc(PriceHistory.changed_at)")
 
     __table_args__ = (
         Index('idx_listings_filter', 'platform', 'kategori', 'ilan_tipi', 'location_id'),
@@ -180,6 +183,46 @@ class ScrapeSession(Base):
             "duration_seconds": self.duration_seconds,
             "status": self.status,
             "error_message": self.error_message,
+        }
+
+
+class PriceHistory(Base):
+    """
+    Tracks price changes for listings over time.
+    Records old price -> new price transitions.
+    """
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False, index=True)
+
+    old_price = Column(Float, nullable=False)
+    new_price = Column(Float, nullable=False)
+    price_change = Column(Float)  # new_price - old_price
+    price_change_percent = Column(Float)  # ((new - old) / old) * 100
+
+    changed_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    listing = relationship("Listing", back_populates="price_history")
+
+    __table_args__ = (
+        Index('idx_price_history_listing', 'listing_id'),
+        Index('idx_price_history_changed', 'changed_at'),
+    )
+
+    def __repr__(self):
+        return f"<PriceHistory(listing_id={self.listing_id}, {self.old_price} -> {self.new_price})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "listing_id": self.listing_id,
+            "old_price": self.old_price,
+            "new_price": self.new_price,
+            "price_change": self.price_change,
+            "price_change_percent": self.price_change_percent,
+            "changed_at": self.changed_at.isoformat() if self.changed_at else None,
         }
 
 

@@ -887,12 +887,12 @@ async def export_to_excel(
 
 @router.delete("/listings/{listing_id}")
 async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
-    """Bir ilanı sil (soft delete)"""
+    """Bir ilanı sil"""
     listing = crud.get_listing_by_id(db, listing_id)
     if not listing:
         raise HTTPException(status_code=404, detail="İlan bulunamadı")
 
-    listing.is_active = False
+    db.delete(listing)
     db.commit()
 
     return {"status": "success", "message": f"İlan {listing_id} silindi"}

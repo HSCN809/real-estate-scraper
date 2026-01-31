@@ -4,7 +4,7 @@ Database module for Real Estate Scraper
 """
 
 from .connection import get_db, engine, SessionLocal
-from .models import Base, Location, Listing, ScrapeSession, FailedPage
+from .models import Base, Location, Listing, ScrapeSession, FailedPage, PriceHistory
 
 __all__ = [
     'get_db',
@@ -14,5 +14,6 @@ __all__ = [
     'Location',
     'Listing',
     'ScrapeSession',
-    'FailedPage'
+    'FailedPage',
+    'PriceHistory'
 ]

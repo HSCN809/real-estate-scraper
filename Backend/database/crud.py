@@ -4,13 +4,47 @@ CRUD operations for database models
 """
 
 import re
+import hashlib
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from sqlalchemy.exc import IntegrityError
 
-from .models import Location, Listing, ScrapeSession, FailedPage
+from .models import Location, Listing, ScrapeSession, FailedPage, PriceHistory
+
+
+# ============== Hash Utilities ==============
+
+def compute_content_hash(data: Dict[str, Any]) -> str:
+    """
+    Compute MD5 hash of listing content (excluding price).
+    Used for detecting non-price changes in listings.
+    """
+    # Fields to include in hash (everything except price)
+    hash_fields = [
+        'baslik',
+        'oda_sayisi', 'metrekare', 'bina_yasi', 'kat',
+        'arsa_metrekare', 'imar_durumu', 'arsa_tipi',
+        'isyeri_tipi', 'tesis_tipi', 'yatak_sayisi',
+        'emlak_ofisi', 'tip'
+    ]
+
+    # Build content string
+    content_parts = []
+    for field in hash_fields:
+        value = data.get(field)
+        if value is not None:
+            content_parts.append(f"{field}:{value}")
+
+    # Include details if present
+    details = data.get('details')
+    if details and isinstance(details, dict):
+        content_parts.append(f"details:{json.dumps(details, sort_keys=True)}")
+
+    content_str = "|".join(sorted(content_parts))
+    return hashlib.md5(content_str.encode('utf-8')).hexdigest()
 
 
 # ============== Location CRUD ==============
@@ -130,7 +164,15 @@ def create_listing(
             return (None, False)  # Duplicate
 
     # Get or create location
-    il = data.get('il') or data.get('lokasyon', '').split(',')[0].strip() if data.get('lokasyon') else 'Belirtilmemiş'
+    il = data.get('il')
+    if not il or il == 'Belirtilmemiş':
+        # Fallback: lokasyon alanından parse et
+        lokasyon = data.get('lokasyon', '')
+        if lokasyon:
+            il = lokasyon.split(',')[0].strip()
+    if not il:
+        il = 'Belirtilmemiş'
+
     ilce = data.get('ilce')
     mahalle = data.get('mahalle')
 
@@ -167,6 +209,9 @@ def create_listing(
         except Exception:
             pass
 
+    # Compute content hash
+    content_hash = compute_content_hash(data)
+
     # Create listing
     listing = Listing(
         baslik=data.get('baslik', 'Başlık Yok'),
@@ -182,7 +227,8 @@ def create_listing(
         emlak_ofisi=data.get('emlak_ofisi'),
         resim_url=data.get('resim_url'),
         details=details if details else None,
-        scrape_session_id=scrape_session_id
+        scrape_session_id=scrape_session_id,
+        content_hash=content_hash
     )
 
     db.add(listing)
@@ -193,6 +239,115 @@ def create_listing(
     except IntegrityError:
         db.rollback()
         return (None, False)  # Duplicate URL
+
+
+def upsert_listing(
+    db: Session,
+    data: Dict[str, Any],
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: Optional[str] = None,
+    scrape_session_id: Optional[int] = None
+) -> Tuple[Optional[Listing], str]:
+    """
+    Upsert a listing - insert if new, update if exists.
+    Uses hash-based change detection for performance.
+    Tracks price changes in price_history table.
+
+    Returns: (listing, status) where status is 'created', 'updated', 'unchanged', or 'error'
+    """
+    # Get ilan_url for deduplication
+    ilan_url = data.get('ilan_linki') or data.get('ilan_url')
+
+    if not ilan_url:
+        # No URL means we can't deduplicate - just create
+        listing, is_new = create_listing(db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id)
+        if listing:
+            listing.content_hash = compute_content_hash(data)
+        return (listing, 'created' if is_new else 'error')
+
+    # Check for existing listing
+    existing = db.query(Listing).filter(Listing.ilan_url == ilan_url).first()
+
+    if not existing:
+        # New listing - create it
+        listing, is_new = create_listing(db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id)
+        if listing:
+            listing.content_hash = compute_content_hash(data)
+        return (listing, 'created' if is_new else 'error')
+
+    # Existing listing found - compute new hash
+    new_content_hash = compute_content_hash(data)
+    new_fiyat_text = data.get('fiyat', '')
+    new_fiyat = parse_price(new_fiyat_text)
+
+    # Check for price change
+    price_changed = False
+    old_price = existing.fiyat
+    if new_fiyat is not None and existing.fiyat != new_fiyat:
+        price_changed = True
+
+    # Check for content change using hash
+    content_changed = (existing.content_hash != new_content_hash)
+
+    # If nothing changed, skip update
+    if not price_changed and not content_changed:
+        existing.scrape_session_id = scrape_session_id
+        return (existing, 'unchanged')
+
+    # Record price change if applicable
+    if price_changed and old_price is not None and new_fiyat is not None:
+        price_change = new_fiyat - old_price
+        price_change_percent = (price_change / old_price) * 100 if old_price > 0 else 0
+
+        price_record = PriceHistory(
+            listing_id=existing.id,
+            old_price=old_price,
+            new_price=new_fiyat,
+            price_change=price_change,
+            price_change_percent=round(price_change_percent, 2)
+        )
+        db.add(price_record)
+
+    # Update the listing
+    new_baslik = data.get('baslik')
+    if new_baslik:
+        existing.baslik = new_baslik
+    if new_fiyat is not None:
+        existing.fiyat = new_fiyat
+        existing.fiyat_text = str(new_fiyat_text) if new_fiyat_text else None
+
+    new_emlak_ofisi = data.get('emlak_ofisi')
+    if new_emlak_ofisi:
+        existing.emlak_ofisi = new_emlak_ofisi
+
+    new_resim_url = data.get('resim_url')
+    if new_resim_url:
+        existing.resim_url = new_resim_url
+
+    # Update details if present
+    new_details = {}
+    detail_fields = [
+        'oda_sayisi', 'metrekare', 'bina_yasi', 'kat',
+        'arsa_metrekare', 'metrekare_fiyat', 'imar_durumu', 'arsa_tipi',
+        'isyeri_tipi', 'tesis_tipi', 'yatak_sayisi', 'otel_tipi',
+        'tip', 'one_cikan', 'yeni'
+    ]
+    for field in detail_fields:
+        if field in data and data[field]:
+            new_details[field] = data[field]
+
+    if new_details:
+        existing.details = {**(existing.details or {}), **new_details}
+
+    # Update hash and metadata
+    existing.content_hash = new_content_hash
+    existing.updated_at = datetime.utcnow()
+    existing.scrape_session_id = scrape_session_id
+
+    db.flush()
+    return (existing, 'updated')
 
 
 def get_listings(
@@ -212,7 +367,7 @@ def get_listings(
     Get listings with filters and pagination.
     Returns (listings, total_count).
     """
-    query = db.query(Listing).filter(Listing.is_active == True)
+    query = db.query(Listing)
 
     # Apply filters
     if platform and platform != 'all':
@@ -250,8 +405,8 @@ def get_listing_by_id(db: Session, listing_id: int) -> Optional[Listing]:
 
 
 def get_listings_count(db: Session) -> int:
-    """Get total number of active listings"""
-    return db.query(Listing).filter(Listing.is_active == True).count()
+    """Get total number of listings"""
+    return db.query(Listing).count()
 
 
 # ============== ScrapeSession CRUD ==============
@@ -362,7 +517,6 @@ def get_price_analytics(
         Listing.kategori,
         Listing.ilan_tipi
     ).join(Location).filter(
-        Listing.is_active == True,
         Listing.fiyat.isnot(None),
         Listing.fiyat > 0
     )
@@ -444,8 +598,7 @@ def get_city_analytics(
 
     # Query listings
     query = db.query(Listing).filter(
-        Listing.location_id.in_(matching_location_ids),
-        Listing.is_active == True
+        Listing.location_id.in_(matching_location_ids)
     )
 
     if platform and platform != 'all':
@@ -553,7 +706,7 @@ def get_stats_summary(db: Session) -> Dict[str, Any]:
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    total_listings = db.query(Listing).filter(Listing.is_active == True).count()
+    total_listings = db.query(Listing).count()
     total_sessions = db.query(ScrapeSession).count()
 
     this_week = db.query(ScrapeSession).filter(ScrapeSession.started_at >= week_ago).count()
@@ -599,9 +752,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
         func.count(Listing.id).label('count'),
         func.avg(Listing.fiyat).label('avg_price'),
         func.max(Listing.created_at).label('last_date')
-    ).join(Location).filter(
-        Listing.is_active == True
-    ).group_by(
+    ).join(Location).group_by(
         Location.il,
         Location.ilce,
         Listing.platform,

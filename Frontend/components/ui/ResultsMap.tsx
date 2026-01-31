@@ -145,12 +145,22 @@ export function ResultsMap({ results }: ResultsMapProps) {
             .replace(/ç/g, 'c');
     };
 
-    // Şehir verilerini map'e dönüştür
+    // Şehir verilerini map'e dönüştür (aynı şehir için count'ları topla)
     const cityDataMap = useMemo(() => {
         const map = new Map<string, ScrapeResult>();
         results.forEach(result => {
             if (result.city) {
-                map.set(normalizeCity(result.city), result);
+                const normalizedCity = normalizeCity(result.city);
+                const existing = map.get(normalizedCity);
+                if (existing) {
+                    // Aynı şehir için count'ları topla
+                    map.set(normalizedCity, {
+                        ...existing,
+                        count: (existing.count || 0) + (result.count || 0)
+                    });
+                } else {
+                    map.set(normalizedCity, result);
+                }
             }
         });
         return map;

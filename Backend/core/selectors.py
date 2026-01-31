@@ -105,7 +105,7 @@ HEPSIEMLAK_SELECTORS = {
         "listing_results": "ul.list-items-container, .search-results",
         "title": "h3",
         "price": "span.list-view-price",
-        "location": "span.list-view-location",
+        "location": "span.list-view-location address",
         "date": "span.list-view-date",
         "link": "a.card-link",
         "firm": "p.listing-card--owner-info__firm-name",

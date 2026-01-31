@@ -32,19 +32,20 @@ logger = get_logger(__name__)
 
 def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, ilan_tipi: str, alt_kategori: str = None, scrape_session_id: int = None):
     """
-    Listing listesini veritabanına kaydet.
-    Returns (new_count, duplicate_count)
+    Listing listesini veritabanına kaydet (upsert mantığı ile).
+    Returns (new_count, updated_count, unchanged_count)
     """
     if not db:
-        return 0, 0
+        return 0, 0, 0
 
     try:
         from database import crud
         new_count = 0
-        duplicate_count = 0
+        updated_count = 0
+        unchanged_count = 0
 
         for data in listings:
-            listing, is_new = crud.create_listing(
+            listing, status = crud.upsert_listing(
                 db,
                 data=data,
                 platform=platform,
@@ -53,18 +54,20 @@ def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, 
                 alt_kategori=alt_kategori,
                 scrape_session_id=scrape_session_id
             )
-            if is_new:
+            if status == 'created':
                 new_count += 1
-            else:
-                duplicate_count += 1
+            elif status == 'updated':
+                updated_count += 1
+            elif status == 'unchanged':
+                unchanged_count += 1
 
         db.commit()
-        logger.info(f"DB save: {new_count} new, {duplicate_count} duplicates")
-        return new_count, duplicate_count
+        logger.info(f"DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged")
+        return new_count, updated_count, unchanged_count
     except Exception as e:
         logger.error(f"DB save error: {e}")
         db.rollback()
-        return 0, 0
+        return 0, 0, 0
 
 
 class HepsiemlakScraper(BaseScraper):
@@ -1085,7 +1088,7 @@ class HepsiemlakScraper(BaseScraper):
             # Veritabanına kaydet
             self.total_scraped_count += len(listings)
             if self.db:
-                new_c, dup_c = save_listings_to_db(
+                new_c, updated_c, unchanged_c = save_listings_to_db(
                     self.db,
                     listings,
                     platform="hepsiemlak",
@@ -1095,8 +1098,8 @@ class HepsiemlakScraper(BaseScraper):
                     scrape_session_id=self.scrape_session_id
                 )
                 self.new_listings_count += new_c
-                self.duplicate_count += dup_c
-                print(f"   💾 DB: {new_c} yeni, {dup_c} tekrar ilan")
+                self.duplicate_count += unchanged_c  # unchanged = mevcut ilan
+                print(f"   💾 DB: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
         except Exception as e:
             logger.error(f"❌ {city}/{district} kaydetme hatası: {e}")
 
@@ -1219,7 +1222,7 @@ class HepsiemlakScraper(BaseScraper):
 
                         # Veritabanına kaydet
                         if self.db:
-                            new_c, dup_c = save_listings_to_db(
+                            new_c, updated_c, unchanged_c = save_listings_to_db(
                                 self.db,
                                 city_listings,
                                 platform="hepsiemlak",
@@ -1229,8 +1232,8 @@ class HepsiemlakScraper(BaseScraper):
                                 scrape_session_id=self.scrape_session_id
                             )
                             self.new_listings_count += new_c
-                            self.duplicate_count += dup_c
-                            print(f"   💾 DB: {new_c} yeni, {dup_c} tekrar ilan")
+                            self.duplicate_count += unchanged_c
+                            print(f"   💾 DB: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                 self.random_medium_wait()  # Stealth: şehirler arası
 
