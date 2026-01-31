@@ -7,9 +7,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Database file path - relative to Backend folder
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_PATH = os.path.join(BACKEND_DIR, "real_estate.db")
+# Database file path - inside database folder
+DATABASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_PATH = os.path.join(DATABASE_DIR, "real_estate.db")
 DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 # Create engine with SQLite-specific settings

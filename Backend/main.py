@@ -6,6 +6,7 @@ FastAPI application definition
 
 import sys
 import os
+import logging
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -15,12 +16,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 
 # Database initialization
-from database.connection import engine
+from database.connection import engine, DATABASE_PATH
 from database.models import Base
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def init_database():
     """Create database tables if they don't exist"""
+    db_exists = os.path.exists(DATABASE_PATH)
     Base.metadata.create_all(bind=engine)
+
+    if db_exists:
+        logger.info(f"Veritabani mevcut: {DATABASE_PATH}")
+    else:
+        logger.info(f"Veritabani olusturuldu: {DATABASE_PATH}")
 
 # Initialize database on startup
 init_database()
