@@ -87,7 +87,7 @@ class DriverManager:
                     options=options,
                     headless=self.headless,
                     use_subprocess=True,
-                    version_main=None # Otomatik Chrome sürümü tespiti
+                    version_main=144  # Chrome 144 ile uyumlu
                 )
                 
                 self._apply_stealth_scripts()
@@ -108,10 +108,16 @@ class DriverManager:
         """Cleanup driver"""
         if self.driver:
             try:
+                # Windows'ta handle hatalarını önlemek için önce process'i kontrol et
+                if hasattr(self.driver, 'service') and self.driver.service.process:
+                    self.driver.service.process.terminate()
                 self.driver.quit()
                 logger.info("Driver gracefully stopped")
-            except:
+            except OSError:
+                # Windows handle hatası - görmezden gel
                 pass
+            except Exception as e:
+                logger.debug(f"Driver stop warning: {e}")
             finally:
                 self.driver = None
                 self.wait = None

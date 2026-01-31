@@ -331,35 +331,33 @@ class HepsiemlakScraper(BaseScraper):
             city_slug = city_slug.replace(' ', '-')
             
             # Subtype path varsa onu kullan, yoksa kategori path'ini config'den al
+            # HepsiEmlak URL formatı: istanbul-kiralik-daire (tire ile birleşik)
             if self.subtype_path:
-                # Subtype path: /kiralik/tarla -> tarla
-                # Şehir URL: eskisehir-kiralik/tarla
+                # Subtype path: /kiralik/daire -> daire
+                # Şehir URL: istanbul-kiralik-daire
                 path_parts = self.subtype_path.split('/')
-                # path_parts: ['', 'kiralik', 'tarla']
+                # path_parts: ['', 'kiralik', 'daire']
                 if len(path_parts) >= 3:
-                    category_suffix = "/" + path_parts[2]  # /tarla
+                    category_suffix = "-" + path_parts[2]  # -daire
                 else:
                     category_suffix = ""
                 print(f"DEBUG: Using subtype_path: {self.subtype_path} -> category_suffix: {category_suffix}")
             else:
                 # Kategori path'ini config'den al
-                # Örnek: /kiralik/turistik-isletme -> /turistik-isletme (sadece kategori kısmı)
-                category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
-                
-                # Category path'ten listing_type'ı çıkar (zaten URL'de olacak)
-                # /kiralik/turistik-isletme -> /turistik-isletme
-                # /satilik/arsa -> /arsa
+                # Örnek: /kiralik/arsa -> -arsa
                 # /kiralik -> "" (konut için)
+                category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
+
                 category_suffix = ""
                 if category_path:
-                    # "/kiralik/arsa" -> ["", "kiralik", "arsa"] -> "arsa"
+                    # "/kiralik/arsa" -> ["", "kiralik", "arsa"] -> "-arsa"
                     # "/kiralik" -> ["", "kiralik"] -> "" (konut)
                     parts = category_path.split('/')
                     if len(parts) > 2:
-                        category_suffix = "/" + parts[2]  # /arsa, /isyeri, /turistik-isletme vb.
-            
+                        category_suffix = "-" + parts[2]  # -arsa, -isyeri, -turistik-isletme vb.
+
             # Doğrudan şehir + kategori sayfasına git
-            # Örnek: https://www.hepsiemlak.com/eskisehir-kiralik/turistik-isletme
+            # Örnek: https://www.hepsiemlak.com/istanbul-kiralik-daire
             city_url = f"https://www.hepsiemlak.com/{city_slug}-{self.listing_type}{category_suffix}"
             print(f"Şehir URL'sine gidiliyor: {city_url}")
             print(f"DEBUG: listing_type = {self.listing_type}, category = {self.current_category}, subtype_path = {self.subtype_path}")
@@ -391,6 +389,116 @@ class HepsiemlakScraper(BaseScraper):
             s = s.replace(old, new)
         return unicodedata.normalize('NFKD', s)
 
+    def _normalize_text(self, text: str) -> str:
+        """URL için Türkçe karakterleri dönüştür ve slug oluştur"""
+        import unicodedata
+        text = unicodedata.normalize('NFC', text)
+        replacements = {
+            'İ': 'i', 'I': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c',
+            'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c'
+        }
+        for tr, en in replacements.items():
+            text = text.replace(tr, en)
+        return text.lower().replace(' ', '-')
+
+    def get_district_urls_from_dropdown(self, city_name: str) -> Dict[str, str]:
+        """
+        Şehir sayfasındaki ilçe dropdown'ından gerçek URL'leri çek.
+        Returns: {ilçe_adı: url} dictionary
+        """
+        district_urls = {}
+        
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            
+            # Önce şehir sayfasına git
+            city_slug = self._normalize_text(city_name)
+            
+            # Base URL with category - HepsiEmlak formatı: istanbul-kiralik-daire
+            if self.subtype_path:
+                # /kiralik/daire -> -kiralik-daire
+                path_parts = self.subtype_path.strip('/').split('/')
+                category_suffix = "-" + "-".join(path_parts) if path_parts else ""
+                city_url = f"https://www.hepsiemlak.com/{city_slug}{category_suffix}"
+            else:
+                category_path = self.hepsiemlak_config.categories.get(self.listing_type, {}).get(self.current_category, '')
+                # /kiralik/arsa -> -kiralik-arsa
+                path_parts = category_path.strip('/').split('/') if category_path else []
+                category_suffix = "-" + "-".join(path_parts) if path_parts else ""
+                city_url = f"https://www.hepsiemlak.com/{city_slug}{category_suffix}"
+            
+            print(f"📍 {city_name} sayfasına gidiliyor: {city_url}")
+            self.driver.get(city_url)
+            time.sleep(3)
+            
+            # İlçe dropdown'ını bul ve tıkla
+            try:
+                # "İlçe Seçiniz" placeholder'ı olan dropdown container'ını bul
+                dropdown = None
+                try:
+                    # Placeholder span'ını bul ve parent container'a tıkla
+                    placeholder = self.driver.find_element(
+                        By.XPATH, "//span[contains(@class, 'he-select-base__placeholder') and contains(text(), 'İlçe')]"
+                    )
+                    dropdown = placeholder.find_element(By.XPATH, "..")  # Parent container
+                except:
+                    # Alternatif: doğrudan container'ı bul
+                    containers = self.driver.find_elements(By.CSS_SELECTOR, "div.he-select-base__container")
+                    for cont in containers:
+                        if "İlçe" in cont.text:
+                            dropdown = cont
+                            break
+
+                if not dropdown:
+                    print("⚠️ İlçe dropdown'ı bulunamadı")
+                    return district_urls
+
+                # Dropdown'ı aç
+                self.driver.execute_script("arguments[0].click();", dropdown)
+                time.sleep(2)  # Liste yüklensin
+
+                # JavaScript ile tüm ilçeleri bir seferde al (scroll gerektirmez)
+                try:
+                    # Tüm linkleri JS ile çek - görünürlük önemli değil
+                    all_districts = self.driver.execute_script("""
+                        var results = [];
+                        var links = document.querySelectorAll('li.he-multiselect__list-item a.js-county-filter__list-link');
+                        links.forEach(function(link) {
+                            var name = link.textContent.trim() || link.innerText.trim();
+                            var href = link.getAttribute('href');
+                            if (name && href) {
+                                results.push({name: name, href: href});
+                            }
+                        });
+                        return results;
+                    """)
+
+                    for item in all_districts:
+                        district_urls[item['name']] = item['href']
+
+                    print(f"   📜 {len(district_urls)} ilçe JS ile toplandı")
+
+                except Exception as js_error:
+                    logger.warning(f"JS ile ilçe alma hatası: {js_error}")
+
+                # Dropdown'ı kapat
+                try:
+                    self.driver.find_element(By.TAG_NAME, "body").click()
+                except:
+                    pass
+
+                print(f"📊 {len(district_urls)} ilçe URL'i bulundu")
+
+            except Exception as e:
+                logger.warning(f"Dropdown'dan URL çekme hatası: {e}")
+            
+            return district_urls
+            
+        except Exception as e:
+            logger.error(f"get_district_urls_from_dropdown hatası: {e}")
+            return district_urls
+
     def select_single_district(self, district_name: str) -> bool:
         """İlçe için doğrudan URL'e git - dropdown kullanma"""
         try:
@@ -413,12 +521,12 @@ class HepsiemlakScraper(BaseScraper):
             district_slug = district_slug.replace(' ', '-')
 
             # Subtype path varsa onu kullan, yoksa kategori path'ini config'den al
+            # HepsiEmlak URL formatı: basaksehir-kiralik-daire (tire ile birleşik)
             if self.subtype_path:
-                # Subtype path: /kiralik/tarla -> tarla
-                # İlçe URL: akyurt-kiralik/tarla
+                # Subtype path: /kiralik/daire -> -daire
                 path_parts = self.subtype_path.split('/')
                 if len(path_parts) >= 3:
-                    category_suffix = "/" + path_parts[2]  # /tarla
+                    category_suffix = "-" + path_parts[2]  # -daire
                 else:
                     category_suffix = ""
             else:
@@ -428,10 +536,10 @@ class HepsiemlakScraper(BaseScraper):
                 if category_path:
                     parts = category_path.split('/')
                     if len(parts) > 2:
-                        category_suffix = "/" + parts[2]  # /arsa, /isyeri, /turistik-isletme vb.
+                        category_suffix = "-" + parts[2]  # -arsa, -isyeri, -turistik-isletme vb.
 
             # Doğrudan ilçe + kategori sayfasına git
-            # Örnek: https://www.hepsiemlak.com/akyurt-satilik
+            # Örnek: https://www.hepsiemlak.com/basaksehir-kiralik-daire
             district_url = f"https://www.hepsiemlak.com/{district_slug}-{self.listing_type}{category_suffix}"
             print(f"📍 İlçe URL'sine gidiliyor: {district_url}")
 
@@ -490,14 +598,19 @@ class HepsiemlakScraper(BaseScraper):
                     By.CSS_SELECTOR, "span.applied-filters__count"
                 )
                 count_text = listing_count_element.text.strip()
-                # "için 20 ilan bulundu" -> 20
+                # "için 2.972 ilan bulundu" -> 2972
+                # Türkçe binlik ayırıcı noktayı kaldır
                 import re
-                match = re.search(r'(\d+)', count_text)
+                # Önce noktaları kaldır (binlik ayırıcı), sonra sayıyı bul
+                count_text_clean = count_text.replace('.', '')
+                match = re.search(r'(\d+)', count_text_clean)
                 if match:
                     total_listings = int(match.group(1))
                     if total_listings <= 24:
                         print(f"📊 Toplam {total_listings} ilan - tek sayfa (pagination yok)")
                         return 1
+                    else:
+                        print(f"📊 Toplam {total_listings} ilan tespit edildi")
             except Exception:
                 pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
             
@@ -566,16 +679,25 @@ class HepsiemlakScraper(BaseScraper):
 
             # Artık search_listings'e gerek yok - doğrudan şehir sayfasındayız
 
-            # Check for zero results
+            # Check for zero results - daha güvenilir kontrol
             try:
-                zero_check = self.driver.find_elements(
-                    By.XPATH, "//span[contains(text(), 'için 0 ilan bulundu')]"
+                listing_count_elem = self.driver.find_elements(
+                    By.CSS_SELECTOR, "span.applied-filters__count"
                 )
-                if zero_check:
-                    print(f"⚠️  {city} için 0 ilan bulundu")
-                    logger.info(f"🔍 {city} - İlan bulunamadı")
-                    return []
-            except:
+                if listing_count_elem:
+                    count_text = listing_count_elem[0].text.strip()
+                    count_text_clean = count_text.replace('.', '')
+                    import re
+                    match = re.search(r'(\d+)', count_text_clean)
+                    if match:
+                        actual_count = int(match.group(1))
+                        if actual_count == 0:
+                            print(f"⚠️  {city} için 0 ilan bulundu")
+                            logger.info(f"🔍 {city} - İlan bulunamadı")
+                            return []
+                        else:
+                            print(f"📊 {city} için {actual_count} ilan tespit edildi")
+            except Exception:
                 pass
 
             # Get total pages
@@ -704,6 +826,13 @@ class HepsiemlakScraper(BaseScraper):
         print(f"📋 Seçili ilçeler: {', '.join(districts)}")
         logger.info(f"🎯 {city} - {len(districts)} ilçe ayrı ayrı taranacak")
 
+        # Önce dropdown'dan gerçek URL'leri al
+        print(f"\n🔍 {city} için ilçe URL'leri alınıyor...")
+        district_url_map = self.get_district_urls_from_dropdown(city)
+        
+        if not district_url_map:
+            logger.warning(f"⚠️ {city} için ilçe URL'leri alınamadı, manuel URL oluşturulacak")
+        
         # Her ilçeyi ayrı ayrı tara
         for idx, district in enumerate(districts, 1):
             # Durdurma kontrolü - her ilçe başında kontrol et
@@ -719,22 +848,52 @@ class HepsiemlakScraper(BaseScraper):
             district_listings = []  # Bu ilçenin ilanları
 
             try:
-                # Doğrudan ilçe URL'ine git
-                if not self.select_single_district(district):
-                    logger.warning(f"⚠️  {district} ilçesi yüklenemedi, atlanıyor")
-                    continue
+                # Gerçek URL varsa onu kullan, yoksa manuel oluştur
+                real_url = district_url_map.get(district)
 
-                # Check for zero results
-                try:
-                    zero_check = self.driver.find_elements(
-                        By.XPATH, "//span[contains(text(), 'için 0 ilan bulundu')]"
-                    )
-                    if zero_check:
-                        print(f"⚠️  {district} için 0 ilan bulundu")
-                        logger.info(f"🔍 {district} - İlan bulunamadı")
+                if real_url:
+                    # Relative URL'yi tam URL'ye çevir
+                    if real_url.startswith('/'):
+                        real_url = f"https://www.hepsiemlak.com{real_url}"
+
+                    print(f"📍 Gerçek URL kullanılıyor: {real_url}")
+                    self.driver.get(real_url)
+                    time.sleep(5)
+
+                    # URL doğru mu kontrol et
+                    if district.lower().replace(' ', '-') in self.driver.current_url.lower() or \
+                       self._normalize_text(district) in self.driver.current_url.lower():
+                        print(f"✓ {district} sayfası yüklendi")
+                    else:
+                        logger.warning(f"⚠️ {district} - URL redirect olmuş olabilir: {self.driver.current_url}")
+                else:
+                    # Fallback: Manuel URL oluştur
+                    if not self.select_single_district(district):
+                        logger.warning(f"⚠️  {district} ilçesi yüklenemedi, atlanıyor")
                         continue
-                except:
-                    pass
+
+                # Check for zero results - daha güvenilir kontrol
+                try:
+                    # Önce gerçek ilan sayısını kontrol et
+                    listing_count_elem = self.driver.find_elements(
+                        By.CSS_SELECTOR, "span.applied-filters__count"
+                    )
+                    if listing_count_elem:
+                        count_text = listing_count_elem[0].text.strip()
+                        # "için 0 ilan" veya "0 ilan bulundu" kontrolü
+                        count_text_clean = count_text.replace('.', '')
+                        import re
+                        match = re.search(r'(\d+)', count_text_clean)
+                        if match:
+                            actual_count = int(match.group(1))
+                            if actual_count == 0:
+                                print(f"⚠️  {district} için 0 ilan bulundu")
+                                logger.info(f"🔍 {district} - İlan bulunamadı")
+                                continue
+                            else:
+                                print(f"📊 {district} için {actual_count} ilan tespit edildi")
+                except Exception as e:
+                    logger.debug(f"İlan sayısı kontrolü hatası: {e}")
 
                 # Get total pages
                 total_pages = self.get_total_pages()
