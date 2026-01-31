@@ -14,6 +14,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 
+# Database initialization
+from database.connection import engine
+from database.models import Base
+
+def init_database():
+    """Create database tables if they don't exist"""
+    Base.metadata.create_all(bind=engine)
+
+# Initialize database on startup
+init_database()
+
 # Initialize FastAPI App
 app = FastAPI(
     title="Real Estate Scraper API",
