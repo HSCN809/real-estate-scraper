@@ -1087,14 +1087,32 @@ class HepsiemlakScraper(BaseScraper):
             # Scrape each city
             all_results = {}
             total_listings_count = 0
+            total_cities = len(self.selected_cities)
 
-            for city in self.selected_cities:
+            for city_idx, city in enumerate(self.selected_cities, 1):
                 # Durdurma kontrolü - kullanıcı durdur dediyse mevcut verileri kaydet
                 from api.status import task_status
                 if task_status.is_stop_requested():
                     print(f"\n⚠️ Durdurma isteği alındı! {len(all_results)} şehir tarandı.")
                     task_status.stopped_early = True
                     break
+
+                # Toplam progress hesabı için wrapper callback
+                # city_idx ve total_cities'i closure'a alıyoruz
+                def make_city_progress_callback(current_city_idx, num_cities, city_name):
+                    def city_progress_callback(msg, current=None, total=None, progress=None):
+                        # Şehir içi progress'i toplam progress'e çevir
+                        city_local_progress = progress if progress is not None else 0
+                        overall = int(((current_city_idx - 1 + city_local_progress / 100) / num_cities) * 100)
+                        task_status.update(
+                            message=f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
+                            progress=overall,
+                            current=current,
+                            total=total
+                        )
+                    return city_progress_callback
+
+                city_callback = make_city_progress_callback(city_idx, total_cities, city)
 
                 # İlçe filtreleme var mı kontrol et
                 if self.selected_districts and city in self.selected_districts:
@@ -1108,7 +1126,7 @@ class HepsiemlakScraper(BaseScraper):
                         city,
                         districts=districts,
                         max_pages=max_pages,
-                        progress_callback=progress_callback
+                        progress_callback=city_callback
                     )
 
                     # Sadece istatistik için tutuyoruz (zaten kaydedildi)
@@ -1122,7 +1140,7 @@ class HepsiemlakScraper(BaseScraper):
                         city,
                         max_pages=max_pages,
                         api_mode=True,
-                        progress_callback=progress_callback
+                        progress_callback=city_callback
                     )
 
                     if city_listings:
