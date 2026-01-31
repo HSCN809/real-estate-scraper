@@ -8,25 +8,23 @@ import {
     FileText,
     Download,
     Sparkles,
-    FileSpreadsheet,
-    FileJson,
-    Clock,
     RefreshCw,
     Database,
     Search,
     Trash2,
     AlertTriangle,
     MapPin,
-    Building2,
     Eye,
     X,
     List,
     Filter,
-    Home,
-    TrendingUp,
     Calendar,
     Map,
-    BarChart3
+    BarChart3,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight
 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { getResults } from '@/lib/api';
@@ -73,6 +71,10 @@ export default function ResultsPage() {
     const [districtFilter, setDistrictFilter] = useState<string[]>([]);
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
     const [districtDropdownOpen, setDistrictDropdownOpen] = useState(false);
+
+    // Pagination for table view
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
 
     // Refs for click outside detection
     const cityDropdownRef = useRef<HTMLDivElement>(null);
@@ -290,6 +292,33 @@ export default function ResultsPage() {
         } else {
             setDistrictFilter([...districts]);
         }
+    };
+
+    // Pagination calculations
+    const totalPages = Math.ceil(filteredResults.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedResults = filteredResults.slice(startIndex, endIndex);
+
+    // Reset to page 1 when filters change
+    const handleCityFilterChangeWithReset = (city: string) => {
+        handleCityFilterChange(city);
+        setCurrentPage(1);
+    };
+
+    const handleDistrictFilterChangeWithReset = (district: string) => {
+        handleDistrictFilterChange(district);
+        setCurrentPage(1);
+    };
+
+    const toggleAllCitiesWithReset = () => {
+        toggleAllCities();
+        setCurrentPage(1);
+    };
+
+    const toggleAllDistrictsWithReset = () => {
+        toggleAllDistricts();
+        setCurrentPage(1);
     };
 
     return (
@@ -569,7 +598,7 @@ export default function ResultsPage() {
                                     <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                                         {/* Select All */}
                                         <button
-                                            onClick={toggleAllCities}
+                                            onClick={toggleAllCitiesWithReset}
                                             className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
                                         >
                                             <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -588,7 +617,7 @@ export default function ResultsPage() {
                                         {cities.map(city => (
                                             <button
                                                 key={city}
-                                                onClick={() => handleCityFilterChange(city)}
+                                                onClick={() => handleCityFilterChangeWithReset(city)}
                                                 className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
                                             >
                                                 <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -637,7 +666,7 @@ export default function ResultsPage() {
                                     <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                                         {/* Select All */}
                                         <button
-                                            onClick={toggleAllDistricts}
+                                            onClick={toggleAllDistrictsWithReset}
                                             className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
                                         >
                                             <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -656,7 +685,7 @@ export default function ResultsPage() {
                                         {districts.map(district => (
                                             <button
                                                 key={district}
-                                                onClick={() => handleDistrictFilterChange(district)}
+                                                onClick={() => handleDistrictFilterChangeWithReset(district)}
                                                 className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
                                             >
                                                 <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -681,6 +710,7 @@ export default function ResultsPage() {
                                     onClick={() => {
                                         setCityFilter([]);
                                         setDistrictFilter([]);
+                                        setCurrentPage(1);
                                     }}
                                     className="px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                                 >
@@ -706,7 +736,7 @@ export default function ResultsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredResults.map((result, index) => (
+                                {paginatedResults.map((result, index) => (
                                     <tr key={result.id || index} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                         <td className="py-3 px-4">
                                             <div className="flex items-center gap-2">
@@ -779,6 +809,99 @@ export default function ResultsPage() {
                             </tbody>
                         </table>
                         </div>
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
+                                <div className="text-sm text-gray-400">
+                                    Toplam {filteredResults.length} kayıttan {startIndex + 1}-{Math.min(endIndex, filteredResults.length)} arası gösteriliyor
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {/* First Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(1)}
+                                        disabled={currentPage === 1}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            currentPage === 1
+                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                        }`}
+                                        title="İlk Sayfa"
+                                    >
+                                        <ChevronsLeft className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Previous Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                        disabled={currentPage === 1}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            currentPage === 1
+                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                        }`}
+                                        title="Önceki Sayfa"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Page Numbers */}
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        let pageNum;
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i;
+                                        } else {
+                                            pageNum = currentPage - 2 + i;
+                                        }
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setCurrentPage(pageNum)}
+                                                className={`px-3 py-1.5 rounded-lg text-sm transition-colors min-w-[40px] ${
+                                                    currentPage === pageNum
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                                }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+
+                                    {/* Next Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            currentPage === totalPages
+                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                        }`}
+                                        title="Sonraki Sayfa"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Last Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(totalPages)}
+                                        disabled={currentPage === totalPages}
+                                        className={`p-2 rounded-lg transition-colors ${
+                                            currentPage === totalPages
+                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                        }`}
+                                        title="Son Sayfa"
+                                    >
+                                        <ChevronsRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 )}
             </motion.div>
