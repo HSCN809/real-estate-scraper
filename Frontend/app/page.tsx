@@ -37,46 +37,50 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <motion.div
+    <motion.section
       className="space-y-8 relative z-10"
       variants={container}
       initial="hidden"
       animate="show"
+      aria-labelledby="dashboard-title"
     >
       {/* Artistic Header */}
-      <motion.div variants={item}>
-        <h1 className="art-title gradient-art-pink mb-3">
+      <motion.header variants={item}>
+        <h1 id="dashboard-title" className="art-title gradient-art-pink mb-3">
           EMLAK SCRAPER
         </h1>
         <p className="text-xl text-gray-300">
           Veri toplama sürecinizi sanat eserine dönüştürün ✨
         </p>
-      </motion.div>
+      </motion.header>
 
       {/* Stats Grid - Bold Artistic Layout */}
-      <motion.div
+      <motion.section
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
         variants={container}
+        aria-label="İstatistikler"
       >
         {/* Large Featured Stat */}
-        <motion.div variants={item} className="lg:col-span-2 lg:row-span-2">
+        <motion.article variants={item} className="lg:col-span-2 lg:row-span-2">
           <ArtCard glowColor="pink" className="h-full">
             <div className="flex flex-col h-full justify-between">
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-4 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20">
-                      <Search className="w-10 h-10 text-pink-400" />
+                      <Search className="w-10 h-10 text-pink-400" aria-hidden="true" />
                     </div>
                     <div>
                       <p className="text-sm text-gray-400 uppercase tracking-wider">
                         Toplam Tarama
                       </p>
-                      <h2 className="text-7xl font-black gradient-art-pink mt-2">{stats.total_scrapes}</h2>
+                      <p className="text-7xl font-black gradient-art-pink mt-2" aria-label={`Toplam tarama sayısı: ${stats.total_scrapes}`}>
+                        {stats.total_scrapes}
+                      </p>
                     </div>
                   </div>
                 </div>
-                <Sparkles className="w-8 h-8 text-pink-400" />
+                <Sparkles className="w-8 h-8 text-pink-400" aria-hidden="true" />
               </div>
 
               {/* Mini Stats */}
@@ -92,70 +96,71 @@ export default function Dashboard() {
               </div>
             </div>
           </ArtCard>
-        </motion.div>
+        </motion.article>
 
         {/* Small Stats */}
-        <motion.div variants={item}>
+        <motion.article variants={item}>
           <ArtCard glowColor="blue" className="h-full">
             <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 w-fit mb-4">
-              <Database className="w-8 h-8 text-blue-400" />
+              <Database className="w-8 h-8 text-blue-400" aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-400 mb-2">Toplam İlan</p>
-            <h3 className="text-5xl font-black gradient-art-blue">{stats.total_listings}</h3>
+            <p className="text-5xl font-black gradient-art-blue">{stats.total_listings}</p>
           </ArtCard>
-        </motion.div>
+        </motion.article>
 
-        <motion.div variants={item}>
+        <motion.article variants={item}>
           <ArtCard glowColor="purple" className="h-full">
             <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 w-fit mb-4">
-              <TrendingUp className="w-8 h-8 text-purple-400" />
+              <TrendingUp className="w-8 h-8 text-purple-400" aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-400 mb-2">Bu Hafta</p>
-            <h3 className="text-5xl font-black text-purple-400">{stats.this_week}</h3>
+            <p className="text-5xl font-black text-purple-400">{stats.this_week}</p>
           </ArtCard>
-        </motion.div>
+        </motion.article>
 
-        <motion.div variants={item} className="lg:col-span-2">
+        <motion.article variants={item} className="lg:col-span-2">
           <ArtCard glowColor="blue" className="h-full">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="p-3 rounded-xl bg-gradient-to-br from-orange-500/20 to-yellow-500/20">
-                  <Clock className="w-8 h-8 text-orange-400" />
+                  <Clock className="w-8 h-8 text-orange-400" aria-hidden="true" />
                 </div>
                 <div>
                   <p className="text-sm text-gray-400 mb-1">Son Tarama</p>
-                  <p className="text-3xl font-bold gradient-art-warm">{stats.last_scrape}</p>
+                  <time className="text-3xl font-bold gradient-art-warm">{stats.last_scrape}</time>
                 </div>
               </div>
-              <Activity className="w-16 h-16 text-gray-800" />
+              <Activity className="w-16 h-16 text-gray-800" aria-hidden="true" />
             </div>
           </ArtCard>
-        </motion.div>
-      </motion.div>
+        </motion.article>
+      </motion.section>
 
       {/* Platform Cards - Creative Layout */}
-      <motion.div variants={item}>
-        <h2 className="text-3xl font-black gradient-art-blue mb-6">
+      <motion.section variants={item} aria-labelledby="platform-section-title">
+        <h2 id="platform-section-title" className="text-3xl font-black gradient-art-blue mb-6">
           Platform Seçimi
         </h2>
-      </motion.div>
+      </motion.section>
 
-      <motion.div
+      <motion.nav
         className="grid grid-cols-1 lg:grid-cols-2 gap-6"
         variants={container}
+        aria-label="Platform seçimi"
       >
         {/* EmlakJet */}
-        <motion.div variants={item}>
-          <Link href="/scraper/emlakjet">
+        <motion.article variants={item}>
+          <Link href="/scraper/emlakjet" aria-label="EmlakJet platformunda taramaya başla">
             <ArtCard glowColor="blue" className="group cursor-pointer">
               <div className="relative">
                 {/* Decorative Element */}
-                <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
+                <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" aria-hidden="true" />
 
                 <div className="relative">
-                  <div className="flex items-center justify-between mb-6">
+                  <header className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      <div className="text-6xl">🔵</div>
+                      <span className="text-6xl" aria-hidden="true">🔵</span>
                       <div>
                         <h3 className="text-4xl font-black gradient-art-blue">
                           EmlakJet
@@ -165,43 +170,43 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <Sparkles className="w-8 h-8 text-blue-400 group-hover:rotate-12 transition-transform" />
-                  </div>
+                    <Sparkles className="w-8 h-8 text-blue-400 group-hover:rotate-12 transition-transform" aria-hidden="true" />
+                  </header>
 
                   {/* Features */}
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <ul className="flex flex-wrap gap-2 mb-4" aria-label="Desteklenen kategoriler">
                     {['Konut', 'Arsa', 'İşyeri', 'Turistik'].map((feature) => (
-                      <span
+                      <li
                         key={feature}
                         className="px-4 py-2 rounded-full bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-sm font-semibold text-blue-300"
                       >
                         {feature}
-                      </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-blue-500/20">
+                  <footer className="flex items-center justify-between pt-4 border-t border-blue-500/20">
                     <span className="text-sm text-gray-400">Taramaya başla</span>
-                    <span className="text-2xl group-hover:translate-x-2 transition-transform">→</span>
-                  </div>
+                    <span className="text-2xl group-hover:translate-x-2 transition-transform" aria-hidden="true">→</span>
+                  </footer>
                 </div>
               </div>
             </ArtCard>
           </Link>
-        </motion.div>
+        </motion.article>
 
         {/* HepsiEmlak */}
-        <motion.div variants={item}>
-          <Link href="/scraper/hepsiemlak">
+        <motion.article variants={item}>
+          <Link href="/scraper/hepsiemlak" aria-label="HepsiEmlak platformunda taramaya başla">
             <ArtCard glowColor="pink" className="group cursor-pointer">
               <div className="relative">
                 {/* Decorative Element */}
-                <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
+                <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" aria-hidden="true" />
 
                 <div className="relative">
-                  <div className="flex items-center justify-between mb-6">
+                  <header className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      <div className="text-6xl">🟢</div>
+                      <span className="text-6xl" aria-hidden="true">🟢</span>
                       <div>
                         <h3 className="text-4xl font-black gradient-art-pink">
                           HepsiEmlak
@@ -211,31 +216,31 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <Zap className="w-8 h-8 text-pink-400 group-hover:rotate-12 transition-transform" />
-                  </div>
+                    <Zap className="w-8 h-8 text-pink-400 group-hover:rotate-12 transition-transform" aria-hidden="true" />
+                  </header>
 
                   {/* Features */}
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <ul className="flex flex-wrap gap-2 mb-4" aria-label="Desteklenen kategoriler">
                     {['Konut', 'Arsa', 'İşyeri', 'Devremülk'].map((feature) => (
-                      <span
+                      <li
                         key={feature}
                         className="px-4 py-2 rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 text-sm font-semibold text-pink-300"
                       >
                         {feature}
-                      </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-pink-500/20">
+                  <footer className="flex items-center justify-between pt-4 border-t border-pink-500/20">
                     <span className="text-sm text-gray-400">Taramaya başla</span>
-                    <span className="text-2xl group-hover:translate-x-2 transition-transform">→</span>
-                  </div>
+                    <span className="text-2xl group-hover:translate-x-2 transition-transform" aria-hidden="true">→</span>
+                  </footer>
                 </div>
               </div>
             </ArtCard>
           </Link>
-        </motion.div>
-      </motion.div>
-    </motion.div>
+        </motion.article>
+      </motion.nav>
+    </motion.section>
   );
 }

@@ -12,7 +12,7 @@ interface ArtCardProps extends HTMLMotionProps<"div"> {
 const ArtCard = forwardRef<HTMLDivElement, ArtCardProps>(
     ({ className, children, glowColor = 'purple', ...props }, ref) => {
         return (
-            <motion.div
+            <motion.article
                 ref={ref}
                 className={cn(
                     'art-card p-6 hover-art',
@@ -23,7 +23,7 @@ const ArtCard = forwardRef<HTMLDivElement, ArtCardProps>(
                 {...props}
             >
                 {children}
-            </motion.div>
+            </motion.article>
         );
     }
 );

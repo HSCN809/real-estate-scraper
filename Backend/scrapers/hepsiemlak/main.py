@@ -817,8 +817,8 @@ class HepsiemlakScraper(BaseScraper):
                     ))
                     continue
 
-                page_listings = self.scrape_current_page()
-                
+                page_listings = self.scrape_current_page(fallback_city=city)
+
                 # 0 ilan bulunduysa ve bu beklenmiyorsa başarısız sayfa olarak işaretle
                 if len(page_listings) == 0 and page > 1:
                     print(f"   ⚠️ Sayfa {page}'de 0 ilan - retry listesine eklendi")
@@ -999,8 +999,8 @@ class HepsiemlakScraper(BaseScraper):
                         ))
                         continue
 
-                    page_listings = self.scrape_current_page()
-                    
+                    page_listings = self.scrape_current_page(fallback_city=city, fallback_district=district)
+
                     # 0 ilan bulunduysa ve bu beklenmiyorsa başarısız sayfa olarak işaretle
                     if len(page_listings) == 0 and page > 1:
                         print(f"   ⚠️ Sayfa {page}'de 0 ilan - retry listesine eklendi")
@@ -1105,8 +1105,14 @@ class HepsiemlakScraper(BaseScraper):
         except Exception as e:
             logger.error(f"❌ {city}/{district} kaydetme hatası: {e}")
 
-    def scrape_current_page(self) -> List[Dict[str, Any]]:
-        """Scrape all listings on current page"""
+    def scrape_current_page(self, fallback_city: str = None, fallback_district: str = None) -> List[Dict[str, Any]]:
+        """
+        Scrape all listings on current page.
+
+        Args:
+            fallback_city: City name to use if location parsing fails
+            fallback_district: District name to use if location parsing fails
+        """
         listings = []
 
         try:
@@ -1120,6 +1126,11 @@ class HepsiemlakScraper(BaseScraper):
                 try:
                     data = self.parser.extract_listing_data(element)
                     if data:
+                        # Fallback: Eğer lokasyon parse edilemezse, taranan şehir/ilçeyi kullan
+                        if fallback_city and (not data.get('il') or data.get('il') == 'Belirtilmemiş'):
+                            data['il'] = fallback_city
+                        if fallback_district and (not data.get('ilce') or data.get('ilce') == 'Belirtilmemiş'):
+                            data['ilce'] = fallback_district
                         listings.append(data)
                     time.sleep(random.uniform(0.02, 0.08))  # Stealth
                 except Exception as e:

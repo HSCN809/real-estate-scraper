@@ -67,19 +67,31 @@ class BaseHepsiemlakParser:
         """
         price_sel = self.common_selectors.get("price", "span.list-view-price")
         title_sel = self.common_selectors.get("title", "h3")
-        location_sel = self.common_selectors.get("location", "span.list-view-location address")
         date_sel = self.common_selectors.get("date", "span.list-view-date")
         link_sel = self.common_selectors.get("link", "a.card-link")
         firm_sel = self.common_selectors.get("firm", "p.listing-card--owner-info__firm-name")
 
         price = self.get_element_text(container, price_sel)
         title = self.get_element_text(container, title_sel)
-        location_text = self.get_element_text(container, location_sel)
         date = self.get_element_text(container, date_sel)
         link = self.get_element_attribute(container, link_sel, "href")
         firm = self.get_element_text(container, firm_sel)
-        
-        # Parse location
+
+        # Try multiple selectors for location (HepsiEmlak HTML structure varies)
+        location_selectors = [
+            "span.list-view-location address",
+            "span.list-view-location",
+            ".list-view-location address",
+            ".list-view-location",
+            "address"
+        ]
+        location_text = ""
+        for loc_sel in location_selectors:
+            location_text = self.get_element_text(container, loc_sel)
+            if location_text and "/" in location_text:
+                break
+
+        # Parse location - format: "İl / İlçe / Mahalle"
         location_parts = [p.strip() for p in location_text.split('/') if p.strip()]
 
         return {

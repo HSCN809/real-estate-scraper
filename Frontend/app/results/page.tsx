@@ -389,40 +389,45 @@ export default function ResultsPage() {
     };
 
     return (
-        <motion.div
+        <motion.section
             className="space-y-8 relative z-10 p-4 md:p-8 max-w-7xl mx-auto"
             variants={containerVariants}
             initial="hidden"
             animate="show"
+            aria-labelledby="results-title"
         >
             {/* Header */}
-            <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <motion.header variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 mb-2">
+                    <h1 id="results-title" className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 mb-2">
                         Veri Sonuçları
                     </h1>
                     <p className="text-gray-400 text-lg flex items-center gap-2">
                         Taranan emlak verileri ve raporlar
-                        <Sparkles className="w-4 h-4 text-yellow-400" />
+                        <Sparkles className="w-4 h-4 text-yellow-400" aria-hidden="true" />
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <nav className="flex items-center gap-3" aria-label="Sayfa kontrolleri">
                     {/* View Toggle */}
-                    <div className="flex rounded-xl overflow-hidden border border-slate-700">
+                    <fieldset className="flex rounded-xl overflow-hidden border border-slate-700" role="group" aria-label="Görünüm modu">
                         <button
                             onClick={() => setViewMode('map')}
                             className={`p-2.5 transition-colors ${viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Harita"
+                            aria-pressed={viewMode === 'map'}
                         >
-                            <Map className="w-4 h-4" />
+                            <Map className="w-4 h-4" aria-hidden="true" />
+                            <span className="sr-only">Harita görünümü</span>
                         </button>
                         <button
                             onClick={() => setViewMode('table')}
                             className={`p-2.5 transition-colors ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Tablo"
+                            aria-pressed={viewMode === 'table'}
                         >
-                            <List className="w-4 h-4" />
+                            <List className="w-4 h-4" aria-hidden="true" />
+                            <span className="sr-only">Tablo görünümü</span>
                         </button>
                         <button
                             onClick={() => {
@@ -431,10 +436,12 @@ export default function ResultsPage() {
                             }}
                             className={`p-2.5 transition-colors ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Grafikler"
+                            aria-pressed={viewMode === 'charts'}
                         >
-                            <BarChart3 className="w-4 h-4" />
+                            <BarChart3 className="w-4 h-4" aria-hidden="true" />
+                            <span className="sr-only">Grafik görünümü</span>
                         </button>
-                    </div>
+                    </fieldset>
 
                     {/* Excel Export Button */}
                     <button
@@ -471,8 +478,9 @@ export default function ResultsPage() {
                         disabled={exporting}
                         className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
                         title="Excel'e Aktar"
+                        aria-label="Excel'e aktar"
                     >
-                        <Download className={`w-5 h-5 text-green-400 ${exporting ? 'animate-pulse' : ''}`} />
+                        <Download className={`w-5 h-5 text-green-400 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
                     </button>
 
                     {results.length > 0 && (
@@ -480,8 +488,9 @@ export default function ResultsPage() {
                             onClick={() => setShowClearConfirm(true)}
                             className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all"
                             title="Sonuçları Temizle"
+                            aria-label="Sonuçları temizle"
                         >
-                            <Trash2 className="w-5 h-5 text-red-400" />
+                            <Trash2 className="w-5 h-5 text-red-400" aria-hidden="true" />
                         </button>
                     )}
 
@@ -490,67 +499,69 @@ export default function ResultsPage() {
                         disabled={loading}
                         className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all"
                         title="Yenile"
+                        aria-label="Verileri yenile"
                     >
-                        <RefreshCw className={`w-5 h-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-5 h-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
                     </button>
-                </div>
-            </motion.div>
+                </nav>
+            </motion.header>
 
             {/* Dashboard Stats */}
-            <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-5">
+            <motion.section variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4" aria-label="Özet istatistikler">
+                <article className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-blue-500/20 rounded-lg">
-                            <Database className="w-5 h-5 text-blue-400" />
+                            <Database className="w-5 h-5 text-blue-400" aria-hidden="true" />
                         </div>
                         <span className="text-gray-400 text-sm">Toplam İlan</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{totalRecords.toLocaleString()}</p>
-                </div>
+                    <p className="text-3xl font-bold text-white" aria-label={`Toplam ilan sayısı: ${totalRecords.toLocaleString()}`}>{totalRecords.toLocaleString()}</p>
+                </article>
 
-                <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-5">
+                <article className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-emerald-500/20 rounded-lg">
-                            <MapPin className="w-5 h-5 text-emerald-400" />
+                            <MapPin className="w-5 h-5 text-emerald-400" aria-hidden="true" />
                         </div>
                         <span className="text-gray-400 text-sm">Şehir</span>
                     </div>
                     <p className="text-3xl font-bold text-white">{uniqueCities}</p>
-                </div>
+                </article>
 
-                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-2xl p-5">
+                <article className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-purple-500/20 rounded-lg">
-                            <FileText className="w-5 h-5 text-purple-400" />
+                            <FileText className="w-5 h-5 text-purple-400" aria-hidden="true" />
                         </div>
                         <span className="text-gray-400 text-sm">Dosya</span>
                     </div>
                     <p className="text-3xl font-bold text-white">{totalFiles}</p>
-                </div>
+                </article>
 
-                <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl p-5">
+                <article className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-amber-500/20 rounded-lg">
-                            <Calendar className="w-5 h-5 text-amber-400" />
+                            <Calendar className="w-5 h-5 text-amber-400" aria-hidden="true" />
                         </div>
                         <span className="text-gray-400 text-sm">Son Tarama</span>
                     </div>
-                    <p className="text-lg font-bold text-white truncate">{latestDate}</p>
-                </div>
-            </motion.div>
+                    <time className="text-lg font-bold text-white truncate block">{latestDate}</time>
+                </article>
+            </motion.section>
 
             {/* Filters */}
-            <motion.div variants={itemVariants} className="flex flex-wrap gap-3">
+            <motion.form variants={itemVariants} className="flex flex-wrap gap-3" role="search" aria-label="Veri filtreleri" onSubmit={(e) => e.preventDefault()}>
                 <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Filter className="w-4 h-4" />
-                    Filtre:
+                    <Filter className="w-4 h-4" aria-hidden="true" />
+                    <span id="filter-label">Filtre:</span>
                 </div>
 
                 {/* Platform Filter */}
-                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="Platform filtresi">
                     <button
                         onClick={() => setPlatformFilter('all')}
                         className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                        aria-pressed={platformFilter === 'all'}
                     >
                         Tümü
                     </button>
@@ -559,42 +570,47 @@ export default function ResultsPage() {
                             key={p}
                             onClick={() => setPlatformFilter(p)}
                             className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === p ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                            aria-pressed={platformFilter === p}
                         >
                             {p}
                         </button>
                     ))}
-                </div>
+                </fieldset>
 
                 {/* Category Filter */}
-                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="Kategori filtresi">
                     {categories.map(c => (
                         <button
                             key={c}
                             onClick={() => setCategoryFilter(categoryFilter === c ? 'all' : c)}
                             className={`px-3 py-1.5 text-sm transition-colors ${categoryFilter === c ? 'bg-emerald-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                            aria-pressed={categoryFilter === c}
                         >
                             {c}
                         </button>
                     ))}
-                </div>
+                </fieldset>
 
                 {/* Listing Type Filter (Satılık/Kiralık) */}
-                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="İlan tipi filtresi">
                     {listingTypes.map(lt => (
                         <button
                             key={lt}
                             onClick={() => setListingTypeFilter(listingTypeFilter === lt ? 'all' : (lt || 'all'))}
                             className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === lt ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
+                            aria-pressed={listingTypeFilter === lt}
                         >
                             {lt}
                         </button>
                     ))}
-                </div>
+                </fieldset>
 
                 {/* Subtype Filter (Alt Kategori) - Custom Dropdown */}
                 {subtypes.length > 0 && (
                     <div className="relative">
+                        <label htmlFor="subtype-filter" className="sr-only">Alt Kategori</label>
                         <select
+                            id="subtype-filter"
                             value={subtypeFilter}
                             onChange={(e) => setSubtypeFilter(e.target.value)}
                             className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none pr-8 cursor-pointer"
@@ -604,17 +620,17 @@ export default function ResultsPage() {
                                 <option key={st} value={st}>{st}</option>
                             ))}
                         </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none" aria-hidden="true">
                             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                         </div>
                     </div>
                 )}
-            </motion.div>
+            </motion.form>
 
             {/* Content */}
-            <motion.div className="min-h-[400px]" variants={containerVariants} initial="show" animate="show">
+            <motion.main className="min-h-[400px]" variants={containerVariants} initial="show" animate="show" aria-live="polite">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                         <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
@@ -651,15 +667,15 @@ export default function ResultsPage() {
                     </motion.div>
                 ) : viewMode === 'map' ? (
                     /* Map View */
-                    <motion.div variants={itemVariants}>
+                    <motion.figure variants={itemVariants} aria-label="Sonuçlar haritası">
                         <ResultsMap results={filteredResults} />
-                    </motion.div>
+                    </motion.figure>
                 ) : viewMode === 'charts' ? (
                     /* Charts View */
-                    <motion.div variants={itemVariants}>
+                    <motion.figure variants={itemVariants} aria-label="Sonuç grafikleri">
                         {(priceDataLoading || !isPriceDataValid) ? (
-                            <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                            <div className="flex flex-col items-center justify-center py-20 gap-4" role="status" aria-live="polite">
+                                <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" aria-hidden="true"></div>
                                 <p className="text-gray-400 animate-pulse">Fiyat verileri yükleniyor...</p>
                             </div>
                         ) : (
@@ -670,14 +686,14 @@ export default function ResultsPage() {
                                 listingTypeFilter={listingTypeFilter}
                             />
                         )}
-                    </motion.div>
+                    </motion.figure>
                 ) : (
                     /* Table View */
-                    <motion.div variants={itemVariants} className="space-y-4">
+                    <motion.section variants={itemVariants} className="space-y-4" aria-label="Tablo görünümü">
                         {/* City/District Filters */}
-                        <div className="flex flex-wrap gap-3 items-center">
-                            <span className="text-sm text-gray-400 flex items-center gap-2">
-                                <MapPin className="w-4 h-4" />
+                        <form className="flex flex-wrap gap-3 items-center" role="search" aria-label="Konum filtreleri" onSubmit={(e) => e.preventDefault()}>
+                            <span className="text-sm text-gray-400 flex items-center gap-2" id="location-filter-label">
+                                <MapPin className="w-4 h-4" aria-hidden="true" />
                                 Konum Filtresi:
                             </span>
 
@@ -819,11 +835,13 @@ export default function ResultsPage() {
                                         setCurrentPage(1);
                                     }}
                                     className="px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                    type="button"
+                                    aria-label="Konum filtrelerini temizle"
                                 >
                                     Temizle
                                 </button>
                             )}
-                        </div>
+                        </form>
 
                         {/* Table */}
                         <div className="overflow-x-auto">
@@ -920,38 +938,42 @@ export default function ResultsPage() {
 
                         {/* Pagination Controls */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
-                                <div className="text-sm text-gray-400">
+                            <nav className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700" aria-label="Sayfa navigasyonu">
+                                <p className="text-sm text-gray-400" aria-live="polite">
                                     Toplam {filteredResults.length} kayıttan {startIndex + 1}-{Math.min(endIndex, filteredResults.length)} arası gösteriliyor
-                                </div>
-                                <div className="flex items-center gap-2">
+                                </p>
+                                <ul className="flex items-center gap-2" role="list">
                                     {/* First Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(1)}
-                                        disabled={currentPage === 1}
-                                        className={`p-2 rounded-lg transition-colors ${
-                                            currentPage === 1
-                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
-                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
-                                        }`}
-                                        title="İlk Sayfa"
-                                    >
-                                        <ChevronsLeft className="w-4 h-4" />
-                                    </button>
+                                    <li>
+                                        <button
+                                            onClick={() => setCurrentPage(1)}
+                                            disabled={currentPage === 1}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                currentPage === 1
+                                                    ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                            }`}
+                                            aria-label="İlk sayfa"
+                                        >
+                                            <ChevronsLeft className="w-4 h-4" aria-hidden="true" />
+                                        </button>
+                                    </li>
 
                                     {/* Previous Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                        disabled={currentPage === 1}
-                                        className={`p-2 rounded-lg transition-colors ${
-                                            currentPage === 1
-                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
-                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
-                                        }`}
-                                        title="Önceki Sayfa"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
+                                    <li>
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            disabled={currentPage === 1}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                currentPage === 1
+                                                    ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                            }`}
+                                            aria-label="Önceki sayfa"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+                                        </button>
+                                    </li>
 
                                     {/* Page Numbers */}
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -966,53 +988,60 @@ export default function ResultsPage() {
                                             pageNum = currentPage - 2 + i;
                                         }
                                         return (
-                                            <button
-                                                key={pageNum}
-                                                onClick={() => setCurrentPage(pageNum)}
-                                                className={`px-3 py-1.5 rounded-lg text-sm transition-colors min-w-[40px] ${
-                                                    currentPage === pageNum
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
-                                                }`}
-                                            >
-                                                {pageNum}
-                                            </button>
+                                            <li key={pageNum}>
+                                                <button
+                                                    onClick={() => setCurrentPage(pageNum)}
+                                                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors min-w-[40px] ${
+                                                        currentPage === pageNum
+                                                            ? 'bg-blue-600 text-white'
+                                                            : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                                    }`}
+                                                    aria-label={`Sayfa ${pageNum}`}
+                                                    aria-current={currentPage === pageNum ? 'page' : undefined}
+                                                >
+                                                    {pageNum}
+                                                </button>
+                                            </li>
                                         );
                                     })}
 
                                     {/* Next Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className={`p-2 rounded-lg transition-colors ${
-                                            currentPage === totalPages
-                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
-                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
-                                        }`}
-                                        title="Sonraki Sayfa"
-                                    >
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
+                                    <li>
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                currentPage === totalPages
+                                                    ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                            }`}
+                                            aria-label="Sonraki sayfa"
+                                        >
+                                            <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                                        </button>
+                                    </li>
 
                                     {/* Last Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(totalPages)}
-                                        disabled={currentPage === totalPages}
-                                        className={`p-2 rounded-lg transition-colors ${
-                                            currentPage === totalPages
-                                                ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
-                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
-                                        }`}
-                                        title="Son Sayfa"
-                                    >
-                                        <ChevronsRight className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
+                                    <li>
+                                        <button
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            disabled={currentPage === totalPages}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                currentPage === totalPages
+                                                    ? 'bg-slate-800/30 text-gray-600 cursor-not-allowed'
+                                                    : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                            }`}
+                                            aria-label="Son sayfa"
+                                        >
+                                            <ChevronsRight className="w-4 h-4" aria-hidden="true" />
+                                        </button>
+                                    </li>
+                                </ul>
+                            </nav>
                         )}
-                    </motion.div>
+                    </motion.section>
                 )}
-            </motion.div>
+            </motion.main>
 
             {/* Clear Confirm Modal */}
             <AnimatePresence>
@@ -1022,26 +1051,30 @@ export default function ResultsPage() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="clear-dialog-title"
+                        aria-describedby="clear-dialog-description"
                     >
-                        <motion.div
+                        <motion.article
                             initial={{ scale: 0.9 }}
                             animate={{ scale: 1 }}
                             exit={{ scale: 0.9 }}
                             className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full"
                         >
-                            <div className="flex items-center gap-4 mb-4">
-                                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                            <header className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center" aria-hidden="true">
                                     <AlertTriangle className="w-6 h-6 text-red-500" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">Sonuçları Temizle</h3>
+                                    <h2 id="clear-dialog-title" className="text-lg font-bold text-white">Sonuçları Temizle</h2>
                                     <p className="text-sm text-gray-400">Bu işlem geri alınamaz!</p>
                                 </div>
-                            </div>
-                            <p className="text-gray-300 mb-6">
+                            </header>
+                            <p id="clear-dialog-description" className="text-gray-300 mb-6">
                                 Tüm tarama sonuçları ({totalFiles} dosya, {totalRecords} ilan) kalıcı olarak silinecek.
                             </p>
-                            <div className="flex gap-3">
+                            <footer className="flex gap-3">
                                 <button
                                     onClick={() => setShowClearConfirm(false)}
                                     className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-gray-300 hover:bg-slate-700"
@@ -1053,11 +1086,11 @@ export default function ResultsPage() {
                                     disabled={clearing}
                                     className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
-                                    {clearing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                    {clearing ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Trash2 className="w-4 h-4" aria-hidden="true" />}
                                     {clearing ? 'Siliniyor...' : 'Evet, Sil'}
                                 </button>
-                            </div>
-                        </motion.div>
+                            </footer>
+                        </motion.article>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -1071,8 +1104,11 @@ export default function ResultsPage() {
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                         onClick={() => { setPreviewFile(null); setPreviewResult(null); }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="preview-dialog-title"
                     >
-                        <motion.div
+                        <motion.article
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
@@ -1080,9 +1116,9 @@ export default function ResultsPage() {
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Modal Header */}
-                            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                            <header className="flex items-center justify-between p-4 border-b border-slate-700">
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">Veri Önizleme</h3>
+                                    <h2 id="preview-dialog-title" className="text-lg font-bold text-white">Veri Önizleme</h2>
                                     <p className="text-sm text-gray-400">
                                         {previewResult ? `${previewResult.city || ''} - ${previewResult.platform} - ${previewResult.category}` : previewFile}
                                     </p>
@@ -1090,24 +1126,26 @@ export default function ResultsPage() {
                                 <button
                                     onClick={() => { setPreviewFile(null); setPreviewResult(null); }}
                                     className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                                    aria-label="Önizlemeyi kapat"
                                 >
-                                    <X className="w-5 h-5 text-gray-400" />
+                                    <X className="w-5 h-5 text-gray-400" aria-hidden="true" />
                                 </button>
-                            </div>
+                            </header>
 
                             {/* Modal Content */}
-                            <div className="flex-1 overflow-auto p-4">
+                            <section className="flex-1 overflow-auto p-4" aria-label="Önizleme içeriği">
                                 {previewLoading ? (
-                                    <div className="flex items-center justify-center py-12">
-                                        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                    <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
+                                        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" aria-hidden="true"></div>
+                                        <span className="sr-only">Yükleniyor...</span>
                                     </div>
                                 ) : previewData?.data?.length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        <table className="w-full text-sm" aria-label="Önizleme verileri">
                                             <thead>
                                                 <tr className="border-b border-slate-700">
                                                     {Object.keys(previewData.data[0]).slice(0, 8).map((key) => (
-                                                        <th key={key} className="text-left py-2 px-3 text-gray-400 font-medium whitespace-nowrap">
+                                                        <th key={key} scope="col" className="text-left py-2 px-3 text-gray-400 font-medium whitespace-nowrap">
                                                             {key}
                                                         </th>
                                                     ))}
@@ -1125,17 +1163,17 @@ export default function ResultsPage() {
                                                 ))}
                                             </tbody>
                                         </table>
-                                        <p className="text-center text-gray-500 text-sm mt-4">
+                                        <p className="text-center text-gray-500 text-sm mt-4" aria-live="polite">
                                             {previewData.showing} / {previewData.total} kayıt gösteriliyor
                                         </p>
                                     </div>
                                 ) : (
                                     <p className="text-center text-gray-400 py-12">Veri bulunamadı</p>
                                 )}
-                            </div>
+                            </section>
 
                             {/* Modal Footer */}
-                            <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
+                            <footer className="p-4 border-t border-slate-700 flex justify-end gap-3">
                                 <button
                                     onClick={() => {
                                         setPreviewFile(null);
@@ -1149,14 +1187,14 @@ export default function ResultsPage() {
                                     onClick={() => previewResult && downloadExcel(previewResult)}
                                     className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"
                                 >
-                                    <Download className="w-4 h-4" />
+                                    <Download className="w-4 h-4" aria-hidden="true" />
                                     Tümünü İndir
                                 </button>
-                            </div>
-                        </motion.div>
+                            </footer>
+                        </motion.article>
                     </motion.div>
                 )}
             </AnimatePresence>
-        </motion.div>
+        </motion.section>
     );
 }

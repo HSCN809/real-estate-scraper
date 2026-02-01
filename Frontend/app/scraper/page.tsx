@@ -43,40 +43,41 @@ const platforms = [
 
 export default function ScraperPage() {
     return (
-        <motion.div
+        <motion.section
             className="space-y-8 relative z-10"
             variants={container}
             initial="hidden"
             animate="show"
+            aria-labelledby="scraper-title"
         >
             {/* Header */}
-            <motion.div variants={item}>
-                <h1 className="art-title gradient-art-blue mb-3">
+            <motion.header variants={item}>
+                <h1 id="scraper-title" className="art-title gradient-art-blue mb-3">
                     Platform Seçimi
                 </h1>
                 <p className="text-xl text-gray-300">
                     Veri toplamak istediğiniz platformu seçin ⚡
                 </p>
-            </motion.div>
+            </motion.header>
 
             {/* Platform Cards */}
-            <div className="grid grid-cols-1 gap-8">
+            <nav className="grid grid-cols-1 gap-8" aria-label="Platform seçimi">
                 {platforms.map((platform, index) => (
-                    <motion.div key={platform.id} variants={item}>
-                        <Link href={`/scraper/${platform.id}`}>
+                    <motion.article key={platform.id} variants={item}>
+                        <Link href={`/scraper/${platform.id}`} aria-label={`${platform.name} platformunda taramaya başla`}>
                             <ArtCard glowColor={platform.glowColor} className="group cursor-pointer relative overflow-visible">
                                 {/* Decorative floating element */}
-                                <div className={`absolute -z-10 -inset-4 bg-gradient-to-r ${platform.gradient} opacity-0 group-hover:opacity-20 blur-3xl transition-opacity duration-500 rounded-3xl`} />
+                                <div className={`absolute -z-10 -inset-4 bg-gradient-to-r ${platform.gradient} opacity-0 group-hover:opacity-20 blur-3xl transition-opacity duration-500 rounded-3xl`} aria-hidden="true" />
 
                                 <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
                                     {/* Icon Section */}
-                                    <div className="relative">
-                                        <div className="text-8xl md:text-9xl group-hover:scale-110 transition-transform duration-300">
+                                    <figure className="relative" aria-hidden="true">
+                                        <span className="text-8xl md:text-9xl group-hover:scale-110 transition-transform duration-300 block">
                                             {platform.icon}
-                                        </div>
+                                        </span>
                                         <platform.Icon className={`absolute -top-4 -right-4 w-12 h-12 ${index === 0 ? 'text-blue-400' : 'text-pink-400'
                                             } group-hover:rotate-12 transition-transform`} />
-                                    </div>
+                                    </figure>
 
                                     {/* Content */}
                                     <div className="flex-1">
@@ -89,9 +90,9 @@ export default function ScraperPage() {
                                         </p>
 
                                         {/* Features Grid */}
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                            {platform.features.map((feature, idx) => (
-                                                <div
+                                        <ul className="grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`${platform.name} desteklenen kategoriler`}>
+                                            {platform.features.map((feature) => (
+                                                <li
                                                     key={feature}
                                                     className={`p-3 rounded-xl bg-gradient-to-br ${platform.gradient} bg-opacity-10 border ${index === 0 ? 'border-blue-500/30' : 'border-pink-500/30'
                                                         } text-center transition-transform hover:scale-105`}
@@ -100,27 +101,27 @@ export default function ScraperPage() {
                                                         }`}>
                                                         {feature}
                                                     </span>
-                                                </div>
+                                                </li>
                                             ))}
-                                        </div>
+                                        </ul>
                                     </div>
 
                                     {/* Arrow */}
-                                    <div className="text-6xl opacity-50 group-hover:opacity-100 group-hover:translate-x-4 transition-all duration-300">
+                                    <span className="text-6xl opacity-50 group-hover:opacity-100 group-hover:translate-x-4 transition-all duration-300" aria-hidden="true">
                                         →
-                                    </div>
+                                    </span>
                                 </div>
                             </ArtCard>
                         </Link>
-                    </motion.div>
+                    </motion.article>
                 ))}
-            </div>
+            </nav>
 
             {/* Info Card */}
-            <motion.div variants={item}>
+            <motion.aside variants={item} aria-label="İpucu">
                 <ArtCard glowColor="purple">
                     <div className="flex items-start gap-4">
-                        <Sparkles className="w-8 h-8 text-purple-400 flex-shrink-0" />
+                        <Sparkles className="w-8 h-8 text-purple-400 flex-shrink-0" aria-hidden="true" />
                         <div>
                             <h3 className="text-xl font-bold text-white mb-2">💡 İpucu</h3>
                             <p className="text-gray-300">
@@ -129,7 +130,7 @@ export default function ScraperPage() {
                         </div>
                     </div>
                 </ArtCard>
-            </motion.div>
-        </motion.div>
+            </motion.aside>
+        </motion.section>
     );
 }
