@@ -418,33 +418,33 @@ export default function ResultsPage() {
                     <fieldset className="flex rounded-xl overflow-hidden border border-slate-700" role="group" aria-label="Görünüm modu">
                         <button
                             onClick={() => setViewMode('map')}
-                            className={`p-2.5 transition-colors ${viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Harita"
                             aria-pressed={viewMode === 'map'}
                         >
                             <Map className="w-4 h-4" aria-hidden="true" />
-                            <span className="sr-only">Harita görünümü</span>
+                            <span className="text-sm font-medium">Harita</span>
                         </button>
                         <button
                             onClick={() => setViewMode('table')}
-                            className={`p-2.5 transition-colors ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Tablo"
                             aria-pressed={viewMode === 'table'}
                         >
                             <List className="w-4 h-4" aria-hidden="true" />
-                            <span className="sr-only">Tablo görünümü</span>
+                            <span className="text-sm font-medium">Tablo</span>
                         </button>
                         <button
                             onClick={() => {
                                 setPriceDataLoading(true); // Show loading immediately
                                 setViewMode('charts');
                             }}
-                            className={`p-2.5 transition-colors ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
+                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
                             title="Grafikler"
                             aria-pressed={viewMode === 'charts'}
                         >
                             <BarChart3 className="w-4 h-4" aria-hidden="true" />
-                            <span className="sr-only">Grafik görünümü</span>
+                            <span className="text-sm font-medium">Grafikler</span>
                         </button>
                     </fieldset>
 
@@ -481,32 +481,35 @@ export default function ResultsPage() {
                             }
                         }}
                         disabled={exporting}
-                        className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
+                        className="px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all flex items-center gap-2"
                         title="Excel'e Aktar"
                         aria-label="Excel'e aktar"
                     >
-                        <Download className={`w-5 h-5 text-green-400 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
+                        <Download className={`w-4 h-4 text-green-400 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
+                        <span className="text-sm font-medium text-green-400">Excel</span>
                     </button>
 
                     {results.length > 0 && (
                         <button
                             onClick={() => setShowClearConfirm(true)}
-                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                            className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all flex items-center gap-2"
                             title="Sonuçları Temizle"
                             aria-label="Sonuçları temizle"
                         >
-                            <Trash2 className="w-5 h-5 text-red-400" aria-hidden="true" />
+                            <Trash2 className="w-4 h-4 text-red-400" aria-hidden="true" />
+                            <span className="text-sm font-medium text-red-400">Temizle</span>
                         </button>
                     )}
 
                     <button
                         onClick={fetchResults}
                         disabled={loading}
-                        className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all"
+                        className="px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-700/50 transition-all flex items-center gap-2"
                         title="Yenile"
                         aria-label="Verileri yenile"
                     >
-                        <RefreshCw className={`w-5 h-5 text-gray-300 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+                        <RefreshCw className={`w-4 h-4 text-gray-300 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+                        <span className="text-sm font-medium text-gray-300">Yenile</span>
                     </button>
                 </nav>
             </motion.header>
