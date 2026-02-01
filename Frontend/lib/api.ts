@@ -84,8 +84,8 @@ export interface SubtypesResponse {
     error?: string;
 }
 
-export async function getSubtypes(listingType: string, category: string): Promise<SubtypesResponse> {
-    const response = await fetch(`${API_BASE_URL}/config/subtypes?listing_type=${listingType}&category=${category}`);
+export async function getSubtypes(listingType: string, category: string, platform: string = 'hepsiemlak'): Promise<SubtypesResponse> {
+    const response = await fetch(`${API_BASE_URL}/config/subtypes?listing_type=${listingType}&category=${category}&platform=${platform}`);
     if (!response.ok) {
         throw new Error('Alt kategoriler alınamadı');
     }

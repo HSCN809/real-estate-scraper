@@ -59,33 +59,36 @@ async def get_categories():
     }
 
 @router.get("/config/subtypes")
-async def get_subtypes(listing_type: str, category: str):
+async def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
     """
     Belirli bir kategori için alt tipleri JSON dosyasından oku.
     JSON dosyası yoksa boş liste döner.
-    Örnek: /config/subtypes?listing_type=kiralik&category=arsa
+    Örnek: /config/subtypes?listing_type=kiralik&category=arsa&platform=hepsiemlak
     """
-    from scrapers.hepsiemlak.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
-    
+    if platform == "emlakjet":
+        from scrapers.emlakjet.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
+    else:
+        from scrapers.hepsiemlak.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
+
     # JSON dosyasından oku
     subtypes = fetch_subtypes(listing_type, category)
-    
+
     if not SUBCATEGORIES_JSON_PATH.exists():
         return {
             "subtypes": [],
-            "error": "Subcategories JSON dosyası bulunamadı. 'python -m scrapers.hepsiemlak.subtype_fetcher' çalıştırın."
+            "error": f"{platform} subcategories JSON dosyası bulunamadı."
         }
-    
+
     return {"subtypes": subtypes, "cached": True}
 
 def run_emlakjet_task(request: ScrapeRequest):
     from scrapers.emlakjet.main import EmlakJetScraper
-    
+
     manager = DriverManager()
     try:
         driver = manager.start()
         config = get_emlakjet_config()
-        
+
         # Reset and start status
         task_status.reset()
         task_status.set_running(True)
@@ -93,35 +96,36 @@ def run_emlakjet_task(request: ScrapeRequest):
 
         def progress_callback(message, current=0, total=0, progress=0):
             task_status.update(message=message, current=current, total=total, progress=progress)
-        
+
         # Construct base URL based on inputs
-        # Logic adapted from original main.py
-        category_path = config.categories[request.listing_type].get(request.category, '')
-        base_url = config.base_url + category_path
-        
-        # Pass parameters to scraper (Refactor required on Scraper class)
-        # Assuming we will refactor the scraper to accept direct options
+        # subtype_path varsa onu kullan, yoksa ana kategori
+        if request.subtype_path:
+            base_url = config.base_url + request.subtype_path
+            logger.info(f"Using subtype path: {request.subtype_path}")
+        else:
+            category_path = config.categories[request.listing_type].get(request.category, '')
+            base_url = config.base_url + category_path
+
         scraper = EmlakJetScraper(
             driver=driver,
             base_url=base_url,
             category=request.category,
-            listing_type=request.listing_type  # Klasör yapısı için
-            # We will add a new init param or method to set simple mode
-            # simple_mode=True
+            listing_type=request.listing_type,
+            subtype_path=request.subtype_path
         )
-        
-        # For now, we need to handle the interactive parts or bypass them.
-        # This part assumes the REFACTOR step has been done to add `start_scraping_api` or similar.
+
+        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, subtype_path={request.subtype_path}, cities={request.cities}")
+
         if hasattr(scraper, 'start_scraping_api'):
-             scraper.start_scraping_api(
-                 cities=request.cities,
-                 districts=request.districts,
-                 max_pages=request.max_pages,
-                 progress_callback=progress_callback
-             )
+            scraper.start_scraping_api(
+                cities=request.cities,
+                districts=request.districts,
+                max_pages=request.max_pages,
+                progress_callback=progress_callback
+            )
         else:
             logger.warning("Scraper api method not found (Refactor needed)")
-            
+
     except Exception as e:
         logger.error(f"EmlakJet task error: {e}")
     finally:

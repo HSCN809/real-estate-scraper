@@ -67,7 +67,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
             for category, path in config.categories[listing_type].items():
                 url = f"{config.base_url}{path}"
                 logger.info(f"Fetching: {listing_type}/{category} -> {url}")
-                print(f"📥 Çekiliyor: {listing_type}/{category}")
+                print(f"[>] Cekiliyor: {listing_type}/{category}")
                 
                 try:
                     driver.get(url)
@@ -86,7 +86,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                             break
                         except Exception as e:
                             if attempt < 2:
-                                print(f"   ⚠️ Dropdown bulunamadı, tekrar deneniyor... ({attempt + 1}/3)")
+                                print(f"   [!] Dropdown bulunamadi, tekrar deneniyor... ({attempt + 1}/3)")
                                 time.sleep(2)
                             continue
                     
@@ -122,7 +122,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                             continue
                     
                     all_subcategories[listing_type][category] = subtypes
-                    print(f"   ✓ {len(subtypes)} alt kategori bulundu")
+                    print(f"   [+] {len(subtypes)} alt kategori bulundu")
                     
                 except Exception as e:
                     logger.error(f"Error fetching {category}: {e}")
@@ -162,22 +162,22 @@ def get_cached_subtypes(listing_type: str, category: str) -> Optional[List[Dict]
 
 
 def ensure_subcategories_exist():
-    """JSON dosyası yoksa Selenium ile çek ve kaydet"""
+    """JSON dosyasi yoksa Selenium ile cek ve kaydet"""
     if not SUBCATEGORIES_JSON_PATH.exists():
-        print("⚠️ Subcategories JSON dosyası bulunamadı. Selenium ile çekiliyor...")
+        print("[!] Subcategories JSON dosyasi bulunamadi. Selenium ile cekiliyor...")
         data = fetch_all_subcategories_with_selenium()
         save_subcategories_to_json(data)
-        print("✅ Subcategories kaydedildi!")
+        print("[+] Subcategories kaydedildi!")
     else:
-        print("✓ Subcategories JSON dosyası mevcut")
+        print("[OK] Subcategories JSON dosyasi mevcut")
 
 
 def refresh_subcategories():
-    """Subcategories'i yeniden çek ve kaydet"""
-    print("🔄 Subcategories yenileniyor...")
+    """Subcategories'i yeniden cek ve kaydet"""
+    print("[*] Subcategories yenileniyor...")
     data = fetch_all_subcategories_with_selenium()
     save_subcategories_to_json(data)
-    print("✅ Subcategories güncellendi!")
+    print("[+] Subcategories guncellendi!")
 
 
 # CLI için

@@ -71,21 +71,14 @@ export default function PlatformScraperPage() {
         fetchCategories();
     }, [platform, listingType]);
 
-    // Fetch subtypes when category changes (HepsiEmlak only)
+    // Fetch subtypes when category changes (Both HepsiEmlak and EmlakJet)
     useEffect(() => {
         const fetchSubtypesData = async () => {
-            // Only for HepsiEmlak and specific categories that have subtypes
-            if (platform !== 'hepsiemlak') {
-                setSubtypes([]);
-                setSelectedSubtype(null);
-                return;
-            }
-
             setSubtypesLoading(true);
             setSelectedSubtype(null);
 
             try {
-                const response = await getSubtypes(listingType, category);
+                const response = await getSubtypes(listingType, category, platform);
                 setSubtypes(response.subtypes || []);
             } catch (error) {
                 console.error('Failed to fetch subtypes:', error);
@@ -197,37 +190,35 @@ export default function PlatformScraperPage() {
                         />
                     </div>
 
-                    {/* Subcategory - Only for HepsiEmlak when subtypes exist */}
-                    {platform === 'hepsiemlak' && (
-                        <div>
-                            <Select
-                                label="📋 Alt Kategori (Opsiyonel)"
-                                value={selectedSubtype?.id || ''}
-                                onChange={(e) => {
-                                    const selected = subtypes.find(s => s.id === e.target.value);
-                                    setSelectedSubtype(selected || null);
-                                }}
-                                options={[
-                                    {
-                                        value: '',
-                                        label: subtypesLoading
-                                            ? '⏳ Alt kategoriler yükleniyor...'
-                                            : subtypes.length === 0
-                                                ? '🔄 Alt kategori bulunamadı'
-                                                : '🔄 Tümü (Alt kategori seçme)'
-                                    },
-                                    ...subtypes.map((s) => ({ value: s.id, label: `📋 ${s.name}` }))
-                                ]}
-                                disabled={subtypesLoading || subtypes.length === 0}
-                            />
-                            {subtypesLoading && (
-                                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Alt kategoriler alınıyor...
-                                </p>
-                            )}
-                        </div>
-                    )}
+                    {/* Subcategory - For both HepsiEmlak and EmlakJet */}
+                    <div>
+                        <Select
+                            label="📋 Alt Kategori (Opsiyonel)"
+                            value={selectedSubtype?.id || ''}
+                            onChange={(e) => {
+                                const selected = subtypes.find(s => s.id === e.target.value);
+                                setSelectedSubtype(selected || null);
+                            }}
+                            options={[
+                                {
+                                    value: '',
+                                    label: subtypesLoading
+                                        ? '⏳ Alt kategoriler yükleniyor...'
+                                        : subtypes.length === 0
+                                            ? '🔄 Alt kategori bulunamadı'
+                                            : '🔄 Tümü (Alt kategori seçme)'
+                                },
+                                ...subtypes.map((s) => ({ value: s.id, label: `📋 ${s.name}` }))
+                            ]}
+                            disabled={subtypesLoading || subtypes.length === 0}
+                        />
+                        {subtypesLoading && (
+                            <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Alt kategoriler alınıyor...
+                            </p>
+                        )}
+                    </div>
 
                     {/* Cities */}
                     <div>

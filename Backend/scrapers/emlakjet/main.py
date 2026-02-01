@@ -51,19 +51,29 @@ class EmlakJetScraper(BaseScraper):
         base_url: str = "https://www.emlakjet.com",
         category: str = "konut",
         selected_locations: Optional[Dict] = None,
-        listing_type: Optional[str] = None  # satilik/kiralik
+        listing_type: Optional[str] = None,  # satilik/kiralik
+        subtype_path: Optional[str] = None  # Alt kategori URL path'i (örn: /satilik-daire)
     ):
         super().__init__(driver, base_url, "emlakjet", category, selected_locations)
 
         self.emlakjet_config = get_emlakjet_config()
-        self.listing_type = listing_type  # Kaydet
+        self.listing_type = listing_type
+        self.subtype_path = subtype_path
 
-        # Hiyerarşik klasör yapısı: Outputs/EmlakJet Output/{listing_type}/{category}/
+        # Alt kategori adını çıkar
+        subtype_name = None
+        if subtype_path:
+            # /satilik-daire -> daire
+            path_part = subtype_path.strip('/').split('-')
+            if len(path_part) >= 2:
+                subtype_name = path_part[-1].replace('-', '_')
+
+        # Hiyerarşik klasör yapısı: Outputs/EmlakJet Output/{listing_type}/{category}/{subtype}/
         self.exporter = DataExporter(
             output_dir="Outputs/EmlakJet Output",
             listing_type=listing_type,
             category=category,
-            subtype=None  # EmlakJet'te subtype yok şimdilik
+            subtype=subtype_name
         )
 
         # Initialize the appropriate parser
@@ -78,11 +88,27 @@ class EmlakJetScraper(BaseScraper):
         """Use the category parser to parse details"""
         return self.parser.parse_category_details(quick_info, title)
     
+    @property
+    def subtype_name(self) -> Optional[str]:
+        """Extract subtype name from subtype_path for file naming"""
+        if self.subtype_path:
+            # /satilik-daire -> daire
+            path_part = self.subtype_path.strip('/').split('-')
+            if len(path_part) >= 2:
+                return path_part[-1].replace('-', '_')
+        return None
+
+    def get_file_prefix(self) -> str:
+        """Generate file prefix with subtype if available"""
+        if self.subtype_name:
+            return f"emlakjet_{self.listing_type}_{self.category}_{self.subtype_name}"
+        return f"emlakjet_{self.listing_type}_{self.category}"
+
     def get_location_options(self, location_type: str, current_url: str) -> List[Dict]:
         """Get location options (il, ilçe, mahalle) from current page"""
         try:
             logger.info(f"Getting {location_type} options...")
-            
+
             self.driver.get(current_url)
             self.random_long_wait()  # Stealth: lokasyon listesi
             
@@ -328,18 +354,21 @@ class EmlakJetScraper(BaseScraper):
     
     def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_pages: int = 1, progress_callback=None):
         """API entry point for scraping without user interaction"""
-        print(f"\n🚀 API: EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
+        subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
+        print(f"\n🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper başlatılıyor")
 
         if progress_callback:
-            progress_callback(f"{self.category.capitalize()} taraması başlatılıyor...", 0, 100, 0)
+            progress_callback(f"{self.category.capitalize()}{subtype_info} taraması başlatılıyor...", 0, 100, 0)
 
         try:
-            # Map city names to indices if possible, or search logic?
-            # Existing select_provinces logic is index based on scraping "all cities" list.
-            # We need to find indices matching names.
+            # subtype_path varsa onu kullan, yoksa base_url
+            start_url = self.base_url
+            if self.subtype_path:
+                start_url = f"https://www.emlakjet.com{self.subtype_path}"
+                print(f"📋 Alt kategori kullanılıyor: {self.subtype_path}")
 
             print("Getting province list...")
-            all_provinces = self.get_location_options("İller", self.base_url)
+            all_provinces = self.get_location_options("İller", start_url)
 
             api_indices = []
             if cities:
@@ -436,7 +465,7 @@ class EmlakJetScraper(BaseScraper):
             if self.all_listings:
                 self.exporter.save_excel(
                     self.all_listings,
-                    prefix=f"emlakjet_{self.category}_ilanlari"
+                    prefix=self.get_file_prefix()
                 )
                 print(f"\n✅ Scraping tamamlandı! Toplam {len(self.all_listings)} ilan bulundu.")
             else:
