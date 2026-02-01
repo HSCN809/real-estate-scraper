@@ -29,6 +29,7 @@ import {
 import { useEffect, useState, useRef } from 'react';
 import { getResults, exportToExcel } from '@/lib/api';
 import { ScrapeResult } from '@/types';
+import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
 
 
 // Animation variants
@@ -79,6 +80,10 @@ export default function ResultsPage() {
     // Refs for click outside detection
     const cityDropdownRef = useRef<HTMLDivElement>(null);
     const districtDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Search states for city/district dropdowns
+    const [citySearch, setCitySearch] = useState('');
+    const [districtSearch, setDistrictSearch] = useState('');
 
     // Preview Modal
     const [previewData, setPreviewData] = useState<any>(null);
@@ -550,82 +555,48 @@ export default function ResultsPage() {
             </motion.section>
 
             {/* Filters */}
-            <motion.form variants={itemVariants} className="flex flex-wrap gap-3" role="search" aria-label="Veri filtreleri" onSubmit={(e) => e.preventDefault()}>
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Filter className="w-4 h-4" aria-hidden="true" />
-                    <span id="filter-label">Filtre:</span>
-                </div>
-
+            <motion.form variants={itemVariants} className="flex flex-wrap gap-4 items-end" role="search" aria-label="Veri filtreleri" onSubmit={(e) => e.preventDefault()}>
                 {/* Platform Filter */}
-                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="Platform filtresi">
-                    <button
-                        onClick={() => setPlatformFilter('all')}
-                        className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
-                        aria-pressed={platformFilter === 'all'}
-                    >
-                        Tümü
-                    </button>
-                    {platforms.map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPlatformFilter(p)}
-                            className={`px-3 py-1.5 text-sm transition-colors ${platformFilter === p ? 'bg-slate-700 text-white' : 'bg-slate-800/50 text-gray-400'}`}
-                            aria-pressed={platformFilter === p}
-                        >
-                            {p}
-                        </button>
-                    ))}
-                </fieldset>
+                <SearchableDropdown
+                    id="platform-filter"
+                    label="Platform"
+                    value={platformFilter}
+                    onChange={setPlatformFilter}
+                    options={platforms}
+                    icon={<Filter className="w-3 h-3" aria-hidden="true" />}
+                    focusRingColor="focus:ring-blue-500"
+                />
+
+                {/* Listing Type Filter */}
+                <SearchableDropdown
+                    id="listing-type-filter"
+                    label="İlan Tipi"
+                    value={listingTypeFilter}
+                    onChange={setListingTypeFilter}
+                    options={listingTypes.filter(Boolean) as string[]}
+                    focusRingColor="focus:ring-amber-500"
+                />
 
                 {/* Category Filter */}
-                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="Kategori filtresi">
-                    {categories.map(c => (
-                        <button
-                            key={c}
-                            onClick={() => setCategoryFilter(categoryFilter === c ? 'all' : c)}
-                            className={`px-3 py-1.5 text-sm transition-colors ${categoryFilter === c ? 'bg-emerald-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
-                            aria-pressed={categoryFilter === c}
-                        >
-                            {c}
-                        </button>
-                    ))}
-                </fieldset>
+                <SearchableDropdown
+                    id="category-filter"
+                    label="Kategori"
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                    options={categories}
+                    focusRingColor="focus:ring-emerald-500"
+                />
 
-                {/* Listing Type Filter (Satılık/Kiralık) */}
-                <fieldset className="flex rounded-lg overflow-hidden border border-slate-700" role="group" aria-label="İlan tipi filtresi">
-                    {listingTypes.map(lt => (
-                        <button
-                            key={lt}
-                            onClick={() => setListingTypeFilter(listingTypeFilter === lt ? 'all' : (lt || 'all'))}
-                            className={`px-3 py-1.5 text-sm transition-colors ${listingTypeFilter === lt ? 'bg-amber-600 text-white' : 'bg-slate-800/50 text-gray-400'}`}
-                            aria-pressed={listingTypeFilter === lt}
-                        >
-                            {lt}
-                        </button>
-                    ))}
-                </fieldset>
-
-                {/* Subtype Filter (Alt Kategori) - Custom Dropdown */}
+                {/* Subtype Filter */}
                 {subtypes.length > 0 && (
-                    <div className="relative">
-                        <label htmlFor="subtype-filter" className="sr-only">Alt Kategori</label>
-                        <select
-                            id="subtype-filter"
-                            value={subtypeFilter}
-                            onChange={(e) => setSubtypeFilter(e.target.value)}
-                            className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none pr-8 cursor-pointer"
-                        >
-                            <option value="all">Alt Kategori: Tümü</option>
-                            {subtypes.map(st => (
-                                <option key={st} value={st}>{st}</option>
-                            ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none" aria-hidden="true">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </div>
-                    </div>
+                    <SearchableDropdown
+                        id="subtype-filter"
+                        label="Alt Kategori"
+                        value={subtypeFilter}
+                        onChange={setSubtypeFilter}
+                        options={subtypes}
+                        focusRingColor="focus:ring-purple-500"
+                    />
                 )}
             </motion.form>
 
@@ -703,57 +674,81 @@ export default function ResultsPage() {
                                     onClick={() => {
                                         setCityDropdownOpen(!cityDropdownOpen);
                                         setDistrictDropdownOpen(false);
+                                        if (!cityDropdownOpen) setCitySearch('');
                                     }}
-                                    className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2 min-w-[160px]"
+                                    className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 hover:bg-slate-700/50 transition-colors flex items-center min-w-[160px]"
                                 >
-                                    <span>
+                                    <span className="flex-1 text-left">
                                         {cityFilter.length === 0 ? 'İl Seçin' :
                                          cityFilter.length === cities.length ? 'Tüm İller' :
                                          `${cityFilter.length} İl Seçili`}
                                     </span>
-                                    <svg className={`w-4 h-4 transition-transform ${cityDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className={`w-4 h-4 text-gray-400 transition-transform ml-2 flex-shrink-0 ${cityDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                 </button>
 
                                 {cityDropdownOpen && (
-                                    <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
-                                        {/* Select All */}
-                                        <button
-                                            onClick={toggleAllCitiesWithReset}
-                                            className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
-                                        >
-                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                                cityFilter.length === cities.length ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
-                                            }`}>
-                                                {cityFilter.length === cities.length && (
-                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
+                                    <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                                        {/* Search Input */}
+                                        <div className="p-2 border-b border-slate-700">
+                                            <div className="relative">
+                                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                                                <input
+                                                    type="text"
+                                                    value={citySearch}
+                                                    onChange={(e) => setCitySearch(e.target.value)}
+                                                    placeholder="İl ara..."
+                                                    className="w-full pl-7 pr-2 py-1.5 text-sm bg-slate-900/50 border border-slate-600 rounded text-gray-300 placeholder-gray-500 focus:outline-none focus:border-slate-500"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
                                             </div>
-                                            <span className="text-white font-medium">Tümünü Seç</span>
-                                        </button>
+                                        </div>
 
-                                        {/* City List */}
-                                        {cities.map(city => (
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {/* Select All */}
                                             <button
-                                                key={city}
-                                                onClick={() => handleCityFilterChangeWithReset(city)}
-                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                                onClick={toggleAllCitiesWithReset}
+                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
                                             >
                                                 <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                                    cityFilter.includes(city) ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+                                                    cityFilter.length === cities.length ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
                                                 }`}>
-                                                    {cityFilter.includes(city) && (
+                                                    {cityFilter.length === cities.length && (
                                                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                         </svg>
                                                     )}
                                                 </div>
-                                                <span className="text-gray-300">{city}</span>
+                                                <span className="text-white font-medium">Tümünü Seç</span>
                                             </button>
-                                        ))}
+
+                                            {/* City List */}
+                                            {cities.filter(city => city.toLowerCase().includes(citySearch.toLowerCase())).length > 0 ? (
+                                                cities.filter(city => city.toLowerCase().includes(citySearch.toLowerCase())).map(city => (
+                                                    <button
+                                                        key={city}
+                                                        onClick={() => handleCityFilterChangeWithReset(city)}
+                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                                    >
+                                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                            cityFilter.includes(city) ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+                                                        }`}>
+                                                            {cityFilter.includes(city) && (
+                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-gray-300">{city}</span>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                    Sonuç bulunamadı
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -765,63 +760,87 @@ export default function ResultsPage() {
                                         if (cityFilter.length > 0 && districts.length > 0) {
                                             setDistrictDropdownOpen(!districtDropdownOpen);
                                             setCityDropdownOpen(false);
+                                            if (!districtDropdownOpen) setDistrictSearch('');
                                         }
                                     }}
                                     disabled={cityFilter.length === 0 || districts.length === 0}
-                                    className={`px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 transition-colors flex items-center gap-2 min-w-[160px] ${
+                                    className={`px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-gray-300 transition-colors flex items-center min-w-[160px] ${
                                         cityFilter.length === 0 || districts.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-700/50'
                                     }`}
                                 >
-                                    <span>
+                                    <span className="flex-1 text-left">
                                         {cityFilter.length === 0 ? 'Önce İl Seçin' :
                                          districts.length === 0 ? 'İlçe Yok' :
                                          districtFilter.length === 0 ? 'İlçe Seçin' :
                                          districtFilter.length === districts.length ? 'Tüm İlçeler' :
                                          `${districtFilter.length} İlçe Seçili`}
                                     </span>
-                                    <svg className={`w-4 h-4 transition-transform ${districtDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className={`w-4 h-4 text-gray-400 transition-transform ml-2 flex-shrink-0 ${districtDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                 </button>
 
                                 {districtDropdownOpen && districts.length > 0 && (
-                                    <div className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
-                                        {/* Select All */}
-                                        <button
-                                            onClick={toggleAllDistrictsWithReset}
-                                            className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
-                                        >
-                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                                districtFilter.length === districts.length ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
-                                            }`}>
-                                                {districtFilter.length === districts.length && (
-                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
+                                    <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                                        {/* Search Input */}
+                                        <div className="p-2 border-b border-slate-700">
+                                            <div className="relative">
+                                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                                                <input
+                                                    type="text"
+                                                    value={districtSearch}
+                                                    onChange={(e) => setDistrictSearch(e.target.value)}
+                                                    placeholder="İlçe ara..."
+                                                    className="w-full pl-7 pr-2 py-1.5 text-sm bg-slate-900/50 border border-slate-600 rounded text-gray-300 placeholder-gray-500 focus:outline-none focus:border-slate-500"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
                                             </div>
-                                            <span className="text-white font-medium">Tümünü Seç</span>
-                                        </button>
+                                        </div>
 
-                                        {/* District List */}
-                                        {districts.map(district => (
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {/* Select All */}
                                             <button
-                                                key={district}
-                                                onClick={() => handleDistrictFilterChangeWithReset(district)}
-                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                                onClick={toggleAllDistrictsWithReset}
+                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
                                             >
                                                 <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                                    districtFilter.includes(district) ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
+                                                    districtFilter.length === districts.length ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
                                                 }`}>
-                                                    {districtFilter.includes(district) && (
+                                                    {districtFilter.length === districts.length && (
                                                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                         </svg>
                                                     )}
                                                 </div>
-                                                <span className="text-gray-300">{district}</span>
+                                                <span className="text-white font-medium">Tümünü Seç</span>
                                             </button>
-                                        ))}
+
+                                            {/* District List */}
+                                            {districts.filter(district => district.toLowerCase().includes(districtSearch.toLowerCase())).length > 0 ? (
+                                                districts.filter(district => district.toLowerCase().includes(districtSearch.toLowerCase())).map(district => (
+                                                    <button
+                                                        key={district}
+                                                        onClick={() => handleDistrictFilterChangeWithReset(district)}
+                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2"
+                                                    >
+                                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                                            districtFilter.includes(district) ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500'
+                                                        }`}>
+                                                            {districtFilter.includes(district) && (
+                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-gray-300">{district}</span>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                    Sonuç bulunamadı
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>

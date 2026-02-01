@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -32,7 +32,7 @@ const REGIONS: Record<string, string[]> = {
     'Akdeniz': ['Antalya', 'Adana', 'Mersin', 'Hatay', 'Kahramanmaraş', 'Osmaniye', 'Isparta', 'Burdur'],
     'İç Anadolu': ['Ankara', 'Konya', 'Kayseri', 'Eskişehir', 'Sivas', 'Yozgat', 'Aksaray', 'Niğde', 'Nevşehir', 'Kırşehir', 'Kırıkkale', 'Karaman', 'Çankırı'],
     'Karadeniz': ['Samsun', 'Trabzon', 'Ordu', 'Zonguldak', 'Tokat', 'Çorum', 'Amasya', 'Giresun', 'Rize', 'Artvin', 'Sinop', 'Kastamonu', 'Bartın', 'Karabük', 'Düzce', 'Bolu', 'Gümüşhane', 'Bayburt'],
-    'Doğu Anadolu': ['Erzurum', 'Malatya', 'Elazığ', 'Van', 'Ağrı', 'Erzincan', 'Kars', 'Iğdır', 'Muş', 'Bitlis', 'Bingöl', 'Tunceli', 'Hakkâri', 'Ardahan'],
+    'Doğu Anadolu': ['Erzurum', 'Malatya', 'Elazığ', 'Van', 'Ağrı', 'Erzincan', 'Kars', 'Iğdır', 'Muş', 'Bitlis', 'Bingöl', 'Tunceli', 'Hakkari', 'Ardahan'],
     'Güneydoğu Anadolu': ['Gaziantep', 'Şanlıurfa', 'Diyarbakır', 'Mardin', 'Batman', 'Siirt', 'Şırnak', 'Adıyaman', 'Kilis'],
 };
 
@@ -46,7 +46,7 @@ const CITY_NAMES: Record<string, string> = {
     'Canakkale': 'Çanakkale', 'Cankiri': 'Çankırı', 'Corum': 'Çorum', 'Denizli': 'Denizli',
     'Diyarbakir': 'Diyarbakır', 'Duzce': 'Düzce', 'Edirne': 'Edirne', 'Elazig': 'Elazığ',
     'Erzincan': 'Erzincan', 'Erzurum': 'Erzurum', 'Eskisehir': 'Eskişehir', 'Gaziantep': 'Gaziantep',
-    'Giresun': 'Giresun', 'Gumushane': 'Gümüşhane', 'Hakkari': 'Hakkâri', 'Hatay': 'Hatay',
+    'Giresun': 'Giresun', 'Gumushane': 'Gümüşhane', 'Hakkari': 'Hakkari', 'Hakkâri': 'Hakkari', 'Hatay': 'Hatay',
     'Igdir': 'Iğdır', 'Isparta': 'Isparta', 'Istanbul': 'İstanbul', 'Izmir': 'İzmir',
     'Kahramanmaras': 'Kahramanmaraş', 'Karabuk': 'Karabük', 'Karaman': 'Karaman', 'Kars': 'Kars',
     'Kastamonu': 'Kastamonu', 'Kayseri': 'Kayseri', 'Kirikkale': 'Kırıkkale', 'Kirklareli': 'Kırklareli',
