@@ -73,6 +73,7 @@ subcategories.json
 ilce_sinirlari.geojson
 cleanup.ps1
 "Proje Dosya Yapısı ve Proje Nasıl Geliştirilecek.txt"
+CLAUDE.md
 
 # ===========================================
 # Docker (optional - keep compose file)

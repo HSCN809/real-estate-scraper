@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: real-estate-db
+    environment:
+      POSTGRES_USER: scraper
+      POSTGRES_PASSWORD: scraper_password
+      POSTGRES_DB: real_estate
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scraper -d real_estate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
   # Backend API - FastAPI + Selenium + Chrome
   api:
     build:
@@ -10,8 +31,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Veritabanı kalıcılığı
-      - ./Backend/database:/app/database
       # Log dosyaları
       - ./Backend/logs:/app/logs
       # Export çıktıları
@@ -19,9 +38,12 @@ services:
     environment:
       - FASTAPI_HOST=0.0.0.0
       - FASTAPI_PORT=8000
-      - DATABASE_PATH=/app/database/real_estate.db
+      - DATABASE_URL=postgresql://scraper:scraper_password@db:5432/real_estate
       - CHROME_HEADLESS=true
       - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
@@ -38,12 +60,12 @@ services:
       context: ./Frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://api:8000/api/v1
+        - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     container_name: real-estate-frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://api:8000/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     depends_on:
       api:
         condition: service_healthy
@@ -56,6 +78,4 @@ networks:
     driver: bridge
 
 volumes:
-  db-data:
-  logs-data:
-  outputs-data:
+  postgres_data:

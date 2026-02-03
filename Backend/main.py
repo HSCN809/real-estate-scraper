@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 
 # Database initialization
-from database.connection import engine, DATABASE_PATH
+from database.connection import engine, DATABASE_URL
 from database.models import Base
 
 # Setup logging
@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 def init_database():
     """Create database tables if they don't exist"""
-    db_exists = os.path.exists(DATABASE_PATH)
     Base.metadata.create_all(bind=engine)
 
-    if db_exists:
-        logger.info(f"Veritabani mevcut: {DATABASE_PATH}")
+    # Log database type
+    if DATABASE_URL and DATABASE_URL.startswith('postgresql'):
+        logger.info("PostgreSQL veritabanina baglandi")
     else:
-        logger.info(f"Veritabani olusturuldu: {DATABASE_PATH}")
+        logger.info("SQLite veritabani kullaniliyor")
 
 # Initialize database on startup
 init_database()

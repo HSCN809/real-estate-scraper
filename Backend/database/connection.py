@@ -1,30 +1,38 @@
 # -*- coding: utf-8 -*-
 """
-Database connection configuration for SQLite
-Environment variable destekli konfigürasyon
+Database connection configuration
+PostgreSQL (Docker) veya SQLite (lokal) destekli
 """
 
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Database file path - Environment variable veya varsayılan yol
-# Docker için: DATABASE_PATH=/app/database/real_estate.db
-DATABASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DB_PATH = os.path.join(DATABASE_DIR, "real_estate.db")
-DATABASE_PATH = os.getenv('DATABASE_PATH', DEFAULT_DB_PATH)
+# Database URL - PostgreSQL veya SQLite
+# Docker için: DATABASE_URL=postgresql://user:pass@host:port/dbname
+# Lokal için: DATABASE_URL belirtilmezse SQLite kullanılır
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-# Veritabanı dizininin var olduğundan emin ol
-os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+if DATABASE_URL:
+    # PostgreSQL (Docker)
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,  # Bağlantı kontrolü
+        echo=False
+    )
+else:
+    # SQLite (Lokal geliştirme)
+    DATABASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATABASE_PATH = os.path.join(DATABASE_DIR, "real_estate.db")
+    DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
-DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
-
-# Create engine with SQLite-specific settings
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Required for SQLite with FastAPI
-    echo=False  # Set to True for SQL debugging
-)
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        echo=False
+    )
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

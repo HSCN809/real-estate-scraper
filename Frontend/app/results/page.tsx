@@ -317,7 +317,7 @@ export default function ResultsPage() {
     const platforms = [...new Set(results.map(r => r.platform))];
     const categories = [...new Set(results.map(r => r.category))];
     const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
-    const subtypes = [...new Set(results.map(r => r.subtype).filter(Boolean))];
+    const subtypes = [...new Set(results.map(r => r.subtype).filter((s): s is string => !!s))];
 
     // Cities and districts for table view filters
     const cities = [...new Set(results.map(r => r.city).filter(Boolean))].sort() as string[];
