@@ -46,7 +46,7 @@ const CITY_NAMES: Record<string, string> = {
     'Canakkale': 'Çanakkale', 'Cankiri': 'Çankırı', 'Corum': 'Çorum', 'Denizli': 'Denizli',
     'Diyarbakir': 'Diyarbakır', 'Duzce': 'Düzce', 'Edirne': 'Edirne', 'Elazig': 'Elazığ',
     'Erzincan': 'Erzincan', 'Erzurum': 'Erzurum', 'Eskisehir': 'Eskişehir', 'Gaziantep': 'Gaziantep',
-    'Giresun': 'Giresun', 'Gumushane': 'Gümüşhane', 'Hakkari': 'Hakkari', 'Hakkâri': 'Hakkari', 'Hatay': 'Hatay',
+    'Giresun': 'Giresun', 'Gumushane': 'Gümüşhane', 'Hakkâri': 'Hakkari', 'Hatay': 'Hatay',
     'Igdir': 'Iğdır', 'Isparta': 'Isparta', 'Istanbul': 'İstanbul', 'Izmir': 'İzmir',
     'Kahramanmaras': 'Kahramanmaraş', 'Karabuk': 'Karabük', 'Karaman': 'Karaman', 'Kars': 'Kars',
     'Kastamonu': 'Kastamonu', 'Kayseri': 'Kayseri', 'Kirikkale': 'Kırıkkale', 'Kirklareli': 'Kırklareli',
@@ -206,7 +206,7 @@ export function CitySelectionModal({
         }
     };
 
-    const handleSelectAll = () => setTempSelectedCities(Object.values(CITY_NAMES));
+    const handleSelectAll = () => setTempSelectedCities([...new Set(Object.values(CITY_NAMES))]);
     const handleClearAll = () => { setTempSelectedCities([]); setTempSelectedDistricts({}); };
 
     const handleDistrictToggle = (districtName: string) => {
