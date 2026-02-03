@@ -1,8 +1,11 @@
 # Backend Dockerfile - FastAPI + Selenium + Chrome
+# syntax=docker/dockerfile:1.4
 FROM python:3.11-slim-bookworm
 
 # Chrome ve sistem bağımlılıkları (Debian Bookworm uyumlu)
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
     unzip \
@@ -37,22 +40,23 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxfixes3 \
     fonts-liberation \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates
 
-# Chrome kurulumu
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+# Chrome kurulumu (cache ile)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends google-chrome-stable
 
 # Çalışma dizini
 WORKDIR /app
 
-# Python bağımlılıkları
+# Python bağımlılıkları (cache ile)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Uygulama kodları
 COPY . .

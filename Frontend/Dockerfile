@@ -1,5 +1,6 @@
 # Frontend Dockerfile - Next.js
-FROM node:18-alpine AS base
+# syntax=docker/dockerfile:1.4
+FROM node:20-alpine AS base
 
 # Bağımlılıkları kur
 FROM base AS deps
@@ -7,7 +8,10 @@ WORKDIR /app
 
 # package.json ve lock dosyasını kopyala
 COPY package.json package-lock.json* ./
-RUN npm ci
+
+# npm cache ile bağımlılıkları kur
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Build aşaması
 FROM base AS builder
@@ -19,9 +23,10 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Next.js build
+# Next.js build (cache ile)
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Production aşaması
 FROM base AS runner
