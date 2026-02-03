@@ -89,10 +89,37 @@ export function CitySelectionModal({
     const [cityMousePosition, setCityMousePosition] = useState<{ x: number; y: number } | null>(null);
     const [zoomLevel, setZoomLevel] = useState(1);
 
+    // Geçici seçimler - Modal içinde kullanılır, onaylanınca parent'a gönderilir
+    const [tempSelectedCities, setTempSelectedCities] = useState<string[]>([]);
+    const [tempSelectedDistricts, setTempSelectedDistricts] = useState<Record<string, string[]>>({});
+
     useEffect(() => {
         setMounted(true);
         return () => setMounted(false);
     }, []);
+
+    // Modal açıldığında mevcut seçimleri kopyala
+    useEffect(() => {
+        if (isOpen) {
+            setTempSelectedCities([...selectedCities]);
+            setTempSelectedDistricts({ ...selectedDistricts });
+            setActiveProvince(null);
+        }
+    }, [isOpen, selectedCities, selectedDistricts]);
+
+    // Onaylama - Seçimleri parent'a gönder
+    const handleConfirm = () => {
+        onCitiesChange(tempSelectedCities);
+        onDistrictsChange?.(tempSelectedDistricts);
+        onClose();
+    };
+
+    // İptal - Geçici seçimleri at, modal'ı kapat
+    const handleCancel = () => {
+        setTempSelectedCities([...selectedCities]);
+        setTempSelectedDistricts({ ...selectedDistricts });
+        onClose();
+    };
 
     // Load district index
     useEffect(() => {
@@ -144,19 +171,19 @@ export function CitySelectionModal({
         if (districtIndex && districtIndex[turkishName]) {
             setActiveProvince(turkishName);
             setZoomLevel(1); // Reset zoom when entering district view
-            if (!selectedCities.includes(turkishName)) {
-                onCitiesChange([...selectedCities, turkishName]);
+            if (!tempSelectedCities.includes(turkishName)) {
+                setTempSelectedCities([...tempSelectedCities, turkishName]);
             }
         } else {
-            if (selectedCities.includes(turkishName)) {
-                onCitiesChange(selectedCities.filter(c => c !== turkishName));
+            if (tempSelectedCities.includes(turkishName)) {
+                setTempSelectedCities(tempSelectedCities.filter(c => c !== turkishName));
                 // İlgili ilçeleri de temizle
-                if (onDistrictsChange && selectedDistricts[turkishName]) {
-                    const { [turkishName]: _, ...restDistricts } = selectedDistricts;
-                    onDistrictsChange(restDistricts);
+                if (tempSelectedDistricts[turkishName]) {
+                    const { [turkishName]: _, ...restDistricts } = tempSelectedDistricts;
+                    setTempSelectedDistricts(restDistricts);
                 }
             } else {
-                onCitiesChange([...selectedCities, turkishName]);
+                setTempSelectedCities([...tempSelectedCities, turkishName]);
             }
         }
     };
@@ -167,54 +194,52 @@ export function CitySelectionModal({
 
     const handleRegionSelect = (region: string) => {
         const regionCities = REGIONS[region] || [];
-        const allSelected = regionCities.every(city => selectedCities.includes(city));
+        const allSelected = regionCities.every(city => tempSelectedCities.includes(city));
         if (allSelected) {
-            onCitiesChange(selectedCities.filter(city => !regionCities.includes(city)));
+            setTempSelectedCities(tempSelectedCities.filter(city => !regionCities.includes(city)));
             // Kaldırılan şehirlerin ilçelerini de temizle
-            if (onDistrictsChange) {
-                const newDistricts = { ...selectedDistricts };
-                regionCities.forEach(city => delete newDistricts[city]);
-                onDistrictsChange(newDistricts);
-            }
+            const newDistricts = { ...tempSelectedDistricts };
+            regionCities.forEach(city => delete newDistricts[city]);
+            setTempSelectedDistricts(newDistricts);
         } else {
-            onCitiesChange([...new Set([...selectedCities, ...regionCities])]);
+            setTempSelectedCities([...new Set([...tempSelectedCities, ...regionCities])]);
         }
     };
 
-    const handleSelectAll = () => onCitiesChange(Object.values(CITY_NAMES));
-    const handleClearAll = () => { onCitiesChange([]); onDistrictsChange?.({}); };
+    const handleSelectAll = () => setTempSelectedCities(Object.values(CITY_NAMES));
+    const handleClearAll = () => { setTempSelectedCities([]); setTempSelectedDistricts({}); };
 
     const handleDistrictToggle = (districtName: string) => {
-        if (!activeProvince || !onDistrictsChange) return;
-        const current = selectedDistricts[activeProvince] || [];
+        if (!activeProvince) return;
+        const current = tempSelectedDistricts[activeProvince] || [];
         const newDistricts = current.includes(districtName)
             ? current.filter(d => d !== districtName)
             : [...current, districtName];
-        onDistrictsChange({ ...selectedDistricts, [activeProvince]: newDistricts });
+        setTempSelectedDistricts({ ...tempSelectedDistricts, [activeProvince]: newDistricts });
 
         // ŞEHRİ OTOMATİK SEÇ - İlçe seçildiğinde şehir de seçilsin
-        if (newDistricts.length > 0 && !selectedCities.includes(activeProvince)) {
-            onCitiesChange([...selectedCities, activeProvince]);
+        if (newDistricts.length > 0 && !tempSelectedCities.includes(activeProvince)) {
+            setTempSelectedCities([...tempSelectedCities, activeProvince]);
         }
     };
 
     const handleSelectAllDistricts = () => {
-        if (!activeProvince || !districtIndex || !onDistrictsChange) return;
-        onDistrictsChange({ ...selectedDistricts, [activeProvince]: districtIndex[activeProvince]?.districts || [] });
+        if (!activeProvince || !districtIndex) return;
+        setTempSelectedDistricts({ ...tempSelectedDistricts, [activeProvince]: districtIndex[activeProvince]?.districts || [] });
     };
 
     const handleDeselectAllDistricts = () => {
-        if (!activeProvince || !onDistrictsChange) return;
-        onDistrictsChange({ ...selectedDistricts, [activeProvince]: [] });
+        if (!activeProvince) return;
+        setTempSelectedDistricts({ ...tempSelectedDistricts, [activeProvince]: [] });
     };
 
-    const isRegionFullySelected = (region: string) => (REGIONS[region] || []).every(city => selectedCities.includes(city));
-    const isRegionPartiallySelected = (region: string) => (REGIONS[region] || []).some(city => selectedCities.includes(city)) && !isRegionFullySelected(region);
+    const isRegionFullySelected = (region: string) => (REGIONS[region] || []).every(city => tempSelectedCities.includes(city));
+    const isRegionPartiallySelected = (region: string) => (REGIONS[region] || []).some(city => tempSelectedCities.includes(city)) && !isRegionFullySelected(region);
 
     const cityWrapper = (cityComponent: React.ReactElement, cityData: { name: string }) => {
         const turkishName = CITY_NAMES[cityData.name] || cityData.name;
-        const isSelected = selectedCities.includes(turkishName);
-        const districtsSelected = (selectedDistricts[turkishName] || []).length;
+        const isSelected = tempSelectedCities.includes(turkishName);
+        const districtsSelected = (tempSelectedDistricts[turkishName] || []).length;
         if (isSelected) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const props = cityComponent.props as any;
@@ -250,8 +275,8 @@ export function CitySelectionModal({
         return districtGeoData.features.map(f => f.properties.feature_name).filter((n): n is string => !!n).sort((a, b) => a.localeCompare(b, 'tr'));
     }, [districtGeoData]);
 
-    const totalDistrictsSelected = Object.values(selectedDistricts).reduce((sum, d) => sum + d.length, 0);
-    const currentProvinceDistricts = activeProvince ? (selectedDistricts[activeProvince] || []) : [];
+    const totalDistrictsSelected = Object.values(tempSelectedDistricts).reduce((sum, d) => sum + d.length, 0);
+    const currentProvinceDistricts = activeProvince ? (tempSelectedDistricts[activeProvince] || []) : [];
 
     if (!mounted) return null;
 
@@ -269,10 +294,10 @@ export function CitySelectionModal({
                                     <MapPin className="w-6 h-6 text-sky-400" />
                                     <h2 className="text-xl font-bold text-white">{activeProvince ? 'İlçe Seçimi' : 'Şehir Seçimi'}</h2>
                                     <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
-                                        {selectedCities.length} şehir{totalDistrictsSelected > 0 && `, ${totalDistrictsSelected} ilçe`}
+                                        {tempSelectedCities.length} şehir{totalDistrictsSelected > 0 && `, ${totalDistrictsSelected} ilçe`}
                                     </span>
                                 </div>
-                                <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                                <button onClick={handleCancel} className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
@@ -501,8 +526,8 @@ export function CitySelectionModal({
 
                             {/* Footer */}
                             <div className="p-4 border-t border-slate-700/50 flex justify-end gap-3">
-                                <button onClick={onClose} className="px-6 py-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700 font-medium">İptal</button>
-                                <button onClick={onClose} className="px-6 py-2 rounded-lg bg-sky-500 text-white hover:bg-sky-600 font-medium">Seçimi Onayla</button>
+                                <button onClick={handleCancel} className="px-6 py-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700 font-medium">İptal</button>
+                                <button onClick={handleConfirm} className="px-6 py-2 rounded-lg bg-sky-500 text-white hover:bg-sky-600 font-medium">Seçimi Onayla</button>
                             </div>
                         </div>
                     </motion.div>
