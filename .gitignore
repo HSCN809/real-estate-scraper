@@ -1,29 +1,80 @@
-env/
-Proje Dosya Yapısı ve Proje Nasıl Geliştirilecek.txt
-__pycache__/
-*.pyc
-.vscode/
-.cursor/
-scraped_*/
+# ===========================================
+# Environment & Secrets
+# ===========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Logs
+# ===========================================
+# Python
+# ===========================================
+env/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ===========================================
+# Node.js / Frontend
+# ===========================================
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================================
+# Database
+# ===========================================
+*.db
+real_estate.db
+
+# ===========================================
+# Logs & Outputs
+# ===========================================
 logs/
 *.log
-
-# Outputs
 outputs/
 *.xlsx
 *.csv
+scraped_*/
 
-# IDE
+# ===========================================
+# IDE & Editor
+# ===========================================
+.vscode/
+.cursor/
 .idea/
+*.swp
+*.swo
+*~
 
-# Cleanup Script
-cleanup.ps1
+# ===========================================
+# OS Files
+# ===========================================
+.DS_Store
+Thumbs.db
+nul
 
-ilce_sinirlari.geojson
-nul 
-
+# ===========================================
+# Project Specific
+# ===========================================
 .claude/
-real_estate.db
 subcategories.json
+ilce_sinirlari.geojson
+cleanup.ps1
+"Proje Dosya Yapısı ve Proje Nasıl Geliştirilecek.txt"
+
+# ===========================================
+# Docker (optional - keep compose file)
+# ===========================================
+# docker-compose.override.yml

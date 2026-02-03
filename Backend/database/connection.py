@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
 """
 Database connection configuration for SQLite
+Environment variable destekli konfigürasyon
 """
 
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Database file path - inside database folder
+# Database file path - Environment variable veya varsayılan yol
+# Docker için: DATABASE_PATH=/app/database/real_estate.db
 DATABASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_PATH = os.path.join(DATABASE_DIR, "real_estate.db")
+DEFAULT_DB_PATH = os.path.join(DATABASE_DIR, "real_estate.db")
+DATABASE_PATH = os.getenv('DATABASE_PATH', DEFAULT_DB_PATH)
+
+# Veritabanı dizininin var olduğundan emin ol
+os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+
 DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 # Create engine with SQLite-specific settings

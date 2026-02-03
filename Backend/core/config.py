@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Configuration management for Real Estate Scraper
+Environment variable destekli konfigürasyon
 """
 
 import os
@@ -8,51 +9,81 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 
+def get_bool_env(key: str, default: bool) -> bool:
+    """Environment variable'dan boolean değer al"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    return value.lower() in ('true', '1', 'yes', 'on')
+
+
+def get_int_env(key: str, default: int) -> int:
+    """Environment variable'dan integer değer al"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def get_float_env(key: str, default: float) -> float:
+    """Environment variable'dan float değer al"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 @dataclass
 class ScraperConfig:
     """Main configuration class for scraper settings - STEALTH OPTIMIZED"""
-    
+
     # Timeouts
-    page_load_timeout: int = 30
-    element_wait_timeout: int = 10  # Düşürüldü (20 -> 10)
-    
+    page_load_timeout: int = field(default_factory=lambda: get_int_env('CHROME_TIMEOUT', 30))
+    element_wait_timeout: int = 10
+
     # Retry settings
-    max_retries: int = 3
+    max_retries: int = field(default_factory=lambda: get_int_env('SCRAPER_MAX_RETRIES', 3))
     retry_delay: float = 2.0
     retry_multiplier: float = 2.0  # Exponential backoff
-    
+
     # Rate limiting - OPTIMIZED for speed while avoiding detection
-    # Rastgele bekleme aralıkları (saniye) - insan davranışını simüle eder
-    wait_between_pages: float = 1.5  # Düşürüldü: 2.0 -> 1.5
-    wait_between_requests: float = 0.3  # Düşürüldü: 0.5 -> 0.3
-    
+    wait_between_pages: float = field(default_factory=lambda: get_float_env('SCRAPER_PAGE_DELAY', 1.5))
+    wait_between_requests: float = 0.3
+
     # Rastgele bekleme aralıkları (min, max)
-    random_wait_short: tuple = (1.0, 2.0)   # Alt limit artırıldı (0.5 -> 1.0)
-    random_wait_medium: tuple = (1.5, 3.5)  # Alt limit artırıldı (1.0 -> 1.5)
-    random_wait_long: tuple = (3.0, 6.0)    # Alt limit artırıldı (2.0 -> 3.0)
-    
+    random_wait_short: tuple = (1.0, 2.0)
+    random_wait_medium: tuple = (1.5, 3.5)
+    random_wait_long: tuple = (3.0, 6.0)
+
     # Scraping limits
-    max_pages_per_location: int = 100  # Artırıldı: 50 -> 100
-    default_pages: int = 10  # Artırıldı: 5 -> 10
-    
+    max_pages_per_location: int = 100
+    default_pages: int = 10
+
     # Browser settings - STEALTH MODE
-    headless: bool = False  # Headless KAPALI - bot tespitinden kaçınmak için
-    disable_images: bool = True  # Resimler KAPALI - hız için
-    
-    # User agent (artık driver_manager.py'de rastgele seçiliyor)
+    # Docker'da CHROME_HEADLESS=true olmalı
+    headless: bool = field(default_factory=lambda: get_bool_env('CHROME_HEADLESS', False))
+    disable_images: bool = True
+
+    # User agent
     user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     )
-    
+
     # Output settings
-    output_dir: str = "outputs"
-    
+    output_dir: str = field(default_factory=lambda: os.getenv('OUTPUT_DIR', 'outputs'))
+
     # Logging
-    log_level: str = "INFO"
+    log_level: str = field(default_factory=lambda: os.getenv('LOG_LEVEL', 'INFO'))
     log_to_file: bool = True
-    log_file: str = "logs/scraper.log"
+    log_file: str = field(default_factory=lambda: os.getenv('LOG_FILE', 'logs/scraper.log'))
 
 
 @dataclass

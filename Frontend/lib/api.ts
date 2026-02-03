@@ -21,9 +21,14 @@ export async function startScrape(platform: Platform, data: ScrapeRequest): Prom
     return response.json();
 }
 
+// Health check URL - API base'den türetilir
+const API_HEALTH_URL = process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '/')
+    : 'http://localhost:8000/';
+
 export async function healthCheck(): Promise<boolean> {
     try {
-        const response = await fetch('http://localhost:8000/');
+        const response = await fetch(API_HEALTH_URL);
         return response.ok;
     } catch {
         return false;

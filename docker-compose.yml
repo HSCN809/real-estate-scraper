@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Backend API - FastAPI + Selenium + Chrome
+  api:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: real-estate-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Veritabanı kalıcılığı
+      - ./Backend/database:/app/database
+      # Log dosyaları
+      - ./Backend/logs:/app/logs
+      # Export çıktıları
+      - ./Backend/outputs:/app/outputs
+    environment:
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=8000
+      - DATABASE_PATH=/app/database/real_estate.db
+      - CHROME_HEADLESS=true
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+  # Frontend - Next.js
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://api:8000/api/v1
+    container_name: real-estate-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000/api/v1
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+networks:
+  real-estate-network:
+    driver: bridge
+
+volumes:
+  db-data:
+  logs-data:
+  outputs-data:
