@@ -4,11 +4,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 
 import type { ScrapeRequest, ScrapeResponse, Platform, ScrapeResult } from '@/types';
 
+// Helper to get auth headers
+function getAuthHeaders(): HeadersInit {
+    if (typeof window === 'undefined') return {};
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 export async function startScrape(platform: Platform, data: ScrapeRequest): Promise<ScrapeResponse> {
     const response = await fetch(`${API_BASE_URL}/scrape/${platform}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            ...getAuthHeaders(),
         },
         body: JSON.stringify(data),
     });
@@ -37,7 +45,9 @@ export async function healthCheck(): Promise<boolean> {
 
 
 export async function getStats() {
-    const response = await fetch(`${API_BASE_URL}/stats`);
+    const response = await fetch(`${API_BASE_URL}/stats`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('İstatistikler alınamadı');
     }
@@ -45,7 +55,9 @@ export async function getStats() {
 }
 
 export async function getResults(): Promise<ScrapeResult[]> {
-    const response = await fetch(`${API_BASE_URL}/results`);
+    const response = await fetch(`${API_BASE_URL}/results`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('Sonuçlar alınamadı');
     }
@@ -69,7 +81,9 @@ export interface CategoriesResponse {
 }
 
 export async function getCategories(): Promise<CategoriesResponse> {
-    const response = await fetch(`${API_BASE_URL}/config/categories`);
+    const response = await fetch(`${API_BASE_URL}/config/categories`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('Kategoriler alınamadı');
     }
@@ -90,7 +104,9 @@ export interface SubtypesResponse {
 }
 
 export async function getSubtypes(listingType: string, category: string, platform: string = 'hepsiemlak'): Promise<SubtypesResponse> {
-    const response = await fetch(`${API_BASE_URL}/config/subtypes?listing_type=${listingType}&category=${category}&platform=${platform}`);
+    const response = await fetch(`${API_BASE_URL}/config/subtypes?listing_type=${listingType}&category=${category}&platform=${platform}`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('Alt kategoriler alınamadı');
     }
@@ -124,7 +140,9 @@ export async function getListings(params: {
     if (params.page) searchParams.set('page', params.page.toString());
     if (params.limit) searchParams.set('limit', params.limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/listings?${searchParams}`);
+    const response = await fetch(`${API_BASE_URL}/listings?${searchParams}`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('İlanlar alınamadı');
     }
@@ -148,6 +166,7 @@ export async function exportToExcel(params: {
 
     const response = await fetch(`${API_BASE_URL}/export/excel?${searchParams}`, {
         method: 'POST',
+        headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -160,7 +179,9 @@ export async function exportToExcel(params: {
 
 // Cities and districts from DB
 export async function getCities(): Promise<{ cities: string[] }> {
-    const response = await fetch(`${API_BASE_URL}/cities`);
+    const response = await fetch(`${API_BASE_URL}/cities`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('Şehirler alınamadı');
     }
@@ -168,7 +189,9 @@ export async function getCities(): Promise<{ cities: string[] }> {
 }
 
 export async function getDistricts(city: string): Promise<{ city: string; districts: string[] }> {
-    const response = await fetch(`${API_BASE_URL}/cities/${city}/districts`);
+    const response = await fetch(`${API_BASE_URL}/cities/${city}/districts`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('İlçeler alınamadı');
     }
@@ -188,7 +211,9 @@ export interface DistrictIndex {
 }
 
 export async function getDistrictsIndex(): Promise<DistrictIndex> {
-    const response = await fetch(`${API_BASE_URL}/districts/index`);
+    const response = await fetch(`${API_BASE_URL}/districts/index`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error('İlçe index alınamadı');
     }
@@ -196,7 +221,9 @@ export async function getDistrictsIndex(): Promise<DistrictIndex> {
 }
 
 export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.FeatureCollection> {
-    const response = await fetch(`${API_BASE_URL}/districts/${encodeURIComponent(provinceName)}`);
+    const response = await fetch(`${API_BASE_URL}/districts/${encodeURIComponent(provinceName)}`, {
+        headers: getAuthHeaders(),
+    });
     if (!response.ok) {
         throw new Error(`${provinceName} ilçe verisi alınamadı`);
     }

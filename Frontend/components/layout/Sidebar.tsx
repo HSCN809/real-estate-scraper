@@ -2,20 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Search, FileText, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Search, FileText, Settings, ChevronLeft, ChevronRight, User, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './SidebarContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
     { href: '/', label: 'Dashboard', icon: Home },
     { href: '/scraper', label: 'Scraper', icon: Search },
     { href: '/results', label: 'Sonuçlar', icon: FileText },
+    { href: '/profile', label: 'Profil', icon: User },
     { href: '/settings', label: 'Ayarlar', icon: Settings },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
     const { isCollapsed, setIsCollapsed } = useSidebar();
+    const { user, logout } = useAuth();
 
     return (
         <>
@@ -80,6 +83,50 @@ export function Sidebar() {
                         );
                     })}
                 </nav>
+
+                {/* User Section */}
+                {user && (
+                    <div className={cn(
+                        'px-4 py-4 border-t border-slate-700/50',
+                        isCollapsed && 'px-2'
+                    )}>
+                        <div className={cn(
+                            'flex items-center gap-3 mb-3',
+                            isCollapsed && 'justify-center'
+                        )}>
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-sm font-bold">
+                                    {user.username.charAt(0).toUpperCase()}
+                                </span>
+                            </div>
+                            {!isCollapsed && (
+                                <div className="overflow-hidden">
+                                    <p className="text-sm font-medium text-slate-200 truncate">
+                                        {user.username}
+                                    </p>
+                                    <p className="text-xs text-slate-500 truncate">
+                                        {user.email}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        {/* Logout Button */}
+                        <button
+                            onClick={logout}
+                            className={cn(
+                                'w-full flex items-center gap-2 rounded-lg transition-all duration-200',
+                                'text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20',
+                                isCollapsed ? 'justify-center p-2' : 'px-3 py-2'
+                            )}
+                            title={isCollapsed ? 'Çıkış Yap' : undefined}
+                        >
+                            <LogOut className="w-4 h-4 flex-shrink-0" />
+                            {!isCollapsed && (
+                                <span className="text-sm font-medium">Çıkış Yap</span>
+                            )}
+                        </button>
+                    </div>
+                )}
 
                 {/* Footer */}
                 <div className="px-4 py-4 border-t border-white/10">
