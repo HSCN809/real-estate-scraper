@@ -37,7 +37,8 @@ packaging==23.2
 setuptools==68.2.2
 
 # Authentication
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
+bcrypt==4.0.1
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.6
 email-validator>=2.0.0
