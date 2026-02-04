@@ -1120,7 +1120,8 @@ const Hyperspeed = ({
         appRef.current.dispose();
       }
     };
-  }, [effectOptions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return <div id="lights" ref={hyperspeed}></div>;
 };

@@ -50,10 +50,10 @@ export default function Dashboard() {
       {/* Artistic Header */}
       <motion.header variants={item}>
         <h1 id="dashboard-title" className="art-title gradient-art-pink mb-3">
-          EMLAK SCRAPER
+          Dashboard
         </h1>
         <p className="text-xl text-gray-300">
-          Veri toplama sürecinizi sanat eserine dönüştürün
+          Veri toplama sürecinizi takip edin ve analiz edin.
         </p>
       </motion.header>
 
