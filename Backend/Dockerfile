@@ -74,7 +74,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV FASTAPI_HOST=0.0.0.0
 ENV FASTAPI_PORT=8000
 ENV DATABASE_PATH=/app/database/real_estate.db
-ENV CHROME_HEADLESS=true
+ENV CHROME_HEADLESS=false
+ENV DISPLAY=:99
 
-# Başlatma komutu
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Başlatma komutu - Xvfb ile sanal ekran
+CMD Xvfb :99 -screen 0 1920x1080x24 & uvicorn main:app --host 0.0.0.0 --port 8000
