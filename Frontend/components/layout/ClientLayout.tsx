@@ -3,6 +3,7 @@
 import { SidebarProvider, useSidebar } from '@/components/layout/SidebarContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ParticleBackground } from '@/components/ui/ParticleBackground';
+import Aurora from '@/components/ui/Aurora';
 import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
 
@@ -29,6 +30,16 @@ export function ClientLayout({ children }: { children: ReactNode }) {
             {/* Particle Background - Fixed at bottom layer */}
             <div className="fixed inset-0" style={{ zIndex: 0 }}>
                 <ParticleBackground />
+            </div>
+
+            {/* Aurora Background - Layer 0.5 */}
+            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+                <Aurora
+                    colorStops={['#38bdf8', '#818cf8', '#34d399']}
+                    amplitude={0.8}
+                    blend={0.6}
+                    speed={0.5}
+                />
             </div>
 
             {/* Abstract Decorations - Layer 1 */}

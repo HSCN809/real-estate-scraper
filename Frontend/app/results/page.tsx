@@ -3,6 +3,7 @@
 import { ArtCard } from '@/components/ui/ArtCard';
 import { ResultsMap } from '@/components/ui/ResultsMap';
 import { ResultsCharts } from '@/components/ui/ResultsCharts';
+import CountUp from '@/components/ui/CountUp';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText,
@@ -514,7 +515,7 @@ export default function ResultsPage() {
                 </nav>
             </motion.header>
 
-            {/* Dashboard Stats */}
+            {/* Dashboard Stats with CountUp Animation */}
             <motion.section variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4" aria-label="Özet istatistikler">
                 <article className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -523,7 +524,9 @@ export default function ResultsPage() {
                         </div>
                         <span className="text-gray-400 text-sm">Toplam İlan</span>
                     </div>
-                    <p className="text-3xl font-bold text-white" aria-label={`Toplam ilan sayısı: ${totalRecords.toLocaleString()}`}>{totalRecords.toLocaleString()}</p>
+                    <div className="text-3xl font-bold text-white" aria-label={`Toplam ilan sayısı: ${totalRecords.toLocaleString()}`}>
+                        <CountUp to={totalRecords} duration={2} separator="." />
+                    </div>
                 </article>
 
                 <article className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-5">
@@ -533,7 +536,9 @@ export default function ResultsPage() {
                         </div>
                         <span className="text-gray-400 text-sm">Şehir</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{uniqueCities}</p>
+                    <div className="text-3xl font-bold text-white">
+                        <CountUp to={uniqueCities} duration={1.5} delay={0.2} />
+                    </div>
                 </article>
 
                 <article className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-2xl p-5">
@@ -543,7 +548,9 @@ export default function ResultsPage() {
                         </div>
                         <span className="text-gray-400 text-sm">Dosya</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{totalFiles}</p>
+                    <div className="text-3xl font-bold text-white">
+                        <CountUp to={totalFiles} duration={1.5} delay={0.3} />
+                    </div>
                 </article>
 
                 <article className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl p-5">

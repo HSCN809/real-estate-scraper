@@ -1,6 +1,9 @@
 'use client';
 
 import { ArtCard } from '@/components/ui/ArtCard';
+import BlurText from '@/components/ui/BlurText';
+import CountUp from '@/components/ui/CountUp';
+import SpotlightCard from '@/components/ui/SpotlightCard';
 import { motion } from 'framer-motion';
 import { Search, Database, TrendingUp, Clock, Sparkles, Zap, Activity } from 'lucide-react';
 import Link from 'next/link';
@@ -50,7 +53,7 @@ export default function Dashboard() {
           EMLAK SCRAPER
         </h1>
         <p className="text-xl text-gray-300">
-          Veri toplama sürecinizi sanat eserine dönüştürün ✨
+          Veri toplama sürecinizi sanat eserine dönüştürün
         </p>
       </motion.header>
 
@@ -74,9 +77,9 @@ export default function Dashboard() {
                       <p className="text-sm text-gray-400 uppercase tracking-wider">
                         Toplam Tarama
                       </p>
-                      <p className="text-7xl font-black gradient-art-pink mt-2" aria-label={`Toplam tarama sayısı: ${stats.total_scrapes}`}>
-                        {stats.total_scrapes}
-                      </p>
+                      <div className="text-7xl font-black gradient-art-pink mt-2" aria-label={`Toplam tarama sayısı: ${stats.total_scrapes}`}>
+                        <CountUp to={stats.total_scrapes} duration={2} separator="." />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -87,36 +90,44 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl bg-gradient-to-br from-pink-500/10 to-transparent border border-pink-500/20">
                   <p className="text-xs text-gray-400 mb-1">Bu Ay</p>
-                  <p className="text-2xl font-bold text-pink-400">{stats.this_month}</p>
+                  <div className="text-2xl font-bold text-pink-400">
+                    <CountUp to={stats.this_month} duration={1.5} delay={0.3} />
+                  </div>
                 </div>
                 <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-transparent border border-purple-500/20">
                   <p className="text-xs text-gray-400 mb-1">Son 7 Gün</p>
-                  <p className="text-2xl font-bold text-purple-400">{stats.this_week}</p>
+                  <div className="text-2xl font-bold text-purple-400">
+                    <CountUp to={stats.this_week} duration={1.5} delay={0.4} />
+                  </div>
                 </div>
               </div>
             </div>
           </ArtCard>
         </motion.article>
 
-        {/* Small Stats */}
+        {/* Small Stats with SpotlightCard */}
         <motion.article variants={item}>
-          <ArtCard glowColor="blue" className="h-full">
+          <SpotlightCard className="h-full" spotlightColor="rgba(56, 189, 248, 0.15)">
             <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 w-fit mb-4">
               <Database className="w-8 h-8 text-blue-400" aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-400 mb-2">Toplam İlan</p>
-            <p className="text-5xl font-black gradient-art-blue">{stats.total_listings}</p>
-          </ArtCard>
+            <div className="text-5xl font-black gradient-art-blue">
+              <CountUp to={stats.total_listings} duration={2} separator="." delay={0.2} />
+            </div>
+          </SpotlightCard>
         </motion.article>
 
         <motion.article variants={item}>
-          <ArtCard glowColor="purple" className="h-full">
+          <SpotlightCard className="h-full" spotlightColor="rgba(168, 85, 247, 0.15)">
             <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 w-fit mb-4">
               <TrendingUp className="w-8 h-8 text-purple-400" aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-400 mb-2">Bu Hafta</p>
-            <p className="text-5xl font-black text-purple-400">{stats.this_week}</p>
-          </ArtCard>
+            <div className="text-5xl font-black text-purple-400">
+              <CountUp to={stats.this_week} duration={1.5} delay={0.3} />
+            </div>
+          </SpotlightCard>
         </motion.article>
 
         <motion.article variants={item} className="lg:col-span-2">
