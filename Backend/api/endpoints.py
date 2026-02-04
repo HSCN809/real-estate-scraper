@@ -15,6 +15,28 @@ from pathlib import Path
 import json
 import os
 import io
+import redis
+
+# Celery imports
+from celery.result import AsyncResult
+from tasks.scraping_tasks import scrape_hepsiemlak_task, scrape_emlakjet_task
+from celery_app import celery_app
+
+# Redis client for task status
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+redis_client = None
+
+def get_redis_client():
+    """Get or create Redis client"""
+    global redis_client
+    if redis_client is None:
+        try:
+            redis_client = redis.from_url(REDIS_URL)
+            redis_client.ping()  # Test connection
+        except Exception as e:
+            logging.warning(f"Redis connection failed: {e}. Falling back to in-memory status.")
+            return None
+    return redis_client
 
 # Districts data directory
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
@@ -237,22 +259,54 @@ def run_hepsiemlak_task(request: ScrapeRequest):
         manager.stop()
 
 @router.post("/scrape/emlakjet", response_model=ScrapeResponse)
-async def scrape_emlakjet(request: ScrapeRequest, background_tasks: BackgroundTasks):
-    # Status'u HEMEN ayarla
+async def scrape_emlakjet(request: ScrapeRequest):
+    """Start EmlakJet scraping task via Celery"""
+    # Submit task to Celery
+    task = scrape_emlakjet_task.apply_async(
+        kwargs={
+            "listing_type": request.listing_type,
+            "category": request.category,
+            "subtype_path": request.subtype_path,
+            "cities": request.cities,
+            "districts": request.districts,
+            "max_pages": request.max_pages
+        },
+        queue="scraping"
+    )
+
+    # Initialize task status in Redis
+    r = get_redis_client()
+    if r:
+        initial_status = {
+            "task_id": task.id,
+            "status": "pending",
+            "message": "EmlakJet taraması başlatılıyor...",
+            "progress": 0,
+            "current": 0,
+            "total": 0,
+            "details": "",
+            "started_at": datetime.now().isoformat(),
+            "should_stop": False,
+            "stopped_early": False,
+        }
+        r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
+
+    # Also update in-memory status for backward compatibility
     task_status.reset()
     task_status.set_running(True)
     task_status.update("EmlakJet taraması başlatılıyor...", progress=0)
-    
-    background_tasks.add_task(run_emlakjet_task, request)
+
     return ScrapeResponse(
         status="accepted",
-        message="EmlakJet scraping task started in background",
+        message="EmlakJet scraping task started",
+        task_id=task.id,
         data_count=0,
         output_files=[]
     )
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
-async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: BackgroundTasks):
+async def scrape_hepsiemlak(request: ScrapeRequest):
+    """Start HepsiEmlak scraping task via Celery"""
     # Validate cities
     if not request.cities or len(request.cities) == 0:
         raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
@@ -266,22 +320,86 @@ async def scrape_hepsiemlak(request: ScrapeRequest, background_tasks: Background
                     detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok"
                 )
 
-    # Status'u HEMEN ayarla - frontend ilk sorguladığında hazır olsun
+    # Submit task to Celery
+    task = scrape_hepsiemlak_task.apply_async(
+        kwargs={
+            "listing_type": request.listing_type,
+            "category": request.category,
+            "subtype_path": request.subtype_path,
+            "cities": request.cities,
+            "districts": request.districts,
+            "max_pages": request.max_pages
+        },
+        queue="scraping"
+    )
+
+    # Initialize task status in Redis
+    r = get_redis_client()
+    if r:
+        initial_status = {
+            "task_id": task.id,
+            "status": "pending",
+            "message": "HepsiEmlak taraması başlatılıyor...",
+            "progress": 0,
+            "current": 0,
+            "total": 0,
+            "details": "",
+            "started_at": datetime.now().isoformat(),
+            "should_stop": False,
+            "stopped_early": False,
+        }
+        r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
+
+    # Also update in-memory status for backward compatibility
     task_status.reset()
     task_status.set_running(True)
     task_status.update("HepsiEmlak taraması başlatılıyor...", progress=0)
 
-    background_tasks.add_task(run_hepsiemlak_task, request)
     return ScrapeResponse(
         status="accepted",
-        message="HepsiEmlak scraping task started in background",
+        message="HepsiEmlak scraping task started",
+        task_id=task.id,
         data_count=0,
         output_files=[]
     )
 
 @router.post("/stop")
-async def stop_scraping():
+async def stop_scraping(task_id: Optional[str] = None):
     """Aktif tarama işlemini durdur ve mevcut verileri kaydet"""
+    r = get_redis_client()
+
+    # If task_id provided, stop that specific task
+    if task_id and r:
+        key = f"scrape_task:{task_id}"
+        data = r.get(key)
+        if data:
+            data = json.loads(data)
+            data["should_stop"] = True
+            data["message"] = "Durdurma isteği alındı, mevcut veriler kaydediliyor..."
+            r.setex(key, 86400, json.dumps(data))
+            return {
+                "status": "stopping",
+                "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor...",
+                "task_id": task_id
+            }
+
+    # Try to find and stop active task from Redis
+    if r:
+        for key in r.scan_iter("scrape_task:*"):
+            data = r.get(key)
+            if data:
+                data = json.loads(data)
+                if data.get("status") == "running":
+                    data["should_stop"] = True
+                    data["message"] = "Durdurma isteği alındı, mevcut veriler kaydediliyor..."
+                    r.setex(key, 86400, json.dumps(data))
+                    return {
+                        "status": "stopping",
+                        "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor...",
+                        "task_id": data.get("task_id")
+                    }
+
+    # Fallback to in-memory status
     if task_status.is_running:
         task_status.request_stop()
         return {"status": "stopping", "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor..."}
@@ -593,8 +711,75 @@ async def get_listings_preview(
     return {"data": data, "total": total, "showing": len(data)}
 
 @router.get("/status")
-async def get_status():
+async def get_status(task_id: Optional[str] = None):
+    """Get task status - supports both Redis-based Celery tasks and in-memory status"""
+    r = get_redis_client()
+
+    # If task_id provided, get that specific task
+    if task_id and r:
+        key = f"scrape_task:{task_id}"
+        data = r.get(key)
+        if data:
+            status_data = json.loads(data)
+            # Map status to is_running for frontend compatibility
+            status_data["is_running"] = status_data.get("status") in ["pending", "running"]
+            return status_data
+
+    # Try to find active task from Redis
+    if r:
+        for key in r.scan_iter("scrape_task:*"):
+            data = r.get(key)
+            if data:
+                status_data = json.loads(data)
+                if status_data.get("status") in ["pending", "running"]:
+                    status_data["is_running"] = True
+                    return status_data
+
+    # Fallback to in-memory status
     return task_status.to_dict()
+
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    """Get detailed status for a specific Celery task"""
+    r = get_redis_client()
+
+    # Get from Redis
+    if r:
+        key = f"scrape_task:{task_id}"
+        data = r.get(key)
+        if data:
+            status_data = json.loads(data)
+            status_data["is_running"] = status_data.get("status") in ["pending", "running"]
+            return status_data
+
+    # Get from Celery directly
+    result = AsyncResult(task_id, app=celery_app)
+
+    return {
+        "task_id": task_id,
+        "status": result.status,
+        "is_running": result.status in ["PENDING", "STARTED", "PROGRESS"],
+        "result": result.result if result.ready() else None,
+        "info": result.info if hasattr(result, 'info') else None
+    }
+
+
+@router.get("/tasks/active")
+async def get_active_tasks():
+    """Get all active/pending tasks"""
+    r = get_redis_client()
+    active_tasks = []
+
+    if r:
+        for key in r.scan_iter("scrape_task:*"):
+            data = r.get(key)
+            if data:
+                status_data = json.loads(data)
+                if status_data.get("status") in ["pending", "running"]:
+                    active_tasks.append(status_data)
+
+    return {"active_tasks": active_tasks, "count": len(active_tasks)}
 
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):

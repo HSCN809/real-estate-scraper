@@ -22,7 +22,24 @@ services:
     networks:
       - real-estate-network
 
-  # Backend API - FastAPI + Selenium + Chrome
+  # Redis - Message Broker for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: real-estate-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+  # Backend API - FastAPI (No scraping here, just API)
   api:
     build:
       context: ./Backend
@@ -31,18 +48,20 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Log dosyaları
+      # Log dosyalari
       - ./Backend/logs:/app/logs
-      # Export çıktıları
+      # Export ciktilari
       - ./Backend/outputs:/app/outputs
     environment:
       - FASTAPI_HOST=0.0.0.0
       - FASTAPI_PORT=8000
       - DATABASE_URL=postgresql://scraper:scraper_password@db:5432/real_estate
-      - CHROME_HEADLESS=false
+      - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
@@ -50,6 +69,47 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+  # Celery Worker - Scraping tasks run here
+  worker:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile.worker
+    container_name: real-estate-worker
+    volumes:
+      # Log dosyalari (worker loglari)
+      - ./Backend/logs:/app/logs
+      # Export ciktilari
+      - ./Backend/outputs:/app/outputs
+    environment:
+      - DATABASE_URL=postgresql://scraper:scraper_password@db:5432/real_estate
+      - REDIS_URL=redis://redis:6379/0
+      - CHROME_HEADLESS=false
+      - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+  # Flower - Celery Monitoring UI
+  flower:
+    image: mher/flower:2.0
+    container_name: real-estate-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=admin:admin123
+    depends_on:
+      - redis
     restart: unless-stopped
     networks:
       - real-estate-network
@@ -85,3 +145,4 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:

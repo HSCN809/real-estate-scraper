@@ -229,3 +229,59 @@ export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.
     }
     return response.json();
 }
+
+// ==================== Task Status API (Celery Integration) ====================
+
+export interface TaskStatus {
+    task_id?: string;
+    status?: string;
+    is_running: boolean;
+    message: string;
+    progress: number;
+    total: number;
+    current: number;
+    details: string;
+    should_stop?: boolean;
+    stopped_early?: boolean;
+    started_at?: string;
+    updated_at?: string;
+}
+
+export async function getTaskStatus(taskId?: string): Promise<TaskStatus> {
+    const url = taskId
+        ? `${API_BASE_URL}/status?task_id=${taskId}`
+        : `${API_BASE_URL}/status`;
+
+    const response = await fetch(url, {
+        headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+        throw new Error('Task durumu alınamadı');
+    }
+    return response.json();
+}
+
+export async function stopTask(taskId?: string): Promise<{ status: string; message: string; task_id?: string }> {
+    const url = taskId
+        ? `${API_BASE_URL}/stop?task_id=${taskId}`
+        : `${API_BASE_URL}/stop`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+        throw new Error('Task durdurulamadı');
+    }
+    return response.json();
+}
+
+export async function getActiveTasks(): Promise<{ active_tasks: TaskStatus[]; count: number }> {
+    const response = await fetch(`${API_BASE_URL}/tasks/active`, {
+        headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+        throw new Error('Aktif tasklar alınamadı');
+    }
+    return response.json();
+}

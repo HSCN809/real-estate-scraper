@@ -29,6 +29,7 @@ export default function PlatformScraperPage() {
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+    const [currentTaskId, setCurrentTaskId] = useState<string | undefined>();
 
     // Dynamic categories from API
     const [categories, setCategories] = useState<Category[]>([]);
@@ -115,9 +116,14 @@ export default function PlatformScraperPage() {
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
                 cities: selectedCities,
-                districts: selectedDistricts,  // İlçe verilerini gönder
+                districts: selectedDistricts,  // Ilce verilerini gonder
                 max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
+
+            // Store task_id for tracking
+            if (response.task_id) {
+                setCurrentTaskId(response.task_id);
+            }
 
             setResult({ type: 'success', message: response.message });
         } catch (error) {
@@ -310,6 +316,7 @@ export default function PlatformScraperPage() {
                     <ProgressModal
                         isOpen={isProgressModalOpen}
                         onClose={() => setIsProgressModalOpen(false)}
+                        taskId={currentTaskId}
                     />
 
                     {/* Max Pages & Scrape All */}
