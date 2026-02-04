@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle, StopCircle, ExternalLink } from 'lucide-react';
@@ -20,30 +20,63 @@ export function ProgressModal({ isOpen, onClose, taskId }: ProgressModalProps) {
     const [isStopping, setIsStopping] = useState(false);
     const [currentTaskId, setCurrentTaskId] = useState<string | undefined>(taskId);
 
+    // Ref to track the latest taskId to avoid stale closure issues
+    const taskIdRef = useRef<string | undefined>(taskId);
+
     useEffect(() => {
         setMounted(true);
         return () => setMounted(false);
     }, []);
 
-    // Update currentTaskId when prop changes
+    // Reset state when modal closes
     useEffect(() => {
-        if (taskId) {
-            setCurrentTaskId(taskId);
+        if (!isOpen) {
+            // Modal kapatıldığında tüm state'i sıfırla
+            // Böylece yeni task açıldığında eski state kalmaz
+            setStatus(null);
+            setIsFinished(false);
+            setIsStopping(false);
         }
-    }, [taskId]);
+    }, [isOpen]);
 
     const pollStatus = useCallback(async () => {
-        try {
-            const data = await getTaskStatus(currentTaskId);
-            setStatus(data);
+        // Use ref for the most up-to-date taskId value
+        const activeTaskId = taskIdRef.current;
 
-            // Update currentTaskId if we got one from the server
-            if (data.task_id && !currentTaskId) {
-                setCurrentTaskId(data.task_id);
+        // taskId yoksa poll yapma - eski task'ı çekmesin
+        if (!activeTaskId) {
+            return;
+        }
+
+        try {
+            const data = await getTaskStatus(activeTaskId);
+
+            // Poll sırasında taskId değişmiş olabilir, ref ile kontrol et
+            if (taskIdRef.current !== activeTaskId) {
+                console.log("Task ID changed during poll, ignoring result for:", activeTaskId);
+                return;
             }
 
-            // Check if finished
-            if (!data.is_running && data.progress === 100) {
+            // Gelen task_id, bizim task_id ile eşleşmiyorsa ignore et
+            if (data.task_id && data.task_id !== activeTaskId) {
+                console.log("Task ID mismatch, ignoring:", data.task_id, "expected:", activeTaskId);
+                return;
+            }
+
+            setStatus(data);
+
+            // IMPORTANT: Sadece task gerçekten tamamlandıysa isFinished'ı true yap
+            // "pending" veya "running" durumunda kesinlikle isFinished false kalmalı
+            const isTaskFinished = data.status === 'completed' || data.status === 'failed' || data.status === 'stopped';
+
+            // Eğer task hala pending/running ise, isFinished kesinlikle false olmalı
+            if (data.status === 'pending' || data.status === 'running' || data.is_running) {
+                // Task hala çalışıyor, isFinished false kalmalı
+                return;
+            }
+
+            // Check if task completed or failed (only set isFinished if truly done)
+            if (isTaskFinished) {
                 setIsFinished(true);
             }
 
@@ -55,31 +88,45 @@ export function ProgressModal({ isOpen, onClose, taskId }: ProgressModalProps) {
                     onClose();
                 }, 2000);
             }
-
-            // Check if task completed or failed
-            if (data.status === 'completed' || data.status === 'failed' || data.status === 'stopped') {
-                setIsFinished(true);
-            }
         } catch (error) {
             console.error("Status check failed", error);
         }
-    }, [currentTaskId, isStopping, onClose]);
+    }, [isStopping, onClose]);
 
+    // Reset all state when taskId changes (new task started)
     useEffect(() => {
-        if (!isOpen) {
+        if (taskId && taskId !== currentTaskId) {
+            // Reset state immediately when a new taskId is received
+            console.log("New task detected, resetting state:", taskId);
             setStatus(null);
             setIsFinished(false);
             setIsStopping(false);
             setCurrentTaskId(taskId);
+            taskIdRef.current = taskId;  // Update ref immediately
+        }
+    }, [taskId, currentTaskId]);  // Include currentTaskId to properly track changes
+
+    useEffect(() => {
+        if (!isOpen || !taskId) {
             return;
         }
+
+        // Update ref when this effect runs
+        taskIdRef.current = taskId;
 
         // Smart polling: faster during stopping, normal otherwise
         const pollInterval = isStopping ? 1000 : 2000;
         const interval = setInterval(pollStatus, pollInterval);
-        pollStatus(); // Initial call
 
-        return () => clearInterval(interval);
+        // Small delay before first poll to allow Redis to have the initial status
+        const initialPollTimer = setTimeout(() => {
+            pollStatus();
+        }, 500);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(initialPollTimer);
+        };
     }, [isOpen, isStopping, pollStatus, taskId]);
 
     const handleStop = async () => {

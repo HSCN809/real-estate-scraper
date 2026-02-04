@@ -663,47 +663,39 @@ class HepsiemlakScraper(BaseScraper):
             except Exception:
                 pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
             
-            # Pagination kontrolü
-            pagination_selector = "ul.he-pagination__links"
+            # Pagination kontrolü - ul.he-pagination__links içindeki a elementleri
             max_retries = 5
             page_links = []
-            
+
             for retry in range(max_retries):
                 try:
-                    # WebDriverWait ile pagination'ın yüklenmesini bekle
-                    wait = WebDriverWait(self.driver, 10)  # 10 saniye bekle
-                    pagination_container = wait.until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, pagination_selector))
-                    )
-                    
-                    # Pagination bulundu, linkleri al
-                    page_links = self.driver.find_elements(
-                        By.CSS_SELECTOR, 
-                        "ul.he-pagination__links li.he-pagination__item a.he-pagination__link"
-                    )
-                    
+                    wait = WebDriverWait(self.driver, 10)
+                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.he-pagination__links")))
+                    page_links = self.driver.find_elements(By.CSS_SELECTOR, "ul.he-pagination__links a")
                     if page_links:
+                        print(f"✓ Pagination bulundu: {len(page_links)} link")
                         break
-                        
-                except Exception as wait_error:
-                    if retry < max_retries - 1:
-                        print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
-                        time.sleep(3)
-                    else:
-                        # Son denemede hala bulunamadıysa, tek sayfa varsay
-                        print(f"⚠️ Pagination bulunamadı - tek sayfa varsayılıyor")
-            
+                except Exception:
+                    pass
+
+                if retry < max_retries - 1:
+                    print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
+                    time.sleep(3)
+                else:
+                    print(f"⚠️ Pagination bulunamadı - tek sayfa varsayılıyor")
+
             # Sayfa sayısını bul - en büyük sayıyı al
             max_page = 1
             for link in page_links:
                 text = link.text.strip()
-                
+
                 # Sadece rakam olan linkleri kontrol et (1, 2, 3, ..., 421 gibi)
+                # "..." gibi break-view'ları atla
                 if text.isdigit():
                     page_num = int(text)
                     if page_num > max_page:
                         max_page = page_num
-            
+
             print(f"DEBUG: max_page = {max_page}")
             return max_page
             
@@ -711,22 +703,36 @@ class HepsiemlakScraper(BaseScraper):
             logger.warning(f"Pagination detection failed: {e}")
             return 1
     
-    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None) -> List[Dict[str, Any]]:
-        """Scrape all listings for a single city"""
+    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None, stop_checker=None) -> List[Dict[str, Any]]:
+        """Scrape all listings for a single city
+
+        Args:
+            stop_checker: Callable that returns True if stop requested
+        """
         print(f"\n{'=' * 70}")
         print(f"🏙️  {city.upper()} - TÜM İLÇELER TARANACAK")
         print("=" * 70)
-        
+
+        # Use passed stop_checker or fall back to instance one
+        _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
+
+        def is_stop_requested():
+            if _stop_checker and _stop_checker():
+                return True
+            try:
+                from api.status import task_status
+                return task_status.is_stop_requested()
+            except:
+                return False
+
         if progress_callback:
             progress_callback(f"{city} için tarama başlatılıyor...", current=0, total=100)
-            
+
         try:
             # Select city (doğrudan şehir URL'ine gider)
             if not self.select_single_city(city):
                 logger.error(f"❌ {city} seçilemedi, atlanıyor")
                 return []
-
-            # Artık search_listings'e gerek yok - doğrudan şehir sayfasındayız
 
             # Check for zero results - daha güvenilir kontrol
             try:
@@ -752,7 +758,7 @@ class HepsiemlakScraper(BaseScraper):
             # Get total pages
             total_pages = self.get_total_pages()
             print(f"📊 {city} için toplam {total_pages} sayfa tespit edildi")
-            
+
             # Get page count
             if api_mode:
                  if max_pages:
@@ -771,14 +777,13 @@ class HepsiemlakScraper(BaseScraper):
                         print(f"Geçersiz giriş, varsayılan {pages_to_scrape} sayfa kullanılıyor.")
                 else:
                     pages_to_scrape = 1
-            
+
             city_listings = []
-            
+
             # Scrape pages
             for page in range(1, pages_to_scrape + 1):
                 # Durdurma kontrolü - her sayfa başında kontrol et
-                from api.status import task_status
-                if task_status.is_stop_requested():
+                if is_stop_requested():
                     print(f"\n⚠️ Durdurma isteği alındı! {len(city_listings)} ilan kaydediliyor...")
                     break
                 
@@ -852,14 +857,29 @@ class HepsiemlakScraper(BaseScraper):
             logger.error(f"❌ {city} tarama hatası: {e}")
             return []
 
-    def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None) -> Dict[str, List[Dict[str, Any]]]:
+    def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None, stop_checker=None) -> Dict[str, List[Dict[str, Any]]]:
         """
         Bir şehir için belirtilen ilçeleri scrape et - HER İLÇEYİ AYRI AYRI TARA VE KAYDET
+
+        Args:
+            stop_checker: Callable that returns True if stop requested
 
         Returns:
             Dictionary of district -> list of listings (her ilçe için ayrı)
         """
         all_results = {}  # İlçe -> İlanlar mapping
+
+        # Use passed stop_checker or fall back to instance one
+        _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
+
+        def is_stop_requested():
+            if _stop_checker and _stop_checker():
+                return True
+            try:
+                from api.status import task_status
+                return task_status.is_stop_requested()
+            except:
+                return False
 
         print(f"\n{'=' * 70}")
         print(f"🏙️  {city.upper()} - İLÇE FİLTRELİ TARAMA")
@@ -869,7 +889,7 @@ class HepsiemlakScraper(BaseScraper):
         if not districts or len(districts) == 0:
             logger.info(f"📍 {city} - Tüm ilçeler taranıyor")
             # Şehir bazlı kayıt için eski formatta döndür
-            city_listings = self.scrape_city(city, max_pages, api_mode=True, progress_callback=progress_callback)
+            city_listings = self.scrape_city(city, max_pages, api_mode=True, progress_callback=progress_callback, stop_checker=_stop_checker)
             return {city: city_listings}
 
         print(f"📋 Seçili ilçeler: {', '.join(districts)}")
@@ -878,15 +898,14 @@ class HepsiemlakScraper(BaseScraper):
         # Önce dropdown'dan gerçek URL'leri al
         print(f"\n🔍 {city} için ilçe URL'leri alınıyor...")
         district_url_map = self.get_district_urls_from_dropdown(city)
-        
+
         if not district_url_map:
             logger.warning(f"⚠️ {city} için ilçe URL'leri alınamadı, manuel URL oluşturulacak")
-        
+
         # Her ilçeyi ayrı ayrı tara
         for idx, district in enumerate(districts, 1):
             # Durdurma kontrolü - her ilçe başında kontrol et
-            from api.status import task_status
-            if task_status.is_stop_requested():
+            if is_stop_requested():
                 print(f"\n⚠️ Durdurma isteği alındı! {len(all_results)} ilçe kaydedildi.")
                 break
             
@@ -953,8 +972,7 @@ class HepsiemlakScraper(BaseScraper):
                 # Scrape pages for this district
                 for page in range(1, pages_to_scrape + 1):
                     # Durdurma kontrolü - her sayfa başında kontrol et
-                    from api.status import task_status
-                    if task_status.is_stop_requested():
+                    if is_stop_requested():
                         print(f"\n⚠️ Durdurma isteği alındı! {district} için {len(district_listings)} ilan kaydediliyor...")
                         # Mevcut ilçe verilerini kaydet
                         if district_listings:
@@ -1143,19 +1161,31 @@ class HepsiemlakScraper(BaseScraper):
 
         return listings
     
-    def start_scraping_api(self, max_pages: int = 1, progress_callback=None):
-        """API scraping entry point"""
+    def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
+        """API scraping entry point
+
+        Args:
+            max_pages: Maximum pages to scrape per city/district
+            progress_callback: Callback for progress updates
+            stop_checker: Callable that returns True if stop requested (for Celery tasks)
+        """
         print(f"\n🚀 API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")
-        
+
+        # Store stop checker for use in nested methods
+        self._stop_checker = stop_checker
+
+        def is_stop_requested():
+            """Check if stop was requested - supports both Celery and in-memory"""
+            if stop_checker and stop_checker():
+                return True
+            # Fallback to in-memory status for non-Celery calls
+            try:
+                from api.status import task_status
+                return task_status.is_stop_requested()
+            except:
+                return False
+
         try:
-            # For HepsiEmlak, current logic requires digging into DOM to get city list to click them.
-            # get_cities() does that.
-            
-            # If self.selected_cities is already populated (from init), we can use that filter.
-            # But we need to VALIDATE if those cities exist and get their clickable elements maybe?
-            # scrape_city() calls select_single_city() which opens dropdown and clicks.
-            # So we just need list of strings.
-            
             if not self.selected_cities:
                  logger.error("No cities provided for API scrape")
                  return
@@ -1165,27 +1195,42 @@ class HepsiemlakScraper(BaseScraper):
             total_listings_count = 0
             total_cities = len(self.selected_cities)
 
+            stopped_early = False  # Track if stopped early
+
             for city_idx, city in enumerate(self.selected_cities, 1):
                 # Durdurma kontrolü - kullanıcı durdur dediyse mevcut verileri kaydet
-                from api.status import task_status
-                if task_status.is_stop_requested():
+                if is_stop_requested():
                     print(f"\n⚠️ Durdurma isteği alındı! {len(all_results)} şehir tarandı.")
-                    task_status.stopped_early = True
+                    stopped_early = True
                     break
 
                 # Toplam progress hesabı için wrapper callback
                 # city_idx ve total_cities'i closure'a alıyoruz
+                # Use progress_callback if provided (Celery), otherwise try task_status
                 def make_city_progress_callback(current_city_idx, num_cities, city_name):
                     def city_progress_callback(msg, current=None, total=None, progress=None):
                         # Şehir içi progress'i toplam progress'e çevir
                         city_local_progress = progress if progress is not None else 0
                         overall = int(((current_city_idx - 1 + city_local_progress / 100) / num_cities) * 100)
-                        task_status.update(
-                            message=f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
-                            progress=overall,
-                            current=current,
-                            total=total
-                        )
+                        if progress_callback:
+                            progress_callback(
+                                f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
+                                current=current,
+                                total=total,
+                                progress=overall
+                            )
+                        else:
+                            # Fallback to in-memory task_status
+                            try:
+                                from api.status import task_status
+                                task_status.update(
+                                    message=f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
+                                    progress=overall,
+                                    current=current,
+                                    total=total
+                                )
+                            except:
+                                pass
                     return city_progress_callback
 
                 city_callback = make_city_progress_callback(city_idx, total_cities, city)
@@ -1255,7 +1300,7 @@ class HepsiemlakScraper(BaseScraper):
                 total = total_listings_count
 
                 print(f"\n{'=' * 70}")
-                if task_status.stopped_early:
+                if stopped_early:
                     print("⚠️  ERKEN DURDURULDU")
                     logger.warning(f"⚠️  Tarama erken durduruldu: {len(all_results)} şehir, {total} ilan")
                 else:
@@ -1289,41 +1334,45 @@ class HepsiemlakScraper(BaseScraper):
             # ============================================================
             max_retries = 3
             retry_round = 0
-            
+            successful_retries = 0
+
             while failed_pages_tracker.has_failed_pages() and retry_round < max_retries:
                 retry_round += 1
                 failed_pages = failed_pages_tracker.get_unretried(max_retry_count=max_retries)
-                
+
                 if not failed_pages:
                     break
-                
+
                 print(f"\n{'=' * 70}")
                 print(f"🔄 YENİDEN DENEME #{retry_round}/{max_retries}")
                 print(f"📊 {len(failed_pages)} başarısız sayfa tekrar taranacak")
                 print("=" * 70)
-                
-                # Status güncelle
-                task_status.is_retrying = True
-                task_status.retry_round = retry_round
-                task_status.failed_pages_count = len(failed_pages)
-                task_status.update(
-                    message=f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
-                    progress=0
-                )
-                
+
+                # Progress callback ile status güncelle
+                if progress_callback:
+                    progress_callback(
+                        f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
+                        current=0,
+                        total=len(failed_pages),
+                        progress=0
+                    )
+
                 # Her başarısız sayfa için yeni tarayıcı ile dene
                 for idx, page_info in enumerate(failed_pages, 1):
                     # Durdurma kontrolü
-                    if task_status.is_stop_requested():
+                    if is_stop_requested():
                         print(f"\n⚠️ Retry durduruldu!")
                         break
-                    
+
                     print(f"\n🔄 [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}")
-                    
-                    task_status.update(
-                        message=f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
-                        progress=int((idx / len(failed_pages)) * 100)
-                    )
+
+                    if progress_callback:
+                        progress_callback(
+                            f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
+                            current=idx,
+                            total=len(failed_pages),
+                            progress=int((idx / len(failed_pages)) * 100)
+                        )
                     
                     try:
                         # Yeni tarayıcı oturumu aç
@@ -1375,11 +1424,11 @@ class HepsiemlakScraper(BaseScraper):
                                         
                                         # Başarılı olarak işaretle
                                         failed_pages_tracker.mark_as_success(
-                                            page_info.city, 
-                                            page_info.district, 
+                                            page_info.city,
+                                            page_info.district,
                                             page_info.page_number
                                         )
-                                        task_status.successful_retries += 1
+                                        successful_retries += 1
                                     else:
                                         print(f"   ⚠️ 0 ilan - devam ediliyor")
                                         failed_pages_tracker.increment_retry_count(
@@ -1417,16 +1466,13 @@ class HepsiemlakScraper(BaseScraper):
                     
                     # Sayfalar arası kısa bekleme
                     time.sleep(random.uniform(1, 2))
-            
-            # Retry tamamlandı
-            task_status.is_retrying = False
-            
+
             # Final özet
             summary = failed_pages_tracker.get_summary()
-            if summary["failed_count"] > 0 or summary["successful_retries"] > 0:
+            if summary["failed_count"] > 0 or successful_retries > 0:
                 print(f"\n{'=' * 70}")
                 print("📊 RETRY ÖZETİ")
-                print(f"   ✅ Başarılı retry: {summary['successful_retries']}")
+                print(f"   ✅ Başarılı retry: {successful_retries}")
                 print(f"   ❌ Kalan başarısız: {summary['failed_count']}")
                 print("=" * 70)
                 

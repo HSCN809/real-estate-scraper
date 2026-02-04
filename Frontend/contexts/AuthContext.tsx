@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import type { User, LoginCredentials, RegisterData, LoginResponse } from '@/types/auth';
 import * as authApi from '@/lib/auth-api';
 
@@ -25,7 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
-    const pathname = usePathname();
 
     const saveAuth = (response: LoginResponse) => {
         sessionStorage.setItem(TOKEN_KEY, response.access_token);
@@ -51,13 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const storedUser = sessionStorage.getItem(USER_KEY);
 
             if (token && storedUser) {
+                // Önce mevcut kullanıcıyı yükle (hızlı yükleme için)
                 try {
-                    // Verify token is still valid
-                    const user = await authApi.getCurrentUser(token);
-                    setUser(user);
-                    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
                 } catch {
-                    // Token invalid, clear auth
+                    clearAuth();
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Arka planda token'ı doğrula
+                try {
+                    const freshUser = await authApi.getCurrentUser(token);
+                    setUser(freshUser);
+                    sessionStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+                } catch {
+                    // Token geçersizse oturumu temizle
                     clearAuth();
                 }
             }

@@ -79,6 +79,8 @@ services:
       context: ./Backend
       dockerfile: Dockerfile.worker
     container_name: real-estate-worker
+    init: true  # Zombie process'leri temizler
+    shm_size: '2gb'  # Chrome için shared memory
     volumes:
       # Log dosyalari (worker loglari)
       - ./Backend/logs:/app/logs

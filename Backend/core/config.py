@@ -66,7 +66,7 @@ class ScraperConfig:
     default_pages: int = 10
 
     # Browser settings - STEALTH MODE
-    # Docker'da CHROME_HEADLESS=true olmalı
+    # Docker'da CHROME_HEADLESS=false olmalı
     headless: bool = field(default_factory=lambda: get_bool_env('CHROME_HEADLESS', False))
     disable_images: bool = True
 

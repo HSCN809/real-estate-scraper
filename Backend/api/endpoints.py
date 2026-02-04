@@ -724,8 +724,21 @@ async def get_status(task_id: Optional[str] = None):
             # Map status to is_running for frontend compatibility
             status_data["is_running"] = status_data.get("status") in ["pending", "running"]
             return status_data
+        else:
+            # Task ID verildi ama Redis'te bulunamadı - henüz başlamamış demek
+            # "pending" olarak dön, başka task'ın status'unu dönme!
+            return {
+                "task_id": task_id,
+                "status": "pending",
+                "is_running": True,
+                "message": "Task başlatılıyor...",
+                "progress": 0,
+                "current": 0,
+                "total": 0,
+                "details": ""
+            }
 
-    # Try to find active task from Redis
+    # task_id yoksa: Try to find active task from Redis
     if r:
         for key in r.scan_iter("scrape_task:*"):
             data = r.get(key)

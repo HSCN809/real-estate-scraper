@@ -206,6 +206,10 @@ def scrape_hepsiemlak_task(
                 logger.info(f"[Task {task_id}] Stop requested, raising exception")
                 raise StopRequested("User requested stop")
 
+        # Stop checker function for scraper
+        def stop_checker():
+            return progress_manager.is_stop_requested()
+
         # Create scraper
         scraper = HepsiemlakScraper(
             driver=driver,
@@ -222,8 +226,12 @@ def scrape_hepsiemlak_task(
 
         logger.info(f"[Task {task_id}] Starting scraping API call")
 
-        # Run scraper
-        scraper.start_scraping_api(max_pages=max_pages, progress_callback=progress_callback)
+        # Run scraper with stop checker
+        scraper.start_scraping_api(
+            max_pages=max_pages,
+            progress_callback=progress_callback,
+            stop_checker=stop_checker
+        )
 
         # Update session with results
         if scrape_session:
@@ -346,6 +354,10 @@ def scrape_emlakjet_task(
             if progress_manager.is_stop_requested():
                 raise StopRequested("User requested stop")
 
+        # Stop checker function for scraper
+        def stop_checker():
+            return progress_manager.is_stop_requested()
+
         scraper = EmlakJetScraper(
             driver=driver,
             base_url=base_url,
@@ -358,7 +370,8 @@ def scrape_emlakjet_task(
             cities=cities,
             districts=districts,
             max_pages=max_pages,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            stop_checker=stop_checker
         )
 
         progress_manager.complete(message="EmlakJet taraması tamamlandı!")

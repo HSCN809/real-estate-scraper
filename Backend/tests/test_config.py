@@ -37,12 +37,12 @@ class TestScraperConfig:
         """Test custom configuration values"""
         config = ScraperConfig(
             page_load_timeout=30,
-            headless=True,
+            headless=False,
             max_retries=5
         )
         
         assert config.page_load_timeout == 30
-        assert config.headless == True
+        assert config.headless == False
         assert config.max_retries == 5
 
 

@@ -107,7 +107,6 @@ export default function PlatformScraperPage() {
 
         setIsLoading(true);
         setResult(null);
-        setIsProgressModalOpen(true); // Modal'ı hemen aç
 
         try {
             const response = await startScrape(platform, {
@@ -120,9 +119,10 @@ export default function PlatformScraperPage() {
                 max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
 
-            // Store task_id for tracking
+            // Store task_id for tracking and open modal
             if (response.task_id) {
                 setCurrentTaskId(response.task_id);
+                setIsProgressModalOpen(true); // Modal'ı task_id aldıktan sonra aç
             }
 
             setResult({ type: 'success', message: response.message });
@@ -131,7 +131,6 @@ export default function PlatformScraperPage() {
                 type: 'error',
                 message: error instanceof Error ? error.message : 'Bilinmeyen hata',
             });
-            setIsProgressModalOpen(false); // Hata varsa kapat
         } finally {
             setIsLoading(false);
         }
