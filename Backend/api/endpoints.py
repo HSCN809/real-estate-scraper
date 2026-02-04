@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from api.schemas import ScrapeRequest, ScrapeResponse
 from core.driver_manager import DriverManager
 from core.config import get_emlakjet_config, get_hepsiemlak_config
@@ -9,10 +9,19 @@ from database.connection import get_db
 from database import crud
 from database.models import Listing, Location, ScrapeSession
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from pathlib import Path
+import json
 import os
 import io
+
+# Districts data directory
+DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
+
+# In-memory cache for district GeoJSON data
+_districts_cache: Dict[str, Any] = {}
+_districts_index: Optional[Dict[str, Any]] = None
 
 # Import scrapers (will need refactoring to import cleanly)
 # We will do dynamic imports or ensure the refactor makes them importable
@@ -829,3 +838,103 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "success", "message": f"İlan {listing_id} silindi"}
+
+
+# ==================== DISTRICTS GeoJSON ENDPOINTS ====================
+
+def _load_districts_index() -> Dict[str, Any]:
+    """Load and cache the districts index.json"""
+    global _districts_index
+    if _districts_index is not None:
+        return _districts_index
+
+    index_path = DISTRICTS_DIR / "index.json"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Districts index not found")
+
+    with open(index_path, "r", encoding="utf-8") as f:
+        _districts_index = json.load(f)
+
+    return _districts_index
+
+
+def _load_district_geojson(province_name: str) -> Dict[str, Any]:
+    """Load and cache a province's GeoJSON data"""
+    # Check cache first
+    if province_name in _districts_cache:
+        return _districts_cache[province_name]
+
+    # Get filename from index
+    index = _load_districts_index()
+    province_info = index.get(province_name)
+
+    if not province_info:
+        raise HTTPException(status_code=404, detail=f"Province '{province_name}' not found in index")
+
+    filename = province_info.get("file")
+    if not filename:
+        raise HTTPException(status_code=404, detail=f"No file specified for province '{province_name}'")
+
+    filepath = DISTRICTS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"GeoJSON file not found: {filename}")
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        geojson_data = json.load(f)
+
+    # Cache it
+    _districts_cache[province_name] = geojson_data
+
+    return geojson_data
+
+
+@router.get("/districts/index")
+async def get_districts_index():
+    """Get the districts index with all provinces and their district counts"""
+    return _load_districts_index()
+
+
+@router.get("/districts/{province_name}")
+async def get_district_geojson(province_name: str):
+    """
+    Get GeoJSON data for a specific province's districts.
+    Uses in-memory caching for fast subsequent requests.
+    """
+    return _load_district_geojson(province_name)
+
+
+@router.get("/districts/info/{province_name}")
+async def get_district_info(province_name: str):
+    """Get district list and metadata for a province (without full GeoJSON geometry)"""
+    index = _load_districts_index()
+    province_info = index.get(province_name)
+
+    if not province_info:
+        raise HTTPException(status_code=404, detail=f"Province '{province_name}' not found")
+
+    return {
+        "province": province_name,
+        "file": province_info.get("file"),
+        "count": province_info.get("count"),
+        "districts": province_info.get("districts", [])
+    }
+
+
+@router.post("/districts/cache/clear")
+async def clear_districts_cache():
+    """Clear the in-memory districts cache (admin endpoint)"""
+    global _districts_cache, _districts_index
+    cache_size = len(_districts_cache)
+    _districts_cache = {}
+    _districts_index = None
+    return {"status": "success", "message": f"Cache cleared. {cache_size} provinces removed from cache."}
+
+
+@router.get("/districts/cache/status")
+async def get_cache_status():
+    """Get current cache status"""
+    return {
+        "cached_provinces": list(_districts_cache.keys()),
+        "cache_size": len(_districts_cache),
+        "index_loaded": _districts_index is not None
+    }

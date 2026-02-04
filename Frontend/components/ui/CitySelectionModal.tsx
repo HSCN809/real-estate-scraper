@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,16 +7,11 @@ import TurkeyMap from 'turkey-map-react';
 import { geoMercator, geoPath } from 'd3-geo';
 import { X, MapPin, Check, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getDistrictsIndex, getDistrictGeoJSON, type DistrictIndex } from '@/lib/api';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
-// District index type
-interface DistrictIndex {
-    [province: string]: {
-        file: string;
-        count: number;
-        districts: string[];
-    };
-}
+// GeoJSON cache - Component dışında tutulur, sayfa yenilenene kadar kalır
+const geoJsonCache: Record<string, FeatureCollection<Geometry, DistrictProperties>> = {};
 
 interface DistrictProperties {
     feature_name: string;
@@ -88,6 +83,8 @@ export function CitySelectionModal({
     const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
     const [cityMousePosition, setCityMousePosition] = useState<{ x: number; y: number } | null>(null);
     const [zoomLevel, setZoomLevel] = useState(1);
+    const [isExitingDistricts, setIsExitingDistricts] = useState(false);
+    const [loadKey, setLoadKey] = useState(0); // Force reload trigger
 
     // Geçici seçimler - Modal içinde kullanılır, onaylanınca parent'a gönderilir
     const [tempSelectedCities, setTempSelectedCities] = useState<string[]>([]);
@@ -121,15 +118,12 @@ export function CitySelectionModal({
         onClose();
     };
 
-    // Load district index
+    // Load district index from backend API
     useEffect(() => {
         const loadDistrictIndex = async () => {
             try {
-                const response = await fetch('/districts/index.json');
-                if (response.ok) {
-                    const data = await response.json();
-                    setDistrictIndex(data);
-                }
+                const data = await getDistrictsIndex();
+                setDistrictIndex(data);
             } catch (err) {
                 console.error('İlçe index yüklenemedi:', err);
             }
@@ -137,38 +131,74 @@ export function CitySelectionModal({
         loadDistrictIndex();
     }, []);
 
-    // Load district GeoJSON when province selected
+    // Preload - Hover edilen şehrin verisini arka planda yükle (backend API)
+    const preloadDistrictData = async (provinceName: string) => {
+        if (!districtIndex || geoJsonCache[provinceName]) return;
+        if (!districtIndex[provinceName]) return;
+
+        try {
+            const data = await getDistrictGeoJSON(provinceName);
+            geoJsonCache[provinceName] = data as FeatureCollection<Geometry, DistrictProperties>;
+        } catch {
+            // Sessizce başarısız ol, kullanıcıyı rahatsız etme
+        }
+    };
+
+    // Load district GeoJSON when province selected (with cache, from backend API)
     useEffect(() => {
         if (!activeProvince || !districtIndex) {
             setDistrictGeoData(null);
             return;
         }
 
+        // Hemen loading state'ini set et
+        setLoadingDistricts(true);
+        setDistrictGeoData(null);
+
+        const MIN_LOADING_TIME = 2000; // Minimum 2 saniye animasyon
+
         const loadDistrictGeoJSON = async () => {
-            setLoadingDistricts(true);
-            try {
-                const fileName = districtIndex[activeProvince]?.file;
-                if (fileName) {
-                    const response = await fetch(`/districts/${fileName}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setDistrictGeoData(data);
-                    }
+            const startTime = Date.now();
+
+            let data: FeatureCollection<Geometry, DistrictProperties>;
+
+            // Cache'de varsa oradan al, yoksa API'den çek
+            if (geoJsonCache[activeProvince]) {
+                data = geoJsonCache[activeProvince];
+            } else {
+                try {
+                    const fetchedData = await getDistrictGeoJSON(activeProvince);
+                    data = fetchedData as FeatureCollection<Geometry, DistrictProperties>;
+                    // Cache'e kaydet
+                    geoJsonCache[activeProvince] = data;
+                } catch (err) {
+                    console.error('İlçe GeoJSON yüklenemedi:', err);
+                    setLoadingDistricts(false);
+                    return;
                 }
-            } catch (err) {
-                console.error('İlçe GeoJSON yüklenemedi:', err);
-            } finally {
-                setLoadingDistricts(false);
             }
+
+            // Minimum 2 saniye bekleme süresi
+            const elapsed = Date.now() - startTime;
+            const remainingTime = MIN_LOADING_TIME - elapsed;
+
+            if (remainingTime > 0) {
+                await new Promise(resolve => setTimeout(resolve, remainingTime));
+            }
+
+            setDistrictGeoData(data);
+            setLoadingDistricts(false);
         };
 
         loadDistrictGeoJSON();
-    }, [activeProvince, districtIndex]);
+    }, [activeProvince, districtIndex, loadKey]);
 
     const handleCityClick = (cityData: { name: string }) => {
         const turkishName = CITY_NAMES[cityData.name] || cityData.name;
 
         if (districtIndex && districtIndex[turkishName]) {
+            // loadKey'i artır - useEffect'i her zaman tetikle
+            setLoadKey(prev => prev + 1);
             setActiveProvince(turkishName);
             setZoomLevel(1); // Reset zoom when entering district view
             if (!tempSelectedCities.includes(turkishName)) {
@@ -191,6 +221,21 @@ export function CitySelectionModal({
     const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.2, 3));
     const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.2, 0.5));
     const handleZoomReset = () => setZoomLevel(1);
+
+    // Geri dön - İlçeler tek tek kaybolsun
+    const handleBackToTurkey = async () => {
+        if (isExitingDistricts) return;
+        setIsExitingDistricts(true);
+
+        // İlçe sayısına göre animasyon süresi (max 800ms)
+        const districtCount = districtGeoData?.features.length || 0;
+        const exitDuration = Math.min(districtCount * 15, 800);
+
+        await new Promise(resolve => setTimeout(resolve, exitDuration + 200));
+
+        setActiveProvince(null);
+        setIsExitingDistricts(false);
+    };
 
     const handleRegionSelect = (region: string) => {
         const regionCities = REGIONS[region] || [];
@@ -354,6 +399,8 @@ export function CitySelectionModal({
                                                     onHover={(cityData: { name: string }) => {
                                                         const turkishName = CITY_NAMES[cityData.name] || cityData.name;
                                                         setHoveredCity(turkishName);
+                                                        // Arka planda ilçe verisini yükle
+                                                        preloadDistrictData(turkishName);
                                                     }}
                                                     cityWrapper={cityWrapper}
                                                 />
@@ -388,10 +435,23 @@ export function CitySelectionModal({
                                             <motion.button
                                                 initial={{ opacity: 0, x: -20 }}
                                                 animate={{ opacity: 1, x: 0 }}
-                                                onClick={() => setActiveProvince(null)}
-                                                className="absolute top-6 left-6 z-10 px-4 py-2 rounded-lg bg-slate-800/90 text-white flex items-center gap-2 hover:bg-slate-700 transition-colors border border-slate-600"
+                                                onClick={handleBackToTurkey}
+                                                disabled={isExitingDistricts}
+                                                className="absolute top-6 left-6 z-10 px-4 py-2 rounded-lg bg-slate-800/90 text-white flex items-center gap-2 hover:bg-slate-700 transition-colors border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                ← Türkiye&apos;ye Dön
+                                                {isExitingDistricts ? (
+                                                    <>
+                                                        <motion.span
+                                                            animate={{ rotate: 360 }}
+                                                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                                        >
+                                                            ◐
+                                                        </motion.span>
+                                                        Çıkılıyor...
+                                                    </>
+                                                ) : (
+                                                    <>← Türkiye&apos;ye Dön</>
+                                                )}
                                             </motion.button>
 
                                             <motion.div
@@ -405,7 +465,49 @@ export function CitySelectionModal({
                                             {/* Harita */}
                                             <div className="flex-1 flex items-center justify-center">
                                                 {loadingDistricts ? (
-                                                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500" />
+                                                    <motion.div
+                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        className="flex flex-col items-center gap-6"
+                                                    >
+                                                        {/* Animated map icon */}
+                                                        <div className="relative">
+                                                            <div className="w-24 h-24 rounded-full bg-sky-500/10 flex items-center justify-center">
+                                                                <MapPin className="w-12 h-12 text-sky-400" />
+                                                            </div>
+                                                            {/* Spinning ring */}
+                                                            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-sky-500 animate-spin" />
+                                                            {/* Pulsing ring */}
+                                                            <div className="absolute inset-0 rounded-full border-2 border-sky-500/30 animate-ping" />
+                                                        </div>
+
+                                                        {/* Province name */}
+                                                        <div className="text-center">
+                                                            <h3 className="text-xl font-bold text-white mb-2">{activeProvince}</h3>
+                                                            <p className="text-slate-400 text-sm">
+                                                                {districtIndex?.[activeProvince]?.count || '...'} ilçe yükleniyor
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Progress dots */}
+                                                        <div className="flex gap-2">
+                                                            {[0, 1, 2].map((i) => (
+                                                                <motion.div
+                                                                    key={i}
+                                                                    className="w-3 h-3 rounded-full bg-sky-500"
+                                                                    animate={{
+                                                                        scale: [1, 1.5, 1],
+                                                                        opacity: [0.3, 1, 0.3],
+                                                                    }}
+                                                                    transition={{
+                                                                        duration: 1,
+                                                                        repeat: Infinity,
+                                                                        delay: i * 0.2,
+                                                                    }}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
                                                 ) : districtGeoData && pathGenerator && bounds ? (
                                                     <div className="relative w-full h-full flex items-center justify-center">
                                                         <svg
@@ -429,18 +531,27 @@ export function CitySelectionModal({
                                                                     const name = feature.properties.feature_name || `d-${idx}`;
                                                                     const isSelected = currentProvinceDistricts.includes(name);
                                                                     const isHovered = hoveredDistrict === name;
+                                                                    const totalFeatures = districtGeoData.features.length;
+                                                                    // Çıkışta ters sırada kaybolsun (sondan başa)
+                                                                    const exitDelay = (totalFeatures - idx - 1) * 0.015;
                                                                     return (
                                                                         <motion.path
                                                                             key={name}
                                                                             d={pathGenerator(feature as Feature<Geometry>) || ''}
-                                                                            initial={{ opacity: 0 }}
-                                                                            animate={{ opacity: 1, fill: isSelected ? 'rgba(16, 185, 129, 0.6)' : isHovered ? 'rgba(14, 165, 233, 0.4)' : 'rgba(51, 65, 85, 0.8)' }}
-                                                                            transition={{ delay: idx * 0.015 }}
+                                                                            initial={{ opacity: 0, scale: 0.8 }}
+                                                                            animate={isExitingDistricts
+                                                                                ? { opacity: 0, scale: 0.5, y: -20 }
+                                                                                : { opacity: 1, scale: 1, y: 0, fill: isSelected ? 'rgba(16, 185, 129, 0.6)' : isHovered ? 'rgba(14, 165, 233, 0.4)' : 'rgba(51, 65, 85, 0.8)' }
+                                                                            }
+                                                                            transition={isExitingDistricts
+                                                                                ? { delay: exitDelay, duration: 0.2 }
+                                                                                : { delay: idx * 0.015 }
+                                                                            }
                                                                             stroke={isSelected ? '#10b981' : isHovered ? '#0ea5e9' : '#475569'}
                                                                             strokeWidth={isSelected || isHovered ? 2 / zoomLevel : 1 / zoomLevel}
                                                                             className="cursor-pointer"
-                                                                            onClick={() => handleDistrictToggle(name)}
-                                                                            onMouseEnter={() => setHoveredDistrict(name)}
+                                                                            onClick={() => !isExitingDistricts && handleDistrictToggle(name)}
+                                                                            onMouseEnter={() => !isExitingDistricts && setHoveredDistrict(name)}
                                                                             onMouseLeave={() => setHoveredDistrict(null)}
                                                                         />
                                                                     );

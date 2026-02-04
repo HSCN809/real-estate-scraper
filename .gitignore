@@ -79,3 +79,8 @@ CLAUDE.md
 # Docker (optional - keep compose file)
 # ===========================================
 # docker-compose.override.yml
+
+# ===========================================
+# Diğer Dosyalar
+# ===========================================
+Genel Proje Kuralları.md

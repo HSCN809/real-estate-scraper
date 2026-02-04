@@ -174,3 +174,31 @@ export async function getDistricts(city: string): Promise<{ city: string; distri
     }
     return response.json();
 }
+
+// ==================== Districts GeoJSON API ====================
+
+export interface DistrictIndexEntry {
+    file: string;
+    count: number;
+    districts: string[];
+}
+
+export interface DistrictIndex {
+    [province: string]: DistrictIndexEntry;
+}
+
+export async function getDistrictsIndex(): Promise<DistrictIndex> {
+    const response = await fetch(`${API_BASE_URL}/districts/index`);
+    if (!response.ok) {
+        throw new Error('İlçe index alınamadı');
+    }
+    return response.json();
+}
+
+export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.FeatureCollection> {
+    const response = await fetch(`${API_BASE_URL}/districts/${encodeURIComponent(provinceName)}`);
+    if (!response.ok) {
+        throw new Error(`${provinceName} ilçe verisi alınamadı`);
+    }
+    return response.json();
+}

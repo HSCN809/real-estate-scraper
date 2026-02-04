@@ -54,18 +54,24 @@ services:
     networks:
       - real-estate-network
 
-  # Frontend - Next.js
+  # Frontend - Next.js (Development Mode with Hot Reload)
   frontend:
-    build:
-      context: ./Frontend
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    image: node:20-alpine
     container_name: real-estate-frontend
+    working_dir: /app
     ports:
       - "3000:3000"
+    volumes:
+      # Source code mount for hot reload
+      - ./Frontend:/app
+      # Anonymous volume for node_modules (prevents overwrite)
+      - /app/node_modules
+      - /app/.next
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev"
     depends_on:
       api:
         condition: service_healthy
