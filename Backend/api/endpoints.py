@@ -981,22 +981,20 @@ async def export_to_excel(
 
     df = pd.DataFrame(data)
 
-    # Create temp file
+    # Bellekte oluştur, diske yazmadan stream olarak gönder
+    from fastapi.responses import StreamingResponse
+
+    buffer = io.BytesIO()
+    df.to_excel(buffer, index=False, engine='openpyxl')
+    buffer.seek(0)
+
     timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
     filename = f"export_{timestamp}.xlsx"
 
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    output_dir = os.path.join(project_root, "outputs", "exports")
-    os.makedirs(output_dir, exist_ok=True)
-
-    filepath = os.path.join(output_dir, filename)
-    df.to_excel(filepath, index=False, engine='openpyxl')
-
-    return FileResponse(
-        path=filepath,
-        filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 
