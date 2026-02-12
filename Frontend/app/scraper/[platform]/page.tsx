@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
-import { ProgressModal } from '@/components/ui/ProgressModal';
+import { useScraping } from '@/contexts/ScrapingContext';
 import { motion } from 'framer-motion';
 import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
@@ -28,8 +28,7 @@ export default function PlatformScraperPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
-    const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
-    const [currentTaskId, setCurrentTaskId] = useState<string | undefined>();
+    const { startTracking, activeTask } = useScraping();
 
     // Dynamic categories from API
     const [categories, setCategories] = useState<Category[]>([]);
@@ -119,10 +118,9 @@ export default function PlatformScraperPage() {
                 max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
             });
 
-            // Store task_id for tracking and open modal
+            // Start tracking in global context
             if (response.task_id) {
-                setCurrentTaskId(response.task_id);
-                setIsProgressModalOpen(true); // Modal'ı task_id aldıktan sonra aç
+                startTracking(response.task_id, platform);
             }
 
             setResult({ type: 'success', message: response.message });
@@ -311,13 +309,6 @@ export default function PlatformScraperPage() {
                         onDistrictsChange={setSelectedDistricts}
                     />
 
-                    {/* Progress Modal */}
-                    <ProgressModal
-                        isOpen={isProgressModalOpen}
-                        onClose={() => setIsProgressModalOpen(false)}
-                        taskId={currentTaskId}
-                    />
-
                     {/* Max Pages & Scrape All */}
                     <div className="flex items-end gap-4">
                         <div className="flex-1">
@@ -355,8 +346,8 @@ export default function PlatformScraperPage() {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isLoading}
-                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                        disabled={isLoading || (activeTask && !activeTask.isFinished)}
+                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading || (activeTask && !activeTask.isFinished) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
                             }`}
                     >
                         {isLoading ? (

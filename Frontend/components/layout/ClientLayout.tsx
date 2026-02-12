@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { ParticleBackground } from '@/components/ui/ParticleBackground';
 import Aurora from '@/components/ui/Aurora';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { ProgressPanel } from '@/components/ui/ProgressModal';
 import { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
@@ -70,6 +71,8 @@ export function ClientLayout({ children }: { children: ReactNode }) {
                     </main>
                 </div>
             </div>
+            {/* Global Progress Panel — visible on all pages */}
+            <ProgressPanel />
         </AuthGuard>
     );
 }

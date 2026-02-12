@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Search, FileText, Settings, User, LogOut, ChevronDown } from 'lucide-react';
+import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useScraping } from '@/contexts/ScrapingContext';
 import { useState, useRef, useEffect } from 'react';
 
 // Ana navigasyon öğeleri (Profil ve Ayarlar dropdown'a taşındı)
@@ -23,8 +24,11 @@ const dropdownMenuItems = [
 export function Header() {
     const pathname = usePathname();
     const { user, logout } = useAuth();
+    const { activeTask, isPanelVisible, showPanel } = useScraping();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const showMiniIndicator = activeTask && !activeTask.isFinished && !isPanelVisible;
 
     // Dropdown dışına tıklandığında kapat
     useEffect(() => {
@@ -84,6 +88,20 @@ export function Header() {
                         );
                     })}
                 </nav>
+
+                {/* Mini Progress Indicator — visible when panel is hidden */}
+                {showMiniIndicator && (
+                    <button
+                        onClick={showPanel}
+                        className="flex items-center gap-2 px-3 py-1.5 mr-3 rounded-lg bg-blue-500/15 border border-blue-500/30 hover:bg-blue-500/25 transition-all text-blue-400 text-sm font-medium"
+                        title="Tarama devam ediyor — tıkla görüntüle"
+                    >
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="hidden sm:inline">
+                            %{Math.round(activeTask.status?.progress || 0)}
+                        </span>
+                    </button>
+                )}
 
                 {/* User Section - Sağ */}
                 {user && (

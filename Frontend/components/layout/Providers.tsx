@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { ReactNode } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ScrapingProvider } from '@/contexts/ScrapingContext';
 import { ToastProvider } from '@/components/ui/Toast';
 
 interface ProvidersProps {
@@ -14,7 +15,9 @@ export function Providers({ children }: ProvidersProps) {
         <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
             <ToastProvider>
                 <AuthProvider>
-                    {children}
+                    <ScrapingProvider>
+                        {children}
+                    </ScrapingProvider>
                 </AuthProvider>
             </ToastProvider>
         </NextThemesProvider>
