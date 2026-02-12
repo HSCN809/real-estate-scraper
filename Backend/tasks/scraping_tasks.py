@@ -330,12 +330,38 @@ def scrape_emlakjet_task(
     from scrapers.emlakjet.main import EmlakJetScraper
     from core.driver_manager import DriverManager
     from core.config import get_emlakjet_config
+    from database.connection import get_db_session
+    from database import crud
 
     manager = DriverManager()
+    db = None
+    scrape_session = None
+    scraper = None
 
     try:
         driver = manager.start()
+        db = get_db_session()
         config = get_emlakjet_config()
+
+        # Extract alt_kategori from subtype_path
+        alt_kategori = None
+        if subtype_path:
+            parts = subtype_path.strip('/').split('-')
+            if len(parts) >= 2:
+                alt_kategori = parts[-1].replace('-', '_')
+
+        # Create scrape session in database
+        scrape_session = crud.create_scrape_session(
+            db,
+            platform="emlakjet",
+            kategori=category,
+            ilan_tipi=listing_type,
+            alt_kategori=alt_kategori,
+            target_cities=cities,
+            target_districts=districts
+        )
+        db.commit()
+        logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
         # Build base URL
         if subtype_path:
@@ -367,6 +393,10 @@ def scrape_emlakjet_task(
             subtype_path=subtype_path
         )
 
+        # Set DB session on scraper for potential future use
+        scraper.db = db
+        scraper.scrape_session_id = scrape_session.id
+
         scraper.start_scraping_api(
             cities=cities,
             districts=districts,
@@ -375,25 +405,150 @@ def scrape_emlakjet_task(
             stop_checker=stop_checker,
         )
 
-        progress_manager.complete(message="EmlakJet taraması tamamlandı!")
+        # Save listings to DB
+        total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
+            db, scraper, category, listing_type, alt_kategori, scrape_session.id
+        )
+
+        # Update session with results
+        crud.update_scrape_session(
+            db, scrape_session.id,
+            total_listings=total_listings,
+            new_listings=new_count,
+            duplicate_listings=unchanged_count
+        )
+        crud.complete_scrape_session(db, scrape_session.id, status="completed")
+        db.commit()
+
+        logger.info(f"[Task {task_id}] Scraping completed: total={total_listings}, new={new_count}")
+        progress_manager.complete(
+            message=f"EmlakJet taraması tamamlandı! {total_listings} ilan bulundu."
+        )
 
         return {
             "status": "completed",
-            "task_id": task_id
+            "task_id": task_id,
+            "total_listings": total_listings,
+            "new_listings": new_count,
+            "duplicates": unchanged_count
         }
 
     except StopRequested:
         logger.info(f"[Task {task_id}] Task stopped by user")
         progress_manager.set_stopped_early()
-        return {"status": "stopped", "task_id": task_id}
+
+        # Save whatever we have so far to DB
+        if scraper and db and scrape_session:
+            total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
+                db, scraper, category, listing_type, alt_kategori, scrape_session.id
+            )
+            crud.update_scrape_session(
+                db, scrape_session.id,
+                total_listings=total_listings,
+                new_listings=new_count,
+                duplicate_listings=unchanged_count
+            )
+            crud.complete_scrape_session(db, scrape_session.id, status="stopped")
+            db.commit()
+            logger.info(f"[Task {task_id}] Saved {total_listings} listings before stop")
+
+        return {
+            "status": "stopped",
+            "task_id": task_id,
+            "message": "Kullanıcı tarafından durduruldu"
+        }
+
+    except SoftTimeLimitExceeded:
+        logger.error(f"[Task {task_id}] Task exceeded time limit")
+        progress_manager.fail("Zaman limiti aşıldı")
+
+        if scraper and db and scrape_session:
+            total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
+                db, scraper, category, listing_type, alt_kategori, scrape_session.id
+            )
+            crud.update_scrape_session(
+                db, scrape_session.id,
+                total_listings=total_listings,
+                new_listings=new_count,
+                duplicate_listings=unchanged_count
+            )
+            crud.complete_scrape_session(db, scrape_session.id, status="timeout")
+            db.commit()
+
+        raise
 
     except Exception as e:
         logger.error(f"[Task {task_id}] Task failed: {e}", exc_info=True)
         progress_manager.fail(str(e))
+
+        if scraper and db and scrape_session:
+            try:
+                total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
+                    db, scraper, category, listing_type, alt_kategori, scrape_session.id
+                )
+                crud.update_scrape_session(
+                    db, scrape_session.id,
+                    total_listings=total_listings,
+                    new_listings=new_count,
+                    duplicate_listings=unchanged_count
+                )
+                crud.complete_scrape_session(db, scrape_session.id, status="failed", error_message=str(e))
+                db.commit()
+            except Exception:
+                db.rollback()
+
         raise
 
     finally:
+        if db:
+            db.close()
         manager.stop()
+
+
+def _save_emlakjet_listings_to_db(db, scraper, category, listing_type, alt_kategori, scrape_session_id):
+    """
+    EmlakJet scraper'ın all_listings verisini DB'ye kaydet.
+    Returns (total_count, new_count, unchanged_count)
+    """
+    from database import crud
+
+    all_listings = getattr(scraper, 'all_listings', [])
+    if not all_listings:
+        return 0, 0, 0
+
+    new_count = 0
+    updated_count = 0
+    unchanged_count = 0
+
+    for data in all_listings:
+        try:
+            listing, status = crud.upsert_listing(
+                db,
+                data=data,
+                platform="emlakjet",
+                kategori=category,
+                ilan_tipi=listing_type,
+                alt_kategori=alt_kategori,
+                scrape_session_id=scrape_session_id
+            )
+            if status == 'created':
+                new_count += 1
+            elif status == 'updated':
+                updated_count += 1
+            elif status == 'unchanged':
+                unchanged_count += 1
+        except Exception as e:
+            logger.warning(f"Failed to save EmlakJet listing: {e}")
+            continue
+
+    try:
+        db.commit()
+        logger.info(f"EmlakJet DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged")
+    except Exception as e:
+        logger.error(f"EmlakJet DB commit failed: {e}")
+        db.rollback()
+
+    return len(all_listings), new_count, unchanged_count
 
 
 class StopRequested(Exception):

@@ -505,7 +505,24 @@ class BaseScraper(ABC):
             
             containers = self.find_elements_safe(container_selector)
             logger.info(f"Found {len(containers)} listing containers")
-            
+
+            # EmlakJet: "Benzer İlanlar" section'ındaki kartları hariç tut
+            if self.platform == "emlakjet" and containers:
+                filtered = []
+                for c in containers:
+                    try:
+                        # Kartın "similarListingWrapper" veya "similarlisting" parent'ı varsa hariç tut
+                        is_similar = self.driver.execute_script(
+                            "return arguments[0].closest('[class*=\"similarListing\"], [class*=\"similarlisting\"]') !== null;", c
+                        )
+                        if not is_similar:
+                            filtered.append(c)
+                    except Exception:
+                        filtered.append(c)
+                if len(filtered) < len(containers):
+                    logger.info(f"Filtered out {len(containers) - len(filtered)} 'Benzer İlanlar' listings")
+                containers = filtered
+
             for container in containers:
                 try:
                     data = self.extract_listing_data(container)

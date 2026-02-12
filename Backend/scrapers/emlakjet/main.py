@@ -383,22 +383,26 @@ class EmlakJetScraper(BaseScraper):
             print("Getting province list...")
             all_provinces = self.get_location_options("İller", start_url)
 
-            api_indices = []
-            if cities:
-                for idx, p in enumerate(all_provinces, 1):
-                     if p['name'] in cities:
-                         api_indices.append(idx)
-
             # Step 1: Select provinces
-            provinces = self.select_provinces(api_indices=api_indices if cities else None)
-            # If no cities provided, maybe scraping all is too much?
-            # For safety, if no cities, return or error?
-            # In select_provinces logic above, if api_indices is None (but arg passed), it asks user?
-            # No, we modified it to check `if api_indices:`
-            if not provinces and not cities:
-                 # If cities empty and api call, maybe we shouldn't ask user.
-                 logger.error("No cities provided for API scrape")
-                 return
+            if cities:
+                # İsim eşleştirme: sidebar'daki isimler "İstanbul Satılık Ev" formatında,
+                # frontend'den gelen "İstanbul" — startswith ile eşleştir
+                api_indices = []
+                cities_lower = [c.lower() for c in cities]
+                for idx, p in enumerate(all_provinces, 1):
+                    province_name = p['name'].split(' ')[0].lower()  # "İstanbul Satılık Ev" → "istanbul"
+                    if province_name in cities_lower:
+                        api_indices.append(idx)
+
+                if not api_indices:
+                    logger.error(f"No matching provinces found for cities: {cities}")
+                    logger.info(f"Available provinces: {[p['name'] for p in all_provinces[:5]]}...")
+                    return
+
+                provinces = self.select_provinces(api_indices=api_indices)
+            else:
+                logger.error("No cities provided for API scrape")
+                return
 
             # Step 2: Process each province sequentially
             stopped = False

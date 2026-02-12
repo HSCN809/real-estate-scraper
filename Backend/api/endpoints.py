@@ -365,46 +365,85 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
 
 @router.post("/stop")
 async def stop_scraping(task_id: Optional[str] = None):
-    """Aktif tarama işlemini durdur ve mevcut verileri kaydet"""
+    """Aktif tarama işlemini anında durdur (terminate) ve orphan verileri temizle"""
     r = get_redis_client()
 
-    # If task_id provided, stop that specific task
-    if task_id and r:
-        key = f"scrape_task:{task_id}"
+    # task_id yoksa aktif task'ı bul
+    if not task_id and r:
+        for key in r.scan_iter("scrape_task:*"):
+            data = r.get(key)
+            if data:
+                d = json.loads(data)
+                if d.get("status") in ("running", "pending"):
+                    task_id = d.get("task_id")
+                    break
+
+    if not task_id:
+        # Fallback to in-memory status
+        if task_status.is_running:
+            task_status.request_stop()
+            return {"status": "stopped", "message": "Durdurma isteği gönderildi."}
+        return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
+
+    # 1) Redis'te status'ü direkt "stopped" yap
+    key = f"scrape_task:{task_id}"
+    if r:
         data = r.get(key)
         if data:
             data = json.loads(data)
             data["should_stop"] = True
-            data["message"] = "Durdurma isteği alındı, mevcut veriler kaydediliyor..."
+            data["message"] = "Task sonlandırıldı."
+            data["status"] = "stopped"
+            data["stopped_early"] = True
             r.setex(key, 86400, json.dumps(data))
-            return {
-                "status": "stopping",
-                "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor...",
-                "task_id": task_id
-            }
 
-    # Try to find and stop active task from Redis
-    if r:
-        for key in r.scan_iter("scrape_task:*"):
-            data = r.get(key)
-            if data:
-                data = json.loads(data)
-                if data.get("status") == "running":
-                    data["should_stop"] = True
-                    data["message"] = "Durdurma isteği alındı, mevcut veriler kaydediliyor..."
-                    r.setex(key, 86400, json.dumps(data))
-                    return {
-                        "status": "stopping",
-                        "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor...",
-                        "task_id": data.get("task_id")
-                    }
+    # 2) Celery task'ı terminate et (SIGTERM — finally blokları çalışsın)
+    try:
+        celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
+        logging.info(f"Task {task_id} revoked with SIGTERM")
+    except Exception as e:
+        logging.error(f"Failed to revoke task {task_id}: {e}")
 
-    # Fallback to in-memory status
+    # 3) Orphan ScrapeSession temizliği
+    _cleanup_orphan_sessions()
+
+    # In-memory status'ü de temizle
     if task_status.is_running:
         task_status.request_stop()
-        return {"status": "stopping", "message": "Durdurma isteği gönderildi. Mevcut veriler kaydediliyor..."}
-    else:
-        return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
+
+    return {
+        "status": "stopped",
+        "message": "Task sonlandırıldı.",
+        "task_id": task_id
+    }
+
+
+def _cleanup_orphan_sessions():
+    """Terminate edilen task'ın DB'deki orphan ScrapeSession'larını temizle.
+    worker_concurrency=1 olduğundan, running kalan her session orphan'dır."""
+    from database.connection import get_db_session
+
+    db = get_db_session()
+    try:
+        running_sessions = db.query(ScrapeSession).filter(
+            ScrapeSession.status == "running"
+        ).all()
+
+        for session in running_sessions:
+            crud.complete_scrape_session(
+                db, session.id,
+                status="terminated",
+                error_message="Task zorla sonlandırıldı"
+            )
+
+        if running_sessions:
+            db.commit()
+            logging.info(f"Cleaned up {len(running_sessions)} orphan session(s)")
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Orphan session cleanup failed: {e}")
+    finally:
+        db.close()
 
 @router.get("/analytics/prices")
 async def get_price_analytics(

@@ -759,12 +759,12 @@ class HepsiemlakScraper(BaseScraper):
             total_pages = self.get_total_pages()
             print(f"📊 {city} için toplam {total_pages} sayfa tespit edildi")
 
-            # Get page count
+            # Get page count (None = limit yok, tüm sayfalar)
             if api_mode:
-                 if max_pages:
+                 if max_pages is not None:
                      pages_to_scrape = min(max_pages, total_pages)
                  else:
-                     pages_to_scrape = 1 # Default 1 if not specified
+                     pages_to_scrape = total_pages
             else:
                 if total_pages > 1:
                     try:
@@ -967,7 +967,7 @@ class HepsiemlakScraper(BaseScraper):
                 total_pages = self.get_total_pages()
                 print(f"📊 {district} için toplam {total_pages} sayfa tespit edildi")
 
-                pages_to_scrape = min(max_pages, total_pages) if max_pages else 1
+                pages_to_scrape = min(max_pages, total_pages) if max_pages is not None else total_pages
 
                 # Scrape pages for this district
                 for page in range(1, pages_to_scrape + 1):

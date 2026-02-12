@@ -23,9 +23,14 @@ export default function PlatformScraperPage() {
     const [category, setCategory] = useState('konut');
     const [selectedCities, setSelectedCities] = useState<string[]>([]);
     const [selectedDistricts, setSelectedDistricts] = useState<Record<string, string[]>>({});
-    const [maxPages, setMaxPages] = useState(1);
+    const minPages = Number(process.env.NEXT_PUBLIC_HEPSIEMLAK_MIN_PAGES) || 1;
+    const defaultMaxPages = Number(process.env.NEXT_PUBLIC_HEPSIEMLAK_MAX_PAGES) || 1;
+    const minListings = Number(process.env.NEXT_PUBLIC_EMLAKJET_MIN_LISTINGS) || 100;
+    const defaultMaxListings = Number(process.env.NEXT_PUBLIC_EMLAKJET_MAX_LISTINGS) || 1000;
+
+    const [maxPages, setMaxPages] = useState(defaultMaxPages);
     const [scrapeAllPages, setScrapeAllPages] = useState(false);
-    const [maxListings, setMaxListings] = useState(1000);
+    const [maxListings, setMaxListings] = useState(defaultMaxListings);
     const [scrapeAllListings, setScrapeAllListings] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -118,8 +123,8 @@ export default function PlatformScraperPage() {
                 cities: selectedCities,
                 districts: selectedDistricts,
                 ...(platform === 'emlakjet'
-                    ? { max_listings: scrapeAllListings ? 0 : (maxListings || 1000) }
-                    : { max_pages: scrapeAllPages ? 9999 : (maxPages || 1) }
+                    ? scrapeAllListings ? {} : { max_listings: maxListings || defaultMaxListings }
+                    : scrapeAllPages ? {} : { max_pages: maxPages || defaultMaxPages }
                 ),
             });
 
@@ -321,9 +326,9 @@ export default function PlatformScraperPage() {
                                 <Input
                                     label="📊 Maksimum İlan Sayısı"
                                     type="number"
-                                    min={100}
-                                    max={50000}
-                                    step={100}
+                                    min={minListings}
+                                    max={defaultMaxListings}
+                                    step={1}
                                     value={maxListings || ''}
                                     onChange={(e) => {
                                         const val = e.target.value;
@@ -331,11 +336,11 @@ export default function PlatformScraperPage() {
                                             setMaxListings(0);
                                         } else {
                                             const num = parseInt(val);
-                                            setMaxListings(Math.min(50000, Math.max(100, num || 1000)));
+                                            setMaxListings(Math.min(defaultMaxListings, Math.max(minListings, num || defaultMaxListings)));
                                         }
                                     }}
                                     onBlur={() => {
-                                        if (maxListings < 100) setMaxListings(100);
+                                        if (maxListings < minListings) setMaxListings(minListings);
                                     }}
                                     disabled={scrapeAllListings}
                                     className={scrapeAllListings ? 'opacity-50 cursor-not-allowed' : ''}
@@ -355,8 +360,9 @@ export default function PlatformScraperPage() {
                                 <Input
                                     label="📄 Maksimum Sayfa"
                                     type="number"
-                                    min={1}
-                                    max={50}
+                                    min={minPages}
+                                    max={defaultMaxPages}
+                                    step={1}
                                     value={maxPages || ''}
                                     onChange={(e) => {
                                         const val = e.target.value;
@@ -364,11 +370,11 @@ export default function PlatformScraperPage() {
                                             setMaxPages(0);
                                         } else {
                                             const num = parseInt(val);
-                                            setMaxPages(Math.min(50, Math.max(1, num || 1)));
+                                            setMaxPages(Math.min(defaultMaxPages, Math.max(minPages, num || defaultMaxPages)));
                                         }
                                     }}
                                     onBlur={() => {
-                                        if (maxPages < 1) setMaxPages(1);
+                                        if (maxPages < minPages) setMaxPages(minPages);
                                     }}
                                     disabled={scrapeAllPages}
                                     className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
