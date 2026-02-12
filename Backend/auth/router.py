@@ -27,14 +27,15 @@ IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 def _set_auth_cookie(response: Response, token: str):
     """Set HTTP-only auth cookie on response.
-    SameSite=none requires Secure=true. Chromium treats localhost as secure context.
+    Production: secure=True + samesite=none (HTTPS required)
+    Development: secure=False + samesite=lax (HTTP localhost)
     """
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
         max_age=COOKIE_MAX_AGE,
         path="/",
     )
@@ -45,6 +46,8 @@ def _clear_auth_cookie(response: Response):
     response.delete_cookie(
         key=COOKIE_NAME,
         path="/",
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
     )
 
 
