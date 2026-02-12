@@ -46,10 +46,8 @@ services:
     ports:
       - "${FASTAPI_PORT:-8000}:8000"
     volumes:
-      # Log dosyalari
-      - ./Backend/logs:/app/logs
-      # Export ciktilari
-      - ./Backend/outputs:/app/outputs
+      # Source code mount (hot reload)
+      - ./Backend:/app
     environment:
       - FASTAPI_HOST=${FASTAPI_HOST}
       - FASTAPI_PORT=${FASTAPI_PORT}
@@ -87,10 +85,8 @@ services:
     init: true  # Zombie process'leri temizler
     shm_size: '2gb'  # Chrome için shared memory
     volumes:
-      # Log dosyalari (worker loglari)
-      - ./Backend/logs:/app/logs
-      # Export ciktilari
-      - ./Backend/outputs:/app/outputs
+      # Source code mount (hot reload)
+      - ./Backend:/app
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
