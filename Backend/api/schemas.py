@@ -16,4 +16,4 @@ class ScrapeResponse(BaseModel):
     message: str
     data_count: int
     output_files: List[str]
-    task_id: Optional[str] = None  # Celery task ID for tracking
+    task_id: Optional[str] = None  # Celery görev takip ID'si

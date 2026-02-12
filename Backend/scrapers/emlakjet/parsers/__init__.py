@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-EmlakJet parsers module
-"""
+"""EmlakJet parser modülleri"""
 
 from .base_parser import BaseEmlakJetParser
 from .konut_parser import KonutParser

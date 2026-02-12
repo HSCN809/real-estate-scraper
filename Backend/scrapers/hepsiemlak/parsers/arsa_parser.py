@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Arsa (Land) parser for HepsiEmlak
-"""
+"""HepsiEmlak Arsa parser'ı"""
 
 from typing import Dict, Any
 from selenium.webdriver.common.by import By
@@ -10,13 +8,13 @@ from .base_parser import BaseHepsiemlakParser
 
 
 class ArsaParser(BaseHepsiemlakParser):
-    """Parser for Arsa (land) listings on HepsiEmlak"""
+    """HepsiEmlak arsa ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("arsa")
     
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
-        """Extract arsa-specific data"""
+        """Arsaya özel verileri çıkar"""
         data = {
             'arsa_metrekare': 'Belirtilmemiş',
             'metrekare_fiyat': 'Belirtilmemiş'

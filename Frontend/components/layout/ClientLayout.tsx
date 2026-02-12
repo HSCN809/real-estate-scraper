@@ -28,12 +28,12 @@ export function ClientLayout({ children }: { children: ReactNode }) {
     // Normal sayfalar için tam layout
     return (
         <AuthGuard>
-            {/* Particle Background - Fixed at bottom layer */}
+            {/* Parçacık Arka Planı */}
             <div className="fixed inset-0" style={{ zIndex: 0 }}>
                 <ParticleBackground />
             </div>
 
-            {/* Aurora Background - Layer 0.5 */}
+            {/* Aurora Arka Planı */}
             <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
                 <Aurora
                     colorStops={['#38bdf8', '#818cf8', '#34d399']}
@@ -43,35 +43,35 @@ export function ClientLayout({ children }: { children: ReactNode }) {
                 />
             </div>
 
-            {/* Abstract Decorations - Layer 1 */}
+            {/* Soyut Dekorasyonlar */}
             <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
                 <div className="abstract-circle" style={{
-                    background: 'radial-gradient(circle, #38bdf8, transparent)', // Sky Blue
+                    background: 'radial-gradient(circle, #38bdf8, transparent)', // Gök Mavisi
                     top: '10%',
                     right: '10%',
                     opacity: 0.05
                 }} />
                 <div className="abstract-circle" style={{
-                    background: 'radial-gradient(circle, #34d399, transparent)', // Emerald Green
+                    background: 'radial-gradient(circle, #34d399, transparent)', // Zümrüt Yeşili
                     bottom: '20%',
                     left: '15%',
                     opacity: 0.05
                 }} />
             </div>
 
-            {/* Layout Container */}
+            {/* Sayfa Konteyneri */}
             <div className="relative isolate">
-                {/* Header Component */}
+                {/* Üst Menü */}
                 <Header />
 
-                {/* Main Content Area - pt-16 for header height */}
+                {/* Ana İçerik Alanı */}
                 <div className="min-h-screen relative z-10 pt-16">
                     <main className="p-4 lg:p-6 pt-8">
                         {children}
                     </main>
                 </div>
             </div>
-            {/* Global Progress Panel — visible on all pages */}
+            {/* Global İlerleme Paneli */}
             <ProgressPanel />
         </AuthGuard>
     );

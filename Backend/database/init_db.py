@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-Database initialization script
-Run this to create all tables:
-    python -m database.init_db
-"""
+"""Veritabanı başlatma scripti"""
 
 import os
 import sys
 
-# Add Backend to path if running as script
+# Script olarak çalıştırılıyorsa Backend'i path'e ekle
 if __name__ == "__main__":
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, backend_dir)
@@ -18,10 +14,10 @@ from database.models import Base
 
 
 def init_database():
-    """Create all tables"""
+    """Tüm tabloları oluştur"""
     print(f"Initializing database at: {DATABASE_PATH}")
 
-    # Create all tables
+    # Tüm tabloları oluştur
     Base.metadata.create_all(bind=engine)
 
     print("Database tables created successfully!")
@@ -31,7 +27,7 @@ def init_database():
 
 
 def drop_all_tables():
-    """Drop all tables (use with caution!)"""
+    """Tüm tabloları sil (dikkatli kullanın!)"""
     print("WARNING: This will delete all data!")
     confirm = input("Type 'yes' to confirm: ")
     if confirm.lower() == 'yes':

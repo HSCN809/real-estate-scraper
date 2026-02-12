@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Celery scraping tasks - runs in separate worker container
-"""
+"""Celery kazıma görevleri - ayrı worker konteynerinde çalışır"""
 
 import os
 import json
@@ -17,7 +15,7 @@ logger = get_logger("celery.scraping")
 
 
 class TaskProgressManager:
-    """Manages task progress updates via Redis"""
+    """Redis üzerinden görev ilerleme güncellemelerini yönetir"""
 
     def __init__(self, task_id: str):
         self.task_id = task_id
@@ -25,7 +23,7 @@ class TaskProgressManager:
         self._init_redis()
 
     def _init_redis(self):
-        """Initialize Redis connection"""
+        """Redis bağlantısını başlat"""
         import redis
         redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
         self.redis_client = redis.from_url(redis_url)
@@ -39,10 +37,10 @@ class TaskProgressManager:
         details: str = None,
         status: str = "running"
     ):
-        """Update task progress in Redis"""
+        """Redis'teki görev ilerlemesini güncelle"""
         key = f"scrape_task:{self.task_id}"
 
-        # Get existing data
+        # Mevcut veriyi al
         existing = self.redis_client.get(key)
         if existing:
             data = json.loads(existing)
@@ -60,7 +58,7 @@ class TaskProgressManager:
                 "stopped_early": False,
             }
 
-        # Update fields if provided
+        # Sağlanan alanları güncelle
         if message is not None:
             data["message"] = message
         if progress is not None:
@@ -76,10 +74,10 @@ class TaskProgressManager:
 
         data["updated_at"] = datetime.now().isoformat()
 
-        # Store in Redis with 24h expiry
+        # 24 saatlik süre ile Redis'e kaydet
         self.redis_client.setex(key, 86400, json.dumps(data))
 
-        # Also update Celery task state
+        # Celery görev durumunu da güncelle
         current_task.update_state(
             state="PROGRESS",
             meta={
@@ -91,7 +89,7 @@ class TaskProgressManager:
         )
 
     def is_stop_requested(self) -> bool:
-        """Check if stop was requested"""
+        """Durdurma isteği yapılıp yapılmadığını kontrol et"""
         key = f"scrape_task:{self.task_id}"
         data = self.redis_client.get(key)
         if data:
@@ -99,7 +97,7 @@ class TaskProgressManager:
         return False
 
     def set_stopped_early(self):
-        """Mark task as stopped early"""
+        """Görevi erken durdurulmuş olarak işaretle"""
         key = f"scrape_task:{self.task_id}"
         data = self.redis_client.get(key)
         if data:
@@ -109,7 +107,7 @@ class TaskProgressManager:
             self.redis_client.setex(key, 86400, json.dumps(data))
 
     def complete(self, message: str = "Tamamlandı", success: bool = True):
-        """Mark task as completed"""
+        """Görevi tamamlanmış olarak işaretle"""
         self.update(
             message=message,
             progress=100,
@@ -117,7 +115,7 @@ class TaskProgressManager:
         )
 
     def fail(self, error: str):
-        """Mark task as failed"""
+        """Görevi başarısız olarak işaretle"""
         self.update(
             message=f"Hata: {error}",
             status="failed"
@@ -134,17 +132,7 @@ def scrape_hepsiemlak_task(
     districts: Optional[Dict[str, List[str]]],
     max_pages: int = 50
 ):
-    """
-    HepsiEmlak scraping task - runs in Celery worker
-
-    Args:
-        listing_type: 'satilik' or 'kiralik'
-        category: e.g., 'konut', 'arsa'
-        subtype_path: Optional subtype URL path
-        cities: List of city names
-        districts: Optional dict of city -> district list
-        max_pages: Maximum pages to scrape per city
-    """
+    """Celery worker'da çalışan HepsiEmlak kazıma görevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
@@ -155,7 +143,7 @@ def scrape_hepsiemlak_task(
         status="running"
     )
 
-    # Import here to avoid circular imports and ensure proper initialization
+    # Döngüsel import'ları önlemek ve doğru başlatmayı sağlamak için burada import et
     from scrapers.hepsiemlak.main import HepsiemlakScraper
     from core.driver_manager import DriverManager
     from core.failed_pages_tracker import failed_pages_tracker
@@ -170,17 +158,17 @@ def scrape_hepsiemlak_task(
         driver = manager.start()
         db = get_db_session()
 
-        # Reset failed pages tracker
+        # Başarısız sayfa takipçisini sıfırla
         failed_pages_tracker.reset()
 
-        # Extract alt_kategori from subtype_path
+        # subtype_path'tan alt_kategori çıkar
         alt_kategori = None
         if subtype_path:
             parts = subtype_path.strip('/').split('/')
             if len(parts) >= 2:
                 alt_kategori = parts[-1].replace('-', '_')
 
-        # Create scrape session in database
+        # Veritabanında kazıma oturumu oluştur
         scrape_session = crud.create_scrape_session(
             db,
             platform="hepsiemlak",
@@ -193,7 +181,7 @@ def scrape_hepsiemlak_task(
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
-        # Progress callback that updates Redis
+        # Redis'i güncelleyen ilerleme geri çağırma fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
                 message=message,
@@ -201,16 +189,16 @@ def scrape_hepsiemlak_task(
                 total=total,
                 progress=progress
             )
-            # Check for stop request
+            # Durdurma isteğini kontrol et
             if progress_manager.is_stop_requested():
                 logger.info(f"[Task {task_id}] Stop requested, raising exception")
                 raise StopRequested("User requested stop")
 
-        # Stop checker function for scraper
+        # Kazıyıcı için durdurma kontrol fonksiyonu
         def stop_checker():
             return progress_manager.is_stop_requested()
 
-        # Create scraper
+        # Kazıyıcıyı oluştur
         scraper = HepsiemlakScraper(
             driver=driver,
             listing_type=listing_type,
@@ -220,13 +208,13 @@ def scrape_hepsiemlak_task(
             selected_districts=districts
         )
 
-        # Set DB session
+        # Veritabanı oturumunu ayarla
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
         logger.info(f"[Task {task_id}] Starting scraping API call")
 
-        # Run scraper with stop checker
+        # Kazıyıcıyı durdurma kontrolüyle çalıştır
         scraper.start_scraping_api(
             max_pages=max_pages,
             progress_callback=progress_callback,
@@ -311,11 +299,9 @@ def scrape_emlakjet_task(
     cities: List[str],
     districts: Optional[Dict[str, List[str]]],
     max_listings: int = 0,
-    max_pages: int = 50,  # deprecated, kept for backward compat
+    max_pages: int = 50,  # kullanım dışı, geriye uyumluluk için tutuldu
 ):
-    """
-    EmlakJet scraping task - runs in Celery worker
-    """
+    """Celery worker'da çalışan EmlakJet kazıma görevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
@@ -342,14 +328,14 @@ def scrape_emlakjet_task(
         db = get_db_session()
         config = get_emlakjet_config()
 
-        # Extract alt_kategori from subtype_path
+        # subtype_path'tan alt_kategori çıkar
         alt_kategori = None
         if subtype_path:
             parts = subtype_path.strip('/').split('-')
             if len(parts) >= 2:
                 alt_kategori = parts[-1].replace('-', '_')
 
-        # Create scrape session in database
+        # Veritabanında kazıma oturumu oluştur
         scrape_session = crud.create_scrape_session(
             db,
             platform="emlakjet",
@@ -362,14 +348,14 @@ def scrape_emlakjet_task(
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
-        # Build base URL
+        # Temel URL'yi oluştur
         if subtype_path:
             base_url = config.base_url + subtype_path
         else:
             category_path = config.categories[listing_type].get(category, '')
             base_url = config.base_url + category_path
 
-        # Progress callback
+        # İlerleme geri çağırma fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
                 message=message,
@@ -380,7 +366,7 @@ def scrape_emlakjet_task(
             if progress_manager.is_stop_requested():
                 raise StopRequested("User requested stop")
 
-        # Stop checker function for scraper
+        # Kazıyıcı için durdurma kontrol fonksiyonu
         def stop_checker():
             return progress_manager.is_stop_requested()
 
@@ -392,7 +378,7 @@ def scrape_emlakjet_task(
             subtype_path=subtype_path
         )
 
-        # Set DB session on scraper for potential future use
+        # Veritabanı oturumunu kazıyıcıya ayarla
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
@@ -471,5 +457,5 @@ def scrape_emlakjet_task(
 
 
 class StopRequested(Exception):
-    """Exception raised when user requests task stop"""
+    """Kullanıcı görev durdurma isteğinde bulunduğunda fırlatılan istisna"""
     pass

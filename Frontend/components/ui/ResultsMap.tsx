@@ -5,7 +5,7 @@ import { X, Building2, BarChart3, TrendingUp } from 'lucide-react';
 import { ScrapeResult } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
 
-// GeoJSON URL
+// GeoJSON adresi
 const GEOJSON_URL = 'https://raw.githubusercontent.com/alpers/Turkey-Maps-GeoJSON/master/tr-cities.json';
 
 // GeoJSON şehir adlarını veri kaynağı adlarına eşleştirme

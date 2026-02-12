@@ -32,7 +32,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
     const taskIdRef = useRef<string | undefined>(undefined);
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Restore from sessionStorage on mount
+    // Yüklendiğinde sessionStorage'dan geri yükle
     useEffect(() => {
         const stored = sessionStorage.getItem(TASK_STORAGE_KEY);
         if (stored) {
@@ -53,7 +53,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 sessionStorage.removeItem(TASK_STORAGE_KEY);
             }
         } else {
-            // No sessionStorage — check backend for active tasks (new tab scenario)
+            // sessionStorage yok — backend'den aktif görevleri kontrol et (yeni sekme)
             getActiveTasks().then(response => {
                 if (response.count > 0 && response.active_tasks.length > 0) {
                     const task = response.active_tasks[0];
@@ -72,7 +72,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Persist to sessionStorage
+    // sessionStorage'a kaydet
     useEffect(() => {
         if (activeTask && !activeTask.isFinished) {
             sessionStorage.setItem(TASK_STORAGE_KEY, JSON.stringify({
@@ -84,7 +84,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         }
     }, [activeTask]);
 
-    // Polling logic
+    // Durum sorgulama mantığı
     const pollStatus = useCallback(async () => {
         const currentTaskId = taskIdRef.current;
         if (!currentTaskId) return;
@@ -99,7 +99,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 || data.status === 'failed'
                 || data.status === 'stopped';
 
-            // Task still running — don't mark as finished
+            // Görev devam ediyor — bitmiş olarak işaretleme
             if (data.status === 'pending' || data.status === 'running' || data.is_running) {
                 setActiveTask(prev => {
                     if (!prev || prev.taskId !== currentTaskId) return prev;
@@ -117,11 +117,11 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 };
             });
         } catch (error) {
-            console.error('Status check failed', error);
+            console.error('Durum kontrolü başarısız', error);
         }
     }, []);
 
-    // Manage polling interval
+    // Polling aralığını yönet
     useEffect(() => {
         if (!activeTask || activeTask.isFinished) {
             if (pollIntervalRef.current) {
@@ -170,7 +170,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         try {
             await stopTask(activeTask.taskId);
         } catch (error) {
-            console.error('Stop request failed', error);
+            console.error('Durdurma isteği başarısız', error);
         }
     }, [activeTask]);
 
@@ -197,7 +197,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
 export function useScraping() {
     const context = useContext(ScrapingContext);
     if (context === undefined) {
-        throw new Error('useScraping must be used within a ScrapingProvider');
+        throw new Error('useScraping ScrapingProvider içinde kullanılmalıdır');
     }
     return context;
 }

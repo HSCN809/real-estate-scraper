@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-EmlakJet Subcategory Fetcher & Cache Manager
-Selenium ile tüm kategorileri ve alt kategorilerini çeker, JSON'a kaydeder
-"""
+"""EmlakJet alt kategori çekici ve önbellek yöneticisi"""
 
 import json
 import os
@@ -66,16 +63,11 @@ def save_subcategories_to_json(data: Dict[str, Dict[str, List[Dict]]]):
 
 
 def extract_subtype_id(path: str) -> str:
-    """
-    URL path'inden subtype ID çıkar
-    /satilik-daire -> daire
-    /satilik-konut-imarli-arsa -> konut_imarli_arsa
-    /satilik-bag-bahce -> bag_bahce
-    """
+    """URL path'inden subtype ID çıkar"""
     # Path'i temizle
     path = path.strip('/')
 
-    # Listing type prefix'ini kaldır
+    # İlan tipi prefix'ini kaldır
     prefixes = ['satilik-', 'kiralik-', 'devren-', 'gunluk-kiralik-', 'kat-karsiligi-']
     for prefix in prefixes:
         if path.startswith(prefix):
@@ -87,10 +79,7 @@ def extract_subtype_id(path: str) -> str:
 
 
 def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
-    """
-    Tüm kategori/listing_type kombinasyonları için subcategories çek.
-    Her kategorinin sayfasına gidip sidebar'daki alt kategorileri alır.
-    """
+    """Selenium ile tüm alt kategorileri çek"""
     all_subcategories = {}
     base_url = "https://www.emlakjet.com"
 
@@ -216,7 +205,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                     else:
                         print(f"   [!] Alt kategori bulunamadi")
 
-                    # Rate limiting
+                    # İstek hız sınırlama
                     time.sleep(2)
 
                 except Exception as e:
@@ -240,10 +229,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
 
 
 def fetch_subtypes(listing_type: str, category: str) -> List[Dict]:
-    """
-    JSON dosyasından subcategories oku.
-    Dosya yoksa boş liste döner.
-    """
+    """JSON dosyasından alt kategorileri oku"""
     data = load_subcategories_from_json()
     return data.get(listing_type, {}).get(category, [])
 

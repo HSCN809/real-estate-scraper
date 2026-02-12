@@ -33,7 +33,7 @@ import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
 
 
-// Animation variants
+// Animasyon varyantları
 const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -47,7 +47,7 @@ const itemVariants = {
     show: { opacity: 1, y: 0 },
 };
 
-// Extended type for our rich data
+// Zenginleştirilmiş veri tipi
 interface RichResult extends ScrapeResult {
     city?: string;
     listing_type?: string;
@@ -62,52 +62,52 @@ export default function ResultsPage() {
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-    // Filters
+    // Filtreler
     const [platformFilter, setPlatformFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [listingTypeFilter, setListingTypeFilter] = useState<string>('all');
     const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
 
-    // City/District filters for table view
+    // Tablo görünümü için şehir/ilçe filtreleri
     const [cityFilter, setCityFilter] = useState<string[]>([]);
     const [districtFilter, setDistrictFilter] = useState<string[]>([]);
     const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
     const [districtDropdownOpen, setDistrictDropdownOpen] = useState(false);
 
-    // Pagination for table view
+    // Tablo görünümü için sayfalama
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
 
-    // Refs for click outside detection
+    // Dışarı tıklama algılama ref'leri
     const cityDropdownRef = useRef<HTMLDivElement>(null);
     const districtDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Search states for city/district dropdowns
+    // Şehir/ilçe dropdown arama durumları
     const [citySearch, setCitySearch] = useState('');
     const [districtSearch, setDistrictSearch] = useState('');
 
-    // Preview Modal
+    // Önizleme Modalı
     const [previewData, setPreviewData] = useState<any>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewFile, setPreviewFile] = useState<string | null>(null);
 
-    // Price data for charts - with filter tracking to prevent stale data rendering
+    // Grafik fiyat verileri - eski veri render'ını önlemek için filtre takibi
     const [priceData, setPriceData] = useState<{
         prices: any[];
         filters: { platform: string; category: string; listingType: string };
     }>({ prices: [], filters: { platform: 'all', category: 'all', listingType: 'all' } });
     const [priceDataLoading, setPriceDataLoading] = useState(false);
 
-    // Excel export state
+    // Excel dışa aktarma durumu
     const [exporting, setExporting] = useState(false);
 
-    // Check if current priceData matches current filters
+    // Fiyat verisinin mevcut filtrelerle eşleşip eşleşmediğini kontrol et
     const isPriceDataValid =
         priceData.filters.platform === platformFilter &&
         priceData.filters.category === categoryFilter &&
         priceData.filters.listingType === listingTypeFilter;
 
-    // Fetch price data with filters
+    // Filtrelerle fiyat verisi çek
     const fetchPriceData = async () => {
         const currentFilters = {
             platform: platformFilter,
@@ -126,20 +126,20 @@ export default function ResultsPage() {
             const res = await fetch(url);
             const data = await res.json();
 
-            // Store prices with the filters they were fetched for
+            // Fiyatları çekildikleri filtrelerle birlikte kaydet
             setPriceData({
                 prices: data.prices || [],
                 filters: currentFilters
             });
         } catch (err) {
-            console.error('Price data fetch failed:', err);
+            console.error('Fiyat verisi alınamadı:', err);
             setPriceData({ prices: [], filters: currentFilters });
         } finally {
             setPriceDataLoading(false);
         }
     };
 
-    // Auto-refetch price data when filters change and in charts view
+    // Filtreler değiştiğinde ve grafik görünümünde fiyat verisini yeniden çek
     useEffect(() => {
         if (viewMode === 'charts') {
             setPriceDataLoading(true); // Show loading spinner immediately
@@ -273,7 +273,7 @@ export default function ResultsPage() {
         fetchResults();
     }, []);
 
-    // Click outside to close dropdowns
+    // Dışarı tıklayınca dropdown'ları kapat
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (cityDropdownRef.current && !cityDropdownRef.current.contains(event.target as Node)) {
@@ -296,31 +296,31 @@ export default function ResultsPage() {
         );
     }
 
-    // Filtered results
+    // Filtrelenmiş sonuçlar
     const filteredResults = results.filter(r => {
         if (platformFilter !== 'all' && r.platform !== platformFilter) return false;
         if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
         if (listingTypeFilter !== 'all' && r.listing_type !== listingTypeFilter) return false;
         if (subtypeFilter !== 'all' && r.subtype !== subtypeFilter) return false;
-        // City/District filters (for table view)
+        // Şehir/İlçe filtreleri (tablo görünümü)
         if (cityFilter.length > 0 && !cityFilter.includes(r.city || '')) return false;
         if (districtFilter.length > 0 && !districtFilter.includes(r.district || '')) return false;
         return true;
     });
 
-    // Stats
+    // İstatistikler
     const totalFiles = results.length;
     const totalRecords = results.reduce((acc, curr) => acc + (curr.count || 0), 0);
     const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
     const latestDate = results.length > 0 ? results[0].date : '-';
 
-    // Unique platforms, categories, listing types and subtypes for filters
+    // Filtreler için benzersiz platformlar, kategoriler, ilan tipleri ve alt kategoriler
     const platforms = [...new Set(results.map(r => r.platform))];
     const categories = [...new Set(results.map(r => r.category))];
     const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
     const subtypes = [...new Set(results.map(r => r.subtype).filter((s): s is string => !!s))];
 
-    // Cities and districts for table view filters
+    // Tablo filtreleri için şehirler ve ilçeler
     const cities = [...new Set(results.map(r => r.city).filter(Boolean))].sort() as string[];
     const availableDistricts = results
         .filter(r => cityFilter.length === 0 || cityFilter.includes(r.city || ''))
@@ -328,7 +328,7 @@ export default function ResultsPage() {
         .filter(Boolean);
     const districts = [...new Set(availableDistricts)].sort() as string[];
 
-    // City filter change handler - clear district filter when city changes
+    // Şehir filtresi değişince ilçe filtresini temizle
     const handleCityFilterChange = (city: string) => {
         setCityFilter(prev => {
             if (prev.includes(city)) {
@@ -367,13 +367,13 @@ export default function ResultsPage() {
         }
     };
 
-    // Pagination calculations
+    // Sayfalama hesaplamaları
     const totalPages = Math.ceil(filteredResults.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedResults = filteredResults.slice(startIndex, endIndex);
 
-    // Reset to page 1 when filters change
+    // Filtreler değişince 1. sayfaya dön
     const handleCityFilterChangeWithReset = (city: string) => {
         handleCityFilterChange(city);
         setCurrentPage(1);
@@ -402,7 +402,7 @@ export default function ResultsPage() {
             animate="show"
             aria-labelledby="results-title"
         >
-            {/* Header */}
+            {/* Başlık */}
             <motion.header variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h1 id="results-title" className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 mb-2">
@@ -415,7 +415,7 @@ export default function ResultsPage() {
                 </div>
 
                 <nav className="flex items-center gap-3" aria-label="Sayfa kontrolleri">
-                    {/* View Toggle */}
+                    {/* Görünüm Değiştir */}
                     <fieldset className="flex rounded-xl overflow-hidden border border-slate-700" role="group" aria-label="Görünüm modu">
                         <button
                             onClick={() => setViewMode('map')}
@@ -437,7 +437,7 @@ export default function ResultsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                setPriceDataLoading(true); // Show loading immediately
+                                setPriceDataLoading(true); // Yükleniyor durumunu hemen göster
                                 setViewMode('charts');
                             }}
                             className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
@@ -449,12 +449,12 @@ export default function ResultsPage() {
                         </button>
                     </fieldset>
 
-                    {/* Excel Export Button */}
+                    {/* Excel Dışa Aktarma Butonu */}
                     <button
                         onClick={async () => {
                             setExporting(true);
                             try {
-                                // Map display names to DB values
+                                // Görüntülenen adları DB değerlerine eşle
                                 const platformMap: Record<string, string> = { 'HepsiEmlak': 'hepsiemlak', 'Emlakjet': 'emlakjet' };
                                 const categoryMap: Record<string, string> = { 'Konut': 'konut', 'Arsa': 'arsa', 'İşyeri': 'isyeri' };
                                 const listingMap: Record<string, string> = { 'Satılık': 'satilik', 'Kiralık': 'kiralik' };
@@ -466,7 +466,7 @@ export default function ResultsPage() {
                                     city: cityFilter.length === 1 ? cityFilter[0] : undefined,
                                 });
 
-                                // Download file
+                                // Dosyayı indir
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -515,7 +515,7 @@ export default function ResultsPage() {
                 </nav>
             </motion.header>
 
-            {/* Dashboard Stats with CountUp Animation */}
+            {/* Özet İstatistikler */}
             <motion.section variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4" aria-label="Özet istatistikler">
                 <article className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -564,9 +564,9 @@ export default function ResultsPage() {
                 </article>
             </motion.section>
 
-            {/* Filters */}
+            {/* Filtreler */}
             <motion.form variants={itemVariants} className="flex flex-wrap gap-4 items-end" role="search" aria-label="Veri filtreleri" onSubmit={(e) => e.preventDefault()}>
-                {/* Platform Filter */}
+                {/* Platform Filtresi */}
                 <SearchableDropdown
                     id="platform-filter"
                     label="Platform"
@@ -577,7 +577,7 @@ export default function ResultsPage() {
                     focusRingColor="focus:ring-blue-500"
                 />
 
-                {/* Listing Type Filter */}
+                {/* İlan Tipi Filtresi */}
                 <SearchableDropdown
                     id="listing-type-filter"
                     label="İlan Tipi"
@@ -587,7 +587,7 @@ export default function ResultsPage() {
                     focusRingColor="focus:ring-amber-500"
                 />
 
-                {/* Category Filter */}
+                {/* Kategori Filtresi */}
                 <SearchableDropdown
                     id="category-filter"
                     label="Kategori"
@@ -597,7 +597,7 @@ export default function ResultsPage() {
                     focusRingColor="focus:ring-emerald-500"
                 />
 
-                {/* Subtype Filter */}
+                {/* Alt Kategori Filtresi */}
                 {subtypes.length > 0 && (
                     <SearchableDropdown
                         id="subtype-filter"
@@ -610,7 +610,7 @@ export default function ResultsPage() {
                 )}
             </motion.form>
 
-            {/* Content */}
+            {/* İçerik */}
             <motion.main className="min-h-[400px]" variants={containerVariants} initial="show" animate="show" aria-live="polite">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -647,12 +647,12 @@ export default function ResultsPage() {
                         </ArtCard>
                     </motion.div>
                 ) : viewMode === 'map' ? (
-                    /* Map View */
+                    /* Harita Görünümü */
                     <motion.figure variants={itemVariants} aria-label="Sonuçlar haritası">
                         <ResultsMap results={filteredResults} />
                     </motion.figure>
                 ) : viewMode === 'charts' ? (
-                    /* Charts View */
+                    /* Grafik Görünümü */
                     <motion.figure variants={itemVariants} aria-label="Sonuç grafikleri">
                         {(priceDataLoading || !isPriceDataValid) ? (
                             <div className="flex flex-col items-center justify-center py-20 gap-4" role="status" aria-live="polite">
@@ -669,16 +669,16 @@ export default function ResultsPage() {
                         )}
                     </motion.figure>
                 ) : (
-                    /* Table View */
+                    /* Tablo Görünümü */
                     <motion.section variants={itemVariants} className="space-y-4" aria-label="Tablo görünümü">
-                        {/* City/District Filters */}
+                        {/* Şehir/İlçe Filtreleri */}
                         <form className="flex flex-wrap gap-3 items-center" role="search" aria-label="Konum filtreleri" onSubmit={(e) => e.preventDefault()}>
                             <span className="text-sm text-gray-400 flex items-center gap-2" id="location-filter-label">
                                 <MapPin className="w-4 h-4" aria-hidden="true" />
                                 Konum Filtresi:
                             </span>
 
-                            {/* City Dropdown */}
+                            {/* Şehir Dropdown'u */}
                             <div className="relative" ref={cityDropdownRef}>
                                 <button
                                     onClick={() => {
@@ -700,7 +700,7 @@ export default function ResultsPage() {
 
                                 {cityDropdownOpen && (
                                     <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                                        {/* Search Input */}
+                                        {/* Arama Girişi */}
                                         <div className="p-2 border-b border-slate-700">
                                             <div className="relative">
                                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -716,7 +716,7 @@ export default function ResultsPage() {
                                         </div>
 
                                         <div className="max-h-64 overflow-y-auto">
-                                            {/* Select All */}
+                                            {/* Tümünü Seç */}
                                             <button
                                                 onClick={toggleAllCitiesWithReset}
                                                 className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
@@ -733,7 +733,7 @@ export default function ResultsPage() {
                                                 <span className="text-white font-medium">Tümünü Seç</span>
                                             </button>
 
-                                            {/* City List */}
+                                            {/* Şehir Listesi */}
                                             {cities.filter(city => city.toLowerCase().includes(citySearch.toLowerCase())).length > 0 ? (
                                                 cities.filter(city => city.toLowerCase().includes(citySearch.toLowerCase())).map(city => (
                                                     <button
@@ -763,7 +763,7 @@ export default function ResultsPage() {
                                 )}
                             </div>
 
-                            {/* District Dropdown */}
+                            {/* İlçe Dropdown'u */}
                             <div className="relative" ref={districtDropdownRef}>
                                 <button
                                     onClick={() => {
@@ -792,7 +792,7 @@ export default function ResultsPage() {
 
                                 {districtDropdownOpen && districts.length > 0 && (
                                     <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                                        {/* Search Input */}
+                                        {/* Arama Girişi */}
                                         <div className="p-2 border-b border-slate-700">
                                             <div className="relative">
                                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -808,7 +808,7 @@ export default function ResultsPage() {
                                         </div>
 
                                         <div className="max-h-64 overflow-y-auto">
-                                            {/* Select All */}
+                                            {/* Tümünü Seç */}
                                             <button
                                                 onClick={toggleAllDistrictsWithReset}
                                                 className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 border-b border-slate-700 flex items-center gap-2"
@@ -825,7 +825,7 @@ export default function ResultsPage() {
                                                 <span className="text-white font-medium">Tümünü Seç</span>
                                             </button>
 
-                                            {/* District List */}
+                                            {/* İlçe Listesi */}
                                             {districts.filter(district => district.toLowerCase().includes(districtSearch.toLowerCase())).length > 0 ? (
                                                 districts.filter(district => district.toLowerCase().includes(districtSearch.toLowerCase())).map(district => (
                                                     <button
@@ -855,7 +855,7 @@ export default function ResultsPage() {
                                 )}
                             </div>
 
-                            {/* Clear Filters Button */}
+                            {/* Filtreleri Temizle Butonu */}
                             {(cityFilter.length > 0 || districtFilter.length > 0) && (
                                 <button
                                     onClick={() => {
@@ -872,7 +872,7 @@ export default function ResultsPage() {
                             )}
                         </form>
 
-                        {/* Table */}
+                        {/* Tablo */}
                         <div className="overflow-x-auto">
                         <table className="w-full border-collapse">
                             <thead>
@@ -965,14 +965,14 @@ export default function ResultsPage() {
                         </table>
                         </div>
 
-                        {/* Pagination Controls */}
+                        {/* Sayfalama */}
                         {totalPages > 1 && (
                             <nav className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700" aria-label="Sayfa navigasyonu">
                                 <p className="text-sm text-gray-400" aria-live="polite">
                                     Toplam {filteredResults.length} kayıttan {startIndex + 1}-{Math.min(endIndex, filteredResults.length)} arası gösteriliyor
                                 </p>
                                 <ul className="flex items-center gap-2" role="list">
-                                    {/* First Page */}
+                                    {/* İlk Sayfa */}
                                     <li>
                                         <button
                                             onClick={() => setCurrentPage(1)}
@@ -988,7 +988,7 @@ export default function ResultsPage() {
                                         </button>
                                     </li>
 
-                                    {/* Previous Page */}
+                                    {/* Önceki Sayfa */}
                                     <li>
                                         <button
                                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -1004,7 +1004,7 @@ export default function ResultsPage() {
                                         </button>
                                     </li>
 
-                                    {/* Page Numbers */}
+                                    {/* Sayfa Numaraları */}
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
                                         if (totalPages <= 5) {
@@ -1034,7 +1034,7 @@ export default function ResultsPage() {
                                         );
                                     })}
 
-                                    {/* Next Page */}
+                                    {/* Sonraki Sayfa */}
                                     <li>
                                         <button
                                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
@@ -1050,7 +1050,7 @@ export default function ResultsPage() {
                                         </button>
                                     </li>
 
-                                    {/* Last Page */}
+                                    {/* Son Sayfa */}
                                     <li>
                                         <button
                                             onClick={() => setCurrentPage(totalPages)}
@@ -1072,7 +1072,7 @@ export default function ResultsPage() {
                 )}
             </motion.main>
 
-            {/* Clear Confirm Modal */}
+            {/* Temizleme Onay Modalı */}
             <AnimatePresence>
                 {showClearConfirm && (
                     <motion.div
@@ -1124,7 +1124,7 @@ export default function ResultsPage() {
                 )}
             </AnimatePresence>
 
-            {/* Preview Modal */}
+            {/* Önizleme Modalı */}
             <AnimatePresence>
                 {previewFile && (
                     <motion.div
@@ -1144,7 +1144,7 @@ export default function ResultsPage() {
                             className="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full max-h-[80vh] overflow-hidden flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {/* Modal Header */}
+                            {/* Modal Başlığı */}
                             <header className="flex items-center justify-between p-4 border-b border-slate-700">
                                 <div>
                                     <h2 id="preview-dialog-title" className="text-lg font-bold text-white">Veri Önizleme</h2>
@@ -1161,7 +1161,7 @@ export default function ResultsPage() {
                                 </button>
                             </header>
 
-                            {/* Modal Content */}
+                            {/* Modal İçeriği */}
                             <section className="flex-1 overflow-auto p-4" aria-label="Önizleme içeriği">
                                 {previewLoading ? (
                                     <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
@@ -1201,7 +1201,7 @@ export default function ResultsPage() {
                                 )}
                             </section>
 
-                            {/* Modal Footer */}
+                            {/* Modal Alt Bilgisi */}
                             <footer className="p-4 border-t border-slate-700 flex justify-end gap-3">
                                 <button
                                     onClick={() => {

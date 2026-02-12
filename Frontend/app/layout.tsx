@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Emlak Scraper - Data Art Dashboard',
-  description: 'Artistic data visualization for real estate scraping',
+  description: 'Emlak veri toplama ve görselleştirme platformu',
 };
 
 export default function RootLayout({

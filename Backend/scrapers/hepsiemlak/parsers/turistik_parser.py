@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Turistik İşletme parser for HepsiEmlak
-"""
+"""HepsiEmlak Turistik İşletme parser'ı"""
 
 from typing import Dict, Any
 from selenium.webdriver.remote.webelement import WebElement
@@ -9,13 +7,13 @@ from .base_parser import BaseHepsiemlakParser
 
 
 class TuristikParser(BaseHepsiemlakParser):
-    """Parser for Turistik İşletme listings on HepsiEmlak"""
+    """HepsiEmlak turistik işletme ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("turistik_isletme")
     
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
-        """Extract turistik isletme-specific data"""
+        """Turistik işletmeye özel verileri çıkar"""
         data = {
             'oda_sayisi': 'Belirtilmemiş',
             'otel_tipi': 'Belirtilmemiş'

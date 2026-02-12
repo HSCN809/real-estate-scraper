@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Failed Pages Tracker - Başarısız sayfaları takip eder ve retry mekanizması için kullanılır
-"""
+"""Başarısız sayfa takibi ve retry mekanizması"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -43,10 +41,7 @@ class FailedPageInfo:
 
 
 class FailedPagesTracker:
-    """
-    Başarısız sayfaları takip eden sınıf.
-    Singleton pattern kullanır.
-    """
+    """Başarısız sayfaları takip eden singleton sınıf"""
     _instance = None
     
     def __new__(cls):
@@ -60,7 +55,7 @@ class FailedPagesTracker:
             return
         self._initialized = True
         self._failed_pages: Dict[str, FailedPageInfo] = {}  # url -> FailedPageInfo
-        self._successful_retries: List[str] = []  # Başarılı retry'ların URL'leri
+        self._successful_retries: List[str] = []  # Başarılı retry URL'leri
         
     def reset(self):
         """Tracker'ı sıfırla"""
@@ -73,7 +68,7 @@ class FailedPagesTracker:
         key = f"{page_info.city}_{page_info.district or 'all'}_{page_info.page_number}"
         
         if key in self._failed_pages:
-            # Zaten var, retry count güncelle
+            # Zaten var, deneme sayısını güncelle
             self._failed_pages[key].retry_count += 1
             self._failed_pages[key].error = page_info.error
             self._failed_pages[key].timestamp = datetime.now()
@@ -103,7 +98,7 @@ class FailedPagesTracker:
             logger.info(f"✅ Başarılı retry: {city}/{district or 'tüm'} - Sayfa {page_number}")
     
     def increment_retry_count(self, city: str, district: Optional[str], page_number: int) -> None:
-        """Sayfa için retry sayısını artır"""
+        """Sayfa için deneme sayısını artır"""
         key = f"{city}_{district or 'all'}_{page_number}"
         
         if key in self._failed_pages:
@@ -131,5 +126,5 @@ class FailedPagesTracker:
         }
 
 
-# Global instance
+# Global örnek
 failed_pages_tracker = FailedPagesTracker()

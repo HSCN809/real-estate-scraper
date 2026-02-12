@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-İşyeri (Commercial) parser for HepsiEmlak
-"""
+"""HepsiEmlak İşyeri parser'ı"""
 
 from typing import Dict, Any
 from selenium.webdriver.remote.webelement import WebElement
@@ -9,13 +7,13 @@ from .base_parser import BaseHepsiemlakParser
 
 
 class IsyeriParser(BaseHepsiemlakParser):
-    """Parser for İşyeri (commercial) listings on HepsiEmlak"""
+    """HepsiEmlak işyeri ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("isyeri")
     
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
-        """Extract isyeri-specific data"""
+        """İşyerine özel verileri çıkar"""
         data = {
             'metrekare': 'Belirtilmemiş'
         }

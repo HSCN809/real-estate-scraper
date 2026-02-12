@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-SQLAlchemy ORM models for Real Estate Scraper
-"""
+"""SQLAlchemy ORM modelleri"""
 
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -15,9 +13,7 @@ Base = declarative_base()
 
 
 class Location(Base):
-    """
-    Normalized location table for il/ilce/mahalle
-    """
+    """Normalize edilmiş il/ilce/mahalle tablosu"""
     __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -25,7 +21,7 @@ class Location(Base):
     ilce = Column(String(100), index=True)
     mahalle = Column(String(200))
 
-    # Relationships
+    # İlişkiler
     listings = relationship("Listing", back_populates="location")
 
     __table_args__ = (
@@ -43,46 +39,44 @@ class Location(Base):
 
 
 class Listing(Base):
-    """
-    Main listings table - stores all real estate listings
-    """
+    """Ana ilan tablosu"""
     __tablename__ = "listings"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # Basic info
+    # Temel bilgiler
     baslik = Column(Text, nullable=False)
-    fiyat = Column(Float)  # Numeric price for calculations
-    fiyat_text = Column(String(50))  # Original price text (e.g., "1.500.000 TL")
+    fiyat = Column(Float)  # Hesaplamalar için sayısal fiyat
+    fiyat_text = Column(String(50))  # Orijinal fiyat metni (ör. "1.500.000 TL")
 
-    # Platform & Category
+    # Platform ve Kategori
     platform = Column(String(20), nullable=False, index=True)  # 'emlakjet' / 'hepsiemlak'
     kategori = Column(String(50), nullable=False, index=True)  # 'konut', 'arsa', etc.
     ilan_tipi = Column(String(20), nullable=False, index=True)  # 'satilik' / 'kiralik'
     alt_kategori = Column(String(50))  # 'daire', 'villa', 'tarla', etc.
 
-    # Location (FK)
+    # Lokasyon (FK)
     location_id = Column(Integer, ForeignKey("locations.id"), index=True)
     location = relationship("Location", back_populates="listings")
 
-    # Listing details
-    ilan_url = Column(Text, unique=True)  # Unique constraint for deduplication
+    # İlan detayları
+    ilan_url = Column(Text, unique=True)  # Tekrar kontrolü için benzersiz kısıtlama
     ilan_tarihi = Column(Date)
     emlak_ofisi = Column(String(200))
     resim_url = Column(Text)
 
-    # Category-specific details stored as JSON
+    # JSON olarak saklanan kategoriye özel detaylar
     details = Column(JSON)
 
-    # Content hash for change detection (excludes price)
+    # Değişiklik tespiti için içerik hash'i (fiyat hariç)
     content_hash = Column(String(32), index=True)  # MD5 hash
 
-    # Metadata
+    # Meta veriler
     scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
+    # İlişkiler
     scrape_session = relationship("ScrapeSession", back_populates="listings")
     price_history = relationship("PriceHistory", back_populates="listing", order_by="desc(PriceHistory.changed_at)")
 
@@ -96,7 +90,7 @@ class Listing(Base):
         return f"<Listing(id={self.id}, baslik='{self.baslik[:30]}...', fiyat={self.fiyat})>"
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert listing to dictionary for API responses"""
+        """API yanıtları için ilanı sözlüğe dönüştür"""
         return {
             "id": self.id,
             "baslik": self.baslik,
@@ -119,40 +113,38 @@ class Listing(Base):
 
 
 class ScrapeSession(Base):
-    """
-    Tracks scraping sessions/runs
-    """
+    """Tarama oturumu takibi"""
     __tablename__ = "scrape_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # Scrape parameters
+    # Tarama parametreleri
     platform = Column(String(20), nullable=False, index=True)
     kategori = Column(String(50), nullable=False)
     ilan_tipi = Column(String(20), nullable=False)
     alt_kategori = Column(String(50))
 
-    # Target locations (stored as JSON)
+    # Hedef lokasyonlar (JSON olarak saklanır)
     target_cities = Column(JSON)  # ["Istanbul", "Ankara"]
     target_districts = Column(JSON)  # {"Istanbul": ["Kadikoy", "Besiktas"]}
 
-    # Results
+    # Sonuçlar
     total_listings = Column(Integer, default=0)
-    new_listings = Column(Integer, default=0)  # New listings (not duplicates)
-    duplicate_listings = Column(Integer, default=0)  # Skipped duplicates
+    new_listings = Column(Integer, default=0)  # Yeni ilanlar (tekrar olmayanlar)
+    duplicate_listings = Column(Integer, default=0)  # Atlanan tekrarlar
     successful_pages = Column(Integer, default=0)
     failed_pages_count = Column(Integer, default=0)
 
-    # Timing
+    # Zamanlama
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
     duration_seconds = Column(Integer)
 
-    # Status
+    # Durum
     status = Column(String(20), default="running", index=True)  # running, completed, failed, stopped
     error_message = Column(Text)
 
-    # Relationships
+    # İlişkiler
     listings = relationship("Listing", back_populates="scrape_session")
     failed_page_records = relationship("FailedPage", back_populates="scrape_session")
 
@@ -164,7 +156,7 @@ class ScrapeSession(Base):
         return f"<ScrapeSession(id={self.id}, platform={self.platform}, status={self.status})>"
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert session to dictionary for API responses"""
+        """API yanıtları için oturumu sözlüğe dönüştür"""
         return {
             "id": self.id,
             "platform": self.platform,
@@ -187,10 +179,7 @@ class ScrapeSession(Base):
 
 
 class PriceHistory(Base):
-    """
-    Tracks price changes for listings over time.
-    Records old price -> new price transitions.
-    """
+    """İlan fiyat değişikliği geçmişi"""
     __tablename__ = "price_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -203,7 +192,7 @@ class PriceHistory(Base):
 
     changed_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships
+    # İlişkiler
     listing = relationship("Listing", back_populates="price_history")
 
     __table_args__ = (
@@ -227,9 +216,7 @@ class PriceHistory(Base):
 
 
 class FailedPage(Base):
-    """
-    Tracks failed page scrapes for retry
-    """
+    """Başarısız sayfa takibi"""
     __tablename__ = "failed_pages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -248,7 +235,7 @@ class FailedPage(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships
+    # İlişkiler
     scrape_session = relationship("ScrapeSession", back_populates="failed_page_records")
 
     __table_args__ = (
@@ -260,9 +247,7 @@ class FailedPage(Base):
 
 
 class User(Base):
-    """
-    User model for authentication
-    """
+    """Kullanıcı modeli"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

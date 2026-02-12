@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Real Estate Scraper - Backend API
-FastAPI application definition
-"""
+"""Emlak Kazıyıcı - Backend API, FastAPI uygulama tanımı"""
 
 import sys
 import os
@@ -10,7 +7,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-# Add current directory to path for imports
+# Import'lar için mevcut dizini yola ekle
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI
@@ -18,16 +15,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 from auth.router import router as auth_router
 
-# Database initialization
+# Veritabanı başlatma
 from database.connection import engine, DATABASE_URL
 from database.models import Base
 
-# Setup logging
+# Loglama ayarla
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def init_database(max_retries=5, retry_delay=3):
-    """Create database tables if they don't exist (retry destekli)"""
+    """Veritabanı tablolarını yoksa oluşturur (yeniden deneme destekli)"""
     for attempt in range(1, max_retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
@@ -46,12 +43,12 @@ def init_database(max_retries=5, retry_delay=3):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Başlatma
     init_database()
     yield
-    # Shutdown
+    # Kapatma
 
-# Initialize FastAPI App
+# FastAPI uygulamasını başlat
 app = FastAPI(
     title="Real Estate Scraper API",
     description="API for EmlakJet and HepsiEmlak scrapers",
@@ -59,7 +56,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - explicit origins required for cookie credentials
+# CORS - çerez kimlik doğrulaması için açık origin'ler gerekli
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 app.add_middleware(

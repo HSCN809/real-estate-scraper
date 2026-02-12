@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Core module initialization
-"""
+"""Çekirdek modül başlatma"""
 
 from .config import (
     ScraperConfig,
@@ -13,7 +11,7 @@ from .config import (
 )
 from .selectors import SELECTORS, get_selectors
 
-# Lazy imports for selenium-dependent modules
+# Selenium bağımlı modüller için gecikmeli import
 def get_driver_manager():
     from .driver_manager import DriverManager
     return DriverManager

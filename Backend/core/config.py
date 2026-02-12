@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Configuration management for Real Estate Scraper
-Environment variable destekli konfigürasyon
-"""
+"""Scraper konfigürasyon yönetimi"""
 
 import os
 from dataclasses import dataclass, field
@@ -41,18 +38,18 @@ def get_float_env(key: str, default: float) -> float:
 
 @dataclass
 class ScraperConfig:
-    """Main configuration class for scraper settings - STEALTH OPTIMIZED"""
+    """Scraper ana konfigürasyon sınıfı"""
 
-    # Timeouts
+    # Zaman aşımı ayarları
     page_load_timeout: int = field(default_factory=lambda: get_int_env('CHROME_TIMEOUT', 30))
     element_wait_timeout: int = 10
 
-    # Retry settings
+    # Yeniden deneme ayarları
     max_retries: int = field(default_factory=lambda: get_int_env('SCRAPER_MAX_RETRIES', 3))
     retry_delay: float = 2.0
-    retry_multiplier: float = 2.0  # Exponential backoff
+    retry_multiplier: float = 2.0  # Üstel geri çekilme
 
-    # Rate limiting - OPTIMIZED for speed while avoiding detection
+    # Hız sınırlama - tespitten kaçınarak optimize edildi
     wait_between_pages: float = field(default_factory=lambda: get_float_env('SCRAPER_PAGE_DELAY', 1.5))
     wait_between_requests: float = 0.3
 
@@ -61,26 +58,26 @@ class ScraperConfig:
     random_wait_medium: tuple = (1.5, 3.5)
     random_wait_long: tuple = (3.0, 6.0)
 
-    # Scraping limits
+    # Tarama limitleri
     max_pages_per_location: int = 100
     default_pages: int = 10
 
-    # Browser settings - STEALTH MODE
+    # Tarayıcı ayarları - gizli mod
     # Docker'da CHROME_HEADLESS=false olmalı
     headless: bool = field(default_factory=lambda: get_bool_env('CHROME_HEADLESS', False))
     disable_images: bool = True
 
-    # User agent
+    # Kullanıcı ajanı
     user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     )
 
-    # Output settings
+    # Çıktı ayarları
     output_dir: str = field(default_factory=lambda: os.getenv('OUTPUT_DIR', 'outputs'))
 
-    # Logging
+    # Loglama
     log_level: str = field(default_factory=lambda: os.getenv('LOG_LEVEL', 'INFO'))
     log_to_file: bool = True
     log_file: str = field(default_factory=lambda: os.getenv('LOG_FILE', 'logs/scraper.log'))
@@ -88,7 +85,7 @@ class ScraperConfig:
 
 @dataclass
 class EmlakJetConfig:
-    """EmlakJet specific configuration"""
+    """EmlakJet konfigürasyonu"""
     base_url: str = "https://www.emlakjet.com"
     
     categories: dict = field(default_factory=lambda: {
@@ -112,7 +109,7 @@ class EmlakJetConfig:
 
 @dataclass
 class HepsiemlakConfig:
-    """Hepsiemlak specific configuration"""
+    """HepsiEmlak konfigürasyonu"""
     base_url: str = "https://www.hepsiemlak.com"
     
     categories: dict = field(default_factory=lambda: {
@@ -135,22 +132,22 @@ class HepsiemlakConfig:
     # Bkz: scrapers/hepsiemlak/subtype_fetcher.py
 
 
-# Global config instance
+# Global konfigürasyon örneği
 config = ScraperConfig()
 emlakjet_config = EmlakJetConfig()
 hepsiemlak_config = HepsiemlakConfig()
 
 
 def get_config() -> ScraperConfig:
-    """Get the global scraper configuration"""
+    """Global scraper konfigürasyonunu getir"""
     return config
 
 
 def get_emlakjet_config() -> EmlakJetConfig:
-    """Get EmlakJet configuration"""
+    """EmlakJet konfigürasyonunu getir"""
     return emlakjet_config
 
 
 def get_hepsiemlak_config() -> HepsiemlakConfig:
-    """Get Hepsiemlak configuration"""
+    """HepsiEmlak konfigürasyonunu getir"""
     return hepsiemlak_config

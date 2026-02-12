@@ -47,7 +47,7 @@ export function Header() {
     return (
         <header className="fixed top-0 left-0 right-0 h-16 z-50 border-b border-slate-700/50 backdrop-blur-xl bg-slate-900/90">
             <div className="h-full max-w-7xl mx-auto px-6 flex items-center">
-                {/* Logo - Sol */}
+                {/* Logo */}
                 <Link href="/" className="flex items-center gap-3 mr-12">
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-sky-500/25">
                         <Home className="w-5 h-5 text-white" />
@@ -57,7 +57,7 @@ export function Header() {
                     </span>
                 </Link>
 
-                {/* Navigation - Orta */}
+                {/* Navigasyon */}
                 <nav className="flex items-center gap-1 flex-1">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href;
@@ -89,7 +89,7 @@ export function Header() {
                     })}
                 </nav>
 
-                {/* Mini Progress Indicator — visible when panel is hidden */}
+                {/* Mini İlerleme Göstergesi */}
                 {showMiniIndicator && (
                     <button
                         onClick={showPanel}
@@ -103,7 +103,7 @@ export function Header() {
                     </button>
                 )}
 
-                {/* User Section - Sağ */}
+                {/* Kullanıcı Bölümü */}
                 {user && (
                     <div className="relative" ref={dropdownRef}>
                         <button
@@ -134,10 +134,10 @@ export function Header() {
                             )} />
                         </button>
 
-                        {/* Dropdown Menu */}
+                        {/* Açılır Menü */}
                         {isDropdownOpen && (
                             <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-slate-700/50 backdrop-blur-xl bg-slate-900/95 shadow-2xl shadow-black/30 overflow-hidden">
-                                {/* User Info Header */}
+                                {/* Kullanıcı Bilgileri */}
                                 <div className="px-4 py-4 bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-b border-slate-700/50">
                                     <div className="flex items-center gap-3">
                                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 ring-2 ring-white/10">
@@ -156,7 +156,7 @@ export function Header() {
                                     </div>
                                 </div>
 
-                                {/* Menu Items */}
+                                {/* Menü Öğeleri */}
                                 <div className="p-2">
                                     {dropdownMenuItems.map((item) => {
                                         const isActive = pathname === item.href;
@@ -184,10 +184,10 @@ export function Header() {
                                     })}
                                 </div>
 
-                                {/* Divider */}
+                                {/* Ayırıcı */}
                                 <div className="border-t border-slate-700/50 mx-2" />
 
-                                {/* Logout Button */}
+                                {/* Çıkış Butonu */}
                                 <div className="p-2">
                                     <button
                                         onClick={() => {

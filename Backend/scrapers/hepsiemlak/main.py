@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-HepsiEmlak Main Scraper - STEALTH MODE
-Refactored with randomized delays to avoid bot detection
-"""
+"""HepsiEmlak Ana Scraper - gizli mod"""
 
 import time
 import random
@@ -31,10 +28,7 @@ logger = get_logger(__name__)
 
 
 def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, ilan_tipi: str, alt_kategori: str = None, scrape_session_id: int = None):
-    """
-    Listing listesini veritabanına kaydet (upsert mantığı ile).
-    Returns (new_count, updated_count, unchanged_count)
-    """
+    """İlan listesini veritabanına kaydet (upsert mantığı ile)"""
     if not db:
         return 0, 0, 0
 
@@ -71,10 +65,7 @@ def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, 
 
 
 class HepsiemlakScraper(BaseScraper):
-    """
-    Main scraper for HepsiEmlak platform.
-    Handles category selection, city filtering, and scraping.
-    """
+    """HepsiEmlak platformu ana scraper sınıfı"""
     
     CATEGORY_PARSERS = {
         'konut': KonutParser,
@@ -87,9 +78,9 @@ class HepsiemlakScraper(BaseScraper):
     def __init__(
         self,
         driver: WebDriver,
-        listing_type: str = "satilik",  # 'satilik' or 'kiralik'
+        listing_type: str = "satilik",  # 'satilik' veya 'kiralik'
         category: str = "konut",
-        subtype_path: Optional[str] = None,  # Yeni: Alt kategori URL path'i
+        subtype_path: Optional[str] = None,  # Alt kategori URL path'i
         selected_cities: Optional[List[str]] = None,
         selected_districts: Optional[Dict[str, List[str]]] = None  # İl -> [İlçeler] mapping
     ):
@@ -129,20 +120,20 @@ class HepsiemlakScraper(BaseScraper):
         )
         self.current_category = category
 
-        # Database support (set by endpoints.py)
+        # Veritabanı desteği (endpoints.py tarafından ayarlanır)
         self.db = None
         self.scrape_session_id = None
         self.total_scraped_count = 0
         self.new_listings_count = 0
         self.duplicate_count = 0
 
-        # Initialize the appropriate parser
+        # Uygun parser'ı başlat
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
     
     @property
     def subtype_name(self) -> Optional[str]:
-        """Extract subtype name from subtype_path for file naming"""
+        """Dosya adlandırma için subtype_path'inden alt kategori adını çıkar"""
         if self.subtype_path:
             # /satilik/daire -> daire
             parts = self.subtype_path.strip('/').split('/')
@@ -151,32 +142,32 @@ class HepsiemlakScraper(BaseScraper):
         return None
     
     def get_file_prefix(self) -> str:
-        """Generate file prefix with subtype if available"""
+        """Alt kategori varsa dosya öneki oluştur"""
         if self.subtype_name:
             return f"hepsiemlak_{self.listing_type}_{self.category}_{self.subtype_name}"
         return f"hepsiemlak_{self.listing_type}_{self.category}"
     
     def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
-        """Use the category parser to extract listing data"""
+        """Kategori parser'ı ile ilan verisini çıkar"""
         return self.parser.extract_listing_data(container)
     
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """Not used for HepsiEmlak - parsing is done via extract_category_data"""
+        """HepsiEmlak için kullanılmaz - parse işlemi extract_category_data ile yapılır"""
         return {}
     
     def get_cities(self) -> List[str]:
-        """Get all cities and let user select"""
+        """Tüm şehirleri al ve kullanıcının seçmesini sağla"""
         print(f"\n{self.category.capitalize()} sitesine gidiliyor...")
         self.driver.get(self.base_url)
         time.sleep(5)  # HepsiEmlak için sabit 5 saniye - sayfa tam yüklensin
         
         try:
-            # Find city dropdown
+            # Şehir dropdown'ını bul
             city_dropdown_sel = self.common_selectors.get("city_dropdown")
             city_dropdown = self.wait_for_clickable(city_dropdown_sel)
             
             if not city_dropdown:
-                logger.error("City dropdown not found")
+                logger.error("Şehir dropdown'ı bulunamadı")
                 return []
             
             # JS click ile menüyü aç (Selenium'un objeye tıklayamama riskine karşı)
@@ -184,7 +175,7 @@ class HepsiemlakScraper(BaseScraper):
             print("Şehir dropdown'ı açıldı...")
             time.sleep(3)  # Dropdown açılması için 3 saniye
             
-            # Expand dropdown
+            # Dropdown'ı genişlet
             city_list_sel = self.common_selectors.get("city_list")
             dropdown_container = self.wait_for_element(city_list_sel)
             
@@ -198,10 +189,10 @@ class HepsiemlakScraper(BaseScraper):
             time.sleep(2)  # Liste genişletme sonrası bekleme
             
             if not dropdown_container:
-                logger.error("City list container not showing after click")
+                logger.error("Tıklama sonrası şehir listesi görüntülenemedi")
                 return []
             
-            # Get city items
+            # Şehir öğelerini al
             city_item_sel = self.common_selectors.get("city_item")
             city_link_sel = self.common_selectors.get("city_link")
             
@@ -219,7 +210,7 @@ class HepsiemlakScraper(BaseScraper):
             
             cities.sort()
             
-            # Display cities in 4 columns
+            # Şehirleri 4 sütunda göster
             print("\n" + "=" * 80)
             print("TÜM ŞEHİRLER")
             print("=" * 80)
@@ -236,12 +227,12 @@ class HepsiemlakScraper(BaseScraper):
             
             print(f"\nToplam {len(cities)} şehir bulundu.")
             
-            # Close dropdown
+            # Dropdown'ı kapat
             try:
                 self.driver.execute_script("document.elementFromPoint(10, 10).click();")
             except:
                 pass
-            self.random_short_wait()  # Stealth
+            self.random_short_wait()  # Gizli mod
             
             return cities
             
@@ -252,18 +243,11 @@ class HepsiemlakScraper(BaseScraper):
             return []
             
     def get_cities_api(self) -> List[str]:
-        """Get cities logic for API (non-interactive)"""
-        # We need to open the dropdown to get the list, similar to get_cities but without printing?
-        # Or just reuse get_cities but suppress print/interaction? 
-        # Actually get_cities interacts with DOM, so it is required.
-        # Let's modify get_cities to be quieter or just use it.
-        # But get_cities prints a lot.
-        
-        # We'll just define this as an alias or use get_cities directly if needed.
+        """API için şehir listesi al (etkileşimsiz)"""
         return self.get_cities()
     
     def select_cities(self, cities: List[str]) -> List[str]:
-        """Let user select multiple cities"""
+        """Kullanıcının birden fazla şehir seçmesini sağla"""
         selected = []
         
         print("\n" + "=" * 50)
@@ -302,7 +286,7 @@ class HepsiemlakScraper(BaseScraper):
                 delete_input = input("\nSilmek istediğiniz numaraları girin: ").strip()
                 indices = self._parse_selection_input(delete_input, len(selected))
                 
-                # Remove in reverse order to maintain indices
+                # İndeksleri korumak için ters sırada sil
                 for idx in sorted(indices, reverse=True):
                     removed = selected.pop(idx - 1)
                     print(f"✓ {removed} silindi")
@@ -329,22 +313,18 @@ class HepsiemlakScraper(BaseScraper):
         return selected
             
     def select_cities_api(self, all_cities: List[str], target_cities: Optional[List[str]] = None) -> List[str]:
-        """Select cities for API"""
+        """API için şehir seç"""
         if not target_cities:
             return []
         
         selected = []
         for city in target_cities:
-            # Simple fuzzy match or exact match
-            # "istanbul" -> "İstanbul"
-            # We try to match user input to available cities
-            
-            # Direct match
+            # Doğrudan eşleştirme
             if city in all_cities:
                 selected.append(city)
                 continue
                 
-            # Case insensitive match
+            # Büyük/küçük harf duyarsız eşleştirme
             found = False
             for ac in all_cities:
                 if ac.lower() == city.lower():
@@ -352,12 +332,12 @@ class HepsiemlakScraper(BaseScraper):
                     found = True
                     break
             if not found:
-                 logger.warning(f"City not found: {city}")
+                 logger.warning(f"Şehir bulunamadı: {city}")
         
         return selected
     
     def select_single_city(self, city_name: str) -> bool:
-        """Select a single city - DOĞRUDAN ŞEHİR URL'İNE GİT"""
+        """Tek bir şehir seç - doğrudan şehir URL'ine git"""
         try:
             import unicodedata
             
@@ -447,10 +427,7 @@ class HepsiemlakScraper(BaseScraper):
         return text.lower().replace(' ', '-')
 
     def get_district_urls_from_dropdown(self, city_name: str) -> Dict[str, str]:
-        """
-        Şehir sayfasındaki ilçe dropdown'ından gerçek URL'leri çek.
-        Returns: {ilçe_adı: url} dictionary
-        """
+        """Şehir sayfasındaki ilçe dropdown'ından gerçek URL'leri çek ve {ilçe_adı: url} sözlüğü döndür"""
         district_urls = {}
         
         try:
@@ -488,11 +465,11 @@ class HepsiemlakScraper(BaseScraper):
                 # "İlçe Seçiniz" placeholder'ı olan dropdown container'ını bul
                 dropdown = None
                 try:
-                    # Placeholder span'ını bul ve parent container'a tıkla
+                    # Placeholder span'ını bul ve üst konteyner'a tıkla
                     placeholder = self.driver.find_element(
                         By.XPATH, "//span[contains(@class, 'he-select-base__placeholder') and contains(text(), 'İlçe')]"
                     )
-                    dropdown = placeholder.find_element(By.XPATH, "..")  # Parent container
+                    dropdown = placeholder.find_element(By.XPATH, "..")  # Üst eleman
                 except:
                     # Alternatif: doğrudan container'ı bul
                     containers = self.driver.find_elements(By.CSS_SELECTOR, "div.he-select-base__container")
@@ -609,7 +586,7 @@ class HepsiemlakScraper(BaseScraper):
             return False
 
     def search_listings(self) -> bool:
-        """Click search button and wait for results"""
+        """Arama butonuna tıkla ve sonuçları bekle"""
         try:
             search_selectors = self.common_selectors.get("search_buttons", [])
             
@@ -619,9 +596,9 @@ class HepsiemlakScraper(BaseScraper):
                     if search_button:
                         self.driver.execute_script("arguments[0].click();", search_button)
                         print("Arama yapılıyor...")
-                        self.random_long_wait()  # Stealth: arama sonrası
+                        self.random_long_wait()  # Gizli mod: arama sonrası
                         
-                        # Wait for results
+                        # Sonuçları bekle
                         results_sel = self.common_selectors.get("listing_results")
                         self.wait_for_element(results_sel)
                         return True
@@ -636,7 +613,7 @@ class HepsiemlakScraper(BaseScraper):
             return False
     
     def get_total_pages(self) -> int:
-        """Get total number of pages from pagination"""
+        """Sayfalamadan toplam sayfa sayısını al"""
         try:
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
@@ -663,7 +640,7 @@ class HepsiemlakScraper(BaseScraper):
             except Exception:
                 pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
             
-            # Pagination kontrolü - ul.he-pagination__links içindeki a elementleri
+            # Sayfalama kontrolü - ul.he-pagination__links içindeki a elementleri
             max_retries = 5
             page_links = []
 
@@ -704,16 +681,12 @@ class HepsiemlakScraper(BaseScraper):
             return 1
     
     def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None, stop_checker=None) -> List[Dict[str, Any]]:
-        """Scrape all listings for a single city
-
-        Args:
-            stop_checker: Callable that returns True if stop requested
-        """
+        """Tek bir şehir için tüm ilanları tara"""
         print(f"\n{'=' * 70}")
         print(f"🏙️  {city.upper()} - TÜM İLÇELER TARANACAK")
         print("=" * 70)
 
-        # Use passed stop_checker or fall back to instance one
+        # Durdurma denetleyicisini belirle
         _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
 
         def is_stop_requested():
@@ -729,12 +702,12 @@ class HepsiemlakScraper(BaseScraper):
             progress_callback(f"{city} için tarama başlatılıyor...", current=0, total=100)
 
         try:
-            # Select city (doğrudan şehir URL'ine gider)
+            # Şehir seç (doğrudan şehir URL'ine gider)
             if not self.select_single_city(city):
                 logger.error(f"❌ {city} seçilemedi, atlanıyor")
                 return []
 
-            # Check for zero results - daha güvenilir kontrol
+            # Sıfır sonuç kontrolü
             try:
                 listing_count_elem = self.driver.find_elements(
                     By.CSS_SELECTOR, "span.applied-filters__count"
@@ -755,11 +728,11 @@ class HepsiemlakScraper(BaseScraper):
             except Exception:
                 pass
 
-            # Get total pages
+            # Toplam sayfa sayısını al
             total_pages = self.get_total_pages()
             print(f"📊 {city} için toplam {total_pages} sayfa tespit edildi")
 
-            # Get page count (None = limit yok, tüm sayfalar)
+            # Sayfa sayısını al (None = limit yok, tüm sayfalar)
             if api_mode:
                  if max_pages is not None:
                      pages_to_scrape = min(max_pages, total_pages)
@@ -780,7 +753,7 @@ class HepsiemlakScraper(BaseScraper):
 
             city_listings = []
 
-            # Scrape pages
+            # Sayfaları tara
             for page in range(1, pages_to_scrape + 1):
                 # Durdurma kontrolü - her sayfa başında kontrol et
                 if is_stop_requested():
@@ -790,7 +763,7 @@ class HepsiemlakScraper(BaseScraper):
                 print(f"\n📄 Sayfa {page}/{pages_to_scrape} taranıyor...")
 
                 if progress_callback:
-                    # Progress: tamamlanan sayfa sayısı üzerinden hesapla
+                    # İlerleme: tamamlanan sayfa sayısı üzerinden hesapla
                     # Sayfa 5 taranmaya başladığında 4 tamamlanmış = %80
                     completed_pages = page - 1
                     page_progress = int((completed_pages / pages_to_scrape) * 100)
@@ -801,13 +774,13 @@ class HepsiemlakScraper(BaseScraper):
                     # Şehir URL'ini kullan (base_url değil!)
                     page_url = f"{page_url}?page={page}"
                     self.driver.get(page_url)
-                    self.random_long_wait()  # Stealth: sayfa geçişi
+                    self.random_long_wait()  # Gizli mod: sayfa geçişi
                     
-                # Wait for results - track timeout failures
+                # Sonuçları bekle - timeout hatalarını takip et
                 result_element = self.wait_for_element(self.common_selectors.get("listing_results"))
                 
                 if result_element is None:
-                    # Timeout - sayfa yüklenemedi, başarısız sayfa olarak kaydet
+                    # Zaman aşımı - sayfa yüklenemedi, başarısız sayfa olarak kaydet
                     print(f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi")
                     failed_pages_tracker.add_failed_page(FailedPageInfo(
                         url=page_url if page > 1 else self.driver.current_url,
@@ -856,7 +829,7 @@ class HepsiemlakScraper(BaseScraper):
                         logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                 if page < pages_to_scrape:
-                    self.random_medium_wait()  # Stealth: sayfalar arası
+                    self.random_medium_wait()  # Gizli mod: sayfalar arası
 
             print(f"\n{'=' * 70}")
             print(f"✅ {city.upper()} TAMAMLANDI")
@@ -871,18 +844,10 @@ class HepsiemlakScraper(BaseScraper):
             return []
 
     def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None, stop_checker=None) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Bir şehir için belirtilen ilçeleri scrape et - HER İLÇEYİ AYRI AYRI TARA VE KAYDET
-
-        Args:
-            stop_checker: Callable that returns True if stop requested
-
-        Returns:
-            Dictionary of district -> list of listings (her ilçe için ayrı)
-        """
+        """Bir şehir için belirtilen ilçeleri ayrı ayrı tara ve kaydet"""
         all_results = {}  # İlçe -> İlanlar mapping
 
-        # Use passed stop_checker or fall back to instance one
+        # Durdurma denetleyicisini belirle
         _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
 
         def is_stop_requested():
@@ -933,7 +898,7 @@ class HepsiemlakScraper(BaseScraper):
                 real_url = district_url_map.get(district)
 
                 if real_url:
-                    # Relative URL'yi tam URL'ye çevir
+                    # Göreceli URL'yi tam URL'ye çevir
                     if real_url.startswith('/'):
                         real_url = f"https://www.hepsiemlak.com{real_url}"
 
@@ -948,12 +913,12 @@ class HepsiemlakScraper(BaseScraper):
                     else:
                         logger.warning(f"⚠️ {district} - URL redirect olmuş olabilir: {self.driver.current_url}")
                 else:
-                    # Fallback: Manuel URL oluştur
+                    # Yedek: Manuel URL oluştur
                     if not self.select_single_district(district):
                         logger.warning(f"⚠️  {district} ilçesi yüklenemedi, atlanıyor")
                         continue
 
-                # Check for zero results - daha güvenilir kontrol
+                # Sıfır sonuç kontrolü - daha güvenilir kontrol
                 try:
                     # Önce gerçek ilan sayısını kontrol et
                     listing_count_elem = self.driver.find_elements(
@@ -976,13 +941,13 @@ class HepsiemlakScraper(BaseScraper):
                 except Exception as e:
                     logger.debug(f"İlan sayısı kontrolü hatası: {e}")
 
-                # Get total pages
+                # Toplam sayfa sayısını al
                 total_pages = self.get_total_pages()
                 print(f"📊 {district} için toplam {total_pages} sayfa tespit edildi")
 
                 pages_to_scrape = min(max_pages, total_pages) if max_pages is not None else total_pages
 
-                # Scrape pages for this district
+                # Bu ilçe için sayfaları tara
                 for page in range(1, pages_to_scrape + 1):
                     # Durdurma kontrolü - her sayfa başında kontrol et
                     if is_stop_requested():
@@ -996,7 +961,7 @@ class HepsiemlakScraper(BaseScraper):
                     print(f"\n📄 Sayfa {page}/{pages_to_scrape} taranıyor...")
 
                     if progress_callback:
-                        # Progress: ilçe ve sayfa bilgisini birlikte göster
+                        # İlerleme: ilçe ve sayfa bilgisini birlikte göster
                         overall_progress = int(((idx - 1 + (page / pages_to_scrape)) / len(districts)) * 100)
                         progress_callback(
                             f"{district} - Sayfa {page}/{pages_to_scrape}",
@@ -1011,11 +976,11 @@ class HepsiemlakScraper(BaseScraper):
                         self.driver.get(page_url)
                         self.random_long_wait()
                     
-                    # Wait for results - track timeout failures
+                    # Sonuçları bekle - timeout hatalarını takip et
                     result_element = self.wait_for_element(self.common_selectors.get("listing_results"))
                     
                     if result_element is None:
-                        # Timeout - sayfa yüklenemedi, başarısız sayfa olarak kaydet
+                        # Zaman aşımı - sayfa yüklenemedi, başarısız sayfa olarak kaydet
                         print(f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi")
                         failed_pages_tracker.add_failed_page(FailedPageInfo(
                             url=page_url if page > 1 else self.driver.current_url,
@@ -1102,13 +1067,7 @@ class HepsiemlakScraper(BaseScraper):
         logger.info(f"✅ {city}/{district} - {len(listings)} ilan toplandı")
 
     def scrape_current_page(self, fallback_city: str = None, fallback_district: str = None) -> List[Dict[str, Any]]:
-        """
-        Scrape all listings on current page.
-
-        Args:
-            fallback_city: City name to use if location parsing fails
-            fallback_district: District name to use if location parsing fails
-        """
+        """Mevcut sayfadaki tüm ilanları tara; lokasyon bulunamazsa fallback_city ve fallback_district kullanılır"""
         listings = []
 
         try:
@@ -1122,13 +1081,13 @@ class HepsiemlakScraper(BaseScraper):
                 try:
                     data = self.parser.extract_listing_data(element)
                     if data:
-                        # Fallback: Eğer lokasyon parse edilemezse, taranan şehir/ilçeyi kullan
+                        # Yedek: Lokasyon parse edilemezse, taranan şehir/ilçeyi kullan
                         if fallback_city and (not data.get('il') or data.get('il') == 'Belirtilmemiş'):
                             data['il'] = fallback_city
                         if fallback_district and (not data.get('ilce') or data.get('ilce') == 'Belirtilmemiş'):
                             data['ilce'] = fallback_district
                         listings.append(data)
-                    time.sleep(random.uniform(0.02, 0.08))  # Stealth
+                    time.sleep(random.uniform(0.02, 0.08))  # Gizli mod
                 except Exception as e:
                     continue
 
@@ -1140,23 +1099,17 @@ class HepsiemlakScraper(BaseScraper):
         return listings
     
     def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
-        """API scraping entry point
-
-        Args:
-            max_pages: Maximum pages to scrape per city/district
-            progress_callback: Callback for progress updates
-            stop_checker: Callable that returns True if stop requested (for Celery tasks)
-        """
+        """API tarama giriş noktası; max_pages, progress_callback ve stop_checker parametreleri alır"""
         print(f"\n🚀 API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")
 
-        # Store stop checker for use in nested methods
+        # Durdurma denetleyicisini iç metotlarda kullanmak için sakla
         self._stop_checker = stop_checker
 
         def is_stop_requested():
-            """Check if stop was requested - supports both Celery and in-memory"""
+            """Durdurma isteğini kontrol et - hem Celery hem bellek içi destekler"""
             if stop_checker and stop_checker():
                 return True
-            # Fallback to in-memory status for non-Celery calls
+            # Celery dışı çağrılar için bellek içi duruma geri dön
             try:
                 from api.status import task_status
                 return task_status.is_stop_requested()
@@ -1168,12 +1121,12 @@ class HepsiemlakScraper(BaseScraper):
                  logger.error("No cities provided for API scrape")
                  return
 
-            # Scrape each city
+            # Her şehri tara
             all_results = {}
             total_listings_count = 0
             total_cities = len(self.selected_cities)
 
-            stopped_early = False  # Track if stopped early
+            stopped_early = False  # Erken durdurulup durdurulmadığını takip et
 
             for city_idx, city in enumerate(self.selected_cities, 1):
                 # Durdurma kontrolü - kullanıcı durdur dediyse mevcut verileri kaydet
@@ -1182,9 +1135,9 @@ class HepsiemlakScraper(BaseScraper):
                     stopped_early = True
                     break
 
-                # Toplam progress hesabı için wrapper callback
+                # Toplam ilerleme hesabı için sarmalayıcı callback
                 # city_idx ve total_cities'i closure'a alıyoruz
-                # Use progress_callback if provided (Celery), otherwise try task_status
+                # progress_callback varsa (Celery) onu kullan, yoksa task_status'u dene
                 def make_city_progress_callback(current_city_idx, num_cities, city_name):
                     def city_progress_callback(msg, current=None, total=None, progress=None):
                         # Şehir içi progress'i toplam progress'e çevir
@@ -1198,7 +1151,7 @@ class HepsiemlakScraper(BaseScraper):
                                 progress=overall
                             )
                         else:
-                            # Fallback to in-memory task_status
+                            # Bellek içi task_status'a geri dön
                             try:
                                 from api.status import task_status
                                 task_status.update(
@@ -1248,7 +1201,7 @@ class HepsiemlakScraper(BaseScraper):
                         self.total_scraped_count += len(city_listings)
                         # DB kaydetme scrape_city içinde sayfa bazlı yapılıyor
 
-                self.random_medium_wait()  # Stealth: şehirler arası
+                self.random_medium_wait()  # Gizli mod: şehirler arası
 
             # Özet bilgi (veriler zaten kaydedildi)
             if all_results:
@@ -1303,7 +1256,7 @@ class HepsiemlakScraper(BaseScraper):
                 print(f"📊 {len(failed_pages)} başarısız sayfa tekrar taranacak")
                 print("=" * 70)
 
-                # Progress callback ile status güncelle
+                # İlerleme callback ile durumu güncelle
                 if progress_callback:
                     progress_callback(
                         f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
@@ -1422,7 +1375,7 @@ class HepsiemlakScraper(BaseScraper):
                     # Sayfalar arası kısa bekleme
                     time.sleep(random.uniform(1, 2))
 
-            # Final özet
+            # Son özet
             summary = failed_pages_tracker.get_summary()
             if summary["failed_count"] > 0 or successful_retries > 0:
                 print(f"\n{'=' * 70}")

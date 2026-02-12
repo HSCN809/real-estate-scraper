@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Base parser for HepsiEmlak listings
-"""
+"""HepsiEmlak ilanları için temel parser"""
 
 from typing import Dict, Any, Optional, List
 from selenium.webdriver.common.by import By
@@ -16,26 +14,18 @@ from core.selectors import get_selectors, get_common_selectors
 
 
 class BaseHepsiemlakParser:
-    """
-    Base parser for HepsiEmlak listings.
-    Provides common element extraction methods.
-    """
+    """HepsiEmlak ilanları için temel parser; ortak element çıkarma metotları sağlar"""
     
     PLATFORM = "hepsiemlak"
     
     def __init__(self, category: str):
-        """
-        Initialize parser.
-        
-        Args:
-            category: Category name ('konut', 'arsa', etc.)
-        """
+        """Parser'ı başlat; category parametresi kategori adını alır ('konut', 'arsa' vb.)"""
         self.category = category
         self.selectors = get_selectors(self.PLATFORM, category)
         self.common_selectors = get_common_selectors(self.PLATFORM)
     
     def get_element_text(self, container: WebElement, selector: str) -> str:
-        """Safely get text from an element"""
+        """Elementten güvenli şekilde metin al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.text.strip()
@@ -48,7 +38,7 @@ class BaseHepsiemlakParser:
         selector: str,
         attribute: str
     ) -> str:
-        """Safely get attribute from an element"""
+        """Elementten güvenli şekilde attribute al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.get_attribute(attribute) or ""
@@ -56,15 +46,7 @@ class BaseHepsiemlakParser:
             return ""
     
     def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
-        """
-        Extract common data fields from a listing container.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with common fields
-        """
+        """İlan konteynerinden ortak veri alanlarını çıkar"""
         price_sel = self.common_selectors.get("price", "span.list-view-price")
         title_sel = self.common_selectors.get("title", "h3")
         date_sel = self.common_selectors.get("date", "span.list-view-date")
@@ -77,7 +59,7 @@ class BaseHepsiemlakParser:
         link = self.get_element_attribute(container, link_sel, "href")
         firm = self.get_element_text(container, firm_sel)
 
-        # Try multiple selectors for location (HepsiEmlak HTML structure varies)
+        # Lokasyon için birden fazla seçici dene (HepsiEmlak HTML yapısı değişkenlik gösterir)
         location_selectors = [
             "span.list-view-location address",
             "span.list-view-location",
@@ -91,7 +73,7 @@ class BaseHepsiemlakParser:
             if location_text and "/" in location_text:
                 break
 
-        # Parse location - format: "İl / İlçe / Mahalle"
+        # Lokasyonu parse et - format: "İl / İlçe / Mahalle"
         location_parts = [p.strip() for p in location_text.split('/') if p.strip()]
 
         return {
@@ -106,32 +88,16 @@ class BaseHepsiemlakParser:
         }
     
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
-        """
-        Extract category-specific data. Override in subclasses.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with category-specific fields
-        """
+        """Kategoriye özel verileri çıkar; alt sınıflarda override edilmeli"""
         return {}
     
     def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
-        """
-        Extract complete listing data.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with all listing data or None if invalid
-        """
+        """Tam ilan verisini çıkar; geçersizse None döndürür"""
         try:
-            # Get common data
+            # Ortak verileri al
             data = self.extract_common_data(container)
             
-            # Get category-specific data
+            # Kategoriye özel verileri al
             category_data = self.extract_category_data(container)
             data.update(category_data)
             
@@ -141,7 +107,7 @@ class BaseHepsiemlakParser:
             return None
     
     def get_csv_fields(self) -> List[str]:
-        """Get CSV field names for this category"""
+        """Bu kategori için CSV alan adlarını getir"""
         return self.selectors.get('csv_fields', [
             'fiyat', 'baslik', 'il', 'ilce', 'mahalle',
             'ilan_linki', 'ilan_tarihi', 'emlak_ofisi'

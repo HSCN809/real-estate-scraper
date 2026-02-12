@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Data export utilities for JSON, CSV, and Excel formats
-"""
+"""JSON, CSV ve Excel formatları için veri dışa aktarma araçları"""
 
 import os
 import json
@@ -21,9 +19,7 @@ logger = get_logger(__name__)
 
 
 class DataExporter:
-    """
-    Export scraped data to various formats (JSON, CSV, Excel).
-    """
+    """Kazınan verileri çeşitli formatlara (JSON, CSV, Excel) dışa aktarır."""
 
     def __init__(
         self,
@@ -32,21 +28,13 @@ class DataExporter:
         category: Optional[str] = None,      # konut/arsa/isyeri vb.
         subtype: Optional[str] = None        # daire/villa vb.
     ):
-        """
-        Initialize the exporter with hierarchical folder structure.
-
-        Args:
-            output_dir: Base directory for output files
-            listing_type: Type of listing (satilik/kiralik)
-            category: Category (konut/arsa/isyeri etc.)
-            subtype: Subcategory (daire/villa etc.)
-        """
+        """Hiyerarşik klasör yapısıyla dışa aktarıcıyı başlatır."""
         self.base_output_dir = output_dir
         self.listing_type = listing_type
         self.category = category
         self.subtype = subtype
 
-        # Build hierarchical path: base/listing_type/category/subtype
+        # Hiyerarşik yol oluştur: base/listing_type/category/subtype
         path_parts = [output_dir]
         if listing_type:
             path_parts.append(listing_type)
@@ -59,7 +47,7 @@ class DataExporter:
         self._ensure_output_dir()
     
     def _ensure_output_dir(self):
-        """Create output directory if it doesn't exist"""
+        """Çıktı dizini yoksa oluşturur"""
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir, exist_ok=True)
             logger.info(f"Created output directory: {self.output_dir}")
@@ -71,18 +59,7 @@ class DataExporter:
         timestamp: bool = True,
         subfolder: Optional[str] = None
     ) -> str:
-        """
-        Generate a filename with optional timestamp.
-        
-        Args:
-            prefix: File prefix (e.g., 'konut_ilanlari')
-            extension: File extension (e.g., 'json')
-            timestamp: Whether to include timestamp
-            subfolder: Optional subfolder name
-            
-        Returns:
-            Full file path
-        """
+        """İsteğe bağlı zaman damgası ile dosya adı üretir ve tam yolunu döndürür."""
         if timestamp:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{prefix}_{ts}.{extension}"
@@ -105,19 +82,7 @@ class DataExporter:
         subfolder: Optional[str] = None,
         sheet_name: str = "Data"
     ) -> str:
-        """
-        Save data to Excel file.
-        
-        Args:
-            data: List of dictionaries to save
-            prefix: File name prefix
-            timestamp: Whether to include timestamp in filename
-            subfolder: Optional subfolder
-            sheet_name: Excel sheet name
-            
-        Returns:
-            Path to saved file
-        """
+        """Verileri Excel dosyasına kaydeder ve dosya yolunu döndürür."""
         if not HAS_PANDAS:
             logger.error("pandas not installed, cannot save Excel")
             raise ImportError("pandas is required for Excel export")
@@ -147,18 +112,7 @@ class DataExporter:
         format: str = "excel",
         city_district_map: Optional[Dict[str, List[str]]] = None  # Şehir -> İlçeler mapping
     ) -> Dict[str, str]:
-        """
-        Save data grouped by city to separate files with hierarchical folder structure.
-
-        Args:
-            data: Dictionary of city -> list of listings
-            prefix: File name prefix
-            format: Output format ('json', 'csv', 'excel')
-            city_district_map: Optional mapping of city -> districts for folder structure
-
-        Returns:
-            Dictionary of city -> filepath
-        """
+        """Şehre göre gruplandırılmış verileri hiyerarşik klasör yapısında ayrı dosyalara kaydeder."""
         results = {}
 
         for city, listings in data.items():
@@ -190,10 +144,10 @@ class DataExporter:
         return results
 
 
-# Create default exporter instance
+# Varsayılan dışa aktarıcı örneğini oluştur
 default_exporter = DataExporter()
 
 
 def save_excel(data: List[Dict], prefix: str = "data", **kwargs) -> str:
-    """Convenience function to save Excel"""
+    """Excel kaydetmek için kısayol fonksiyonu"""
     return default_exporter.save_excel(data, prefix, **kwargs)

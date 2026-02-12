@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Chrome WebDriver Manager - PURE STEALTH MODE
-Exclusively uses undetected-chromedriver to bypass bot detection.
-Optimized for Docker container environment.
-"""
+"""Chrome WebDriver yöneticisi - gizli mod"""
 
 import os
 import time
@@ -43,10 +39,7 @@ def _kill_zombie_chrome():
 
 
 class DriverManager:
-    """
-    Manages Chrome WebDriver lifecycle using ONLY undetected-chromedriver.
-    Optimized for Docker/container environments.
-    """
+    """Chrome WebDriver yaşam döngüsünü yönetir"""
 
     def __init__(self, headless: Optional[bool] = None):
         self.config = get_config()
@@ -56,10 +49,10 @@ class DriverManager:
         self.user_agent = random.choice(USER_AGENTS)
 
     def _create_options(self) -> uc.ChromeOptions:
-        """Create Chrome options for undetected-chromedriver"""
+        """Chrome seçeneklerini oluştur"""
         options = uc.ChromeOptions()
 
-        # Temel ayarlar
+        # Temel tarayıcı ayarları
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument(f"user-agent={self.user_agent}")
@@ -92,7 +85,7 @@ class DriverManager:
         return options
 
     def _apply_stealth_scripts(self):
-        """Webdriver olduğunu gizlemek için JS patch'leri"""
+        """Webdriver tespitini gizlemek için JS yamaları uygula"""
         if self.driver:
             try:
                 self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -104,7 +97,7 @@ class DriverManager:
                 logger.debug(f"Stealth script warning: {e}")
 
     def start(self) -> uc.Chrome:
-        """Starts purely in undetected mode"""
+        """Gizli modda Chrome başlat"""
         last_error = None
 
         # Önceki zombie process'leri temizle
@@ -116,11 +109,11 @@ class DriverManager:
 
                 options = self._create_options()
 
-                # Docker ortamında önceden kurulu Chrome ve ChromeDriver kullan
+                # Docker ortamında kurulu Chrome ve ChromeDriver yolları
                 chrome_path = "/usr/bin/google-chrome"
                 chromedriver_path = "/usr/bin/chromedriver"
 
-                # Windows/local için farklı path kontrol et
+                # Windows/yerel ortam için path kontrolü
                 if not os.path.exists(chrome_path):
                     chrome_path = None  # undetected_chromedriver kendi bulacak
                     chromedriver_path = None
@@ -129,7 +122,7 @@ class DriverManager:
                     "options": options,
                     "headless": self.headless,
                     "use_subprocess": True,
-                    "version_main": 145,  # Chrome for Testing version
+                    "version_main": 145,  # Chrome for Testing sürümü
                 }
 
                 if chrome_path and os.path.exists(chrome_path):
@@ -158,7 +151,7 @@ class DriverManager:
         raise WebDriverException(f"Pure stealth mode failed: {last_error}")
 
     def stop(self):
-        """Cleanup driver"""
+        """Driver'ı temizle"""
         if self.driver:
             try:
                 self.driver.quit()

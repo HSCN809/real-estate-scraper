@@ -34,12 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
     }, []);
 
-    // Initialize auth state on mount
+    // Bileşen yüklendiğinde auth durumunu başlat
     useEffect(() => {
         const initAuth = async () => {
             const storedUser = sessionStorage.getItem(USER_KEY);
 
-            // Layer 1: Instant restore from sessionStorage (fast UI paint)
+            // 1. Katman: sessionStorage'dan hızlı geri yükleme
             if (storedUser) {
                 try {
                     const parsedUser = JSON.parse(storedUser);
@@ -51,12 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
 
-            // Layer 2: Validate against backend (cookie sent automatically)
+            // 2. Katman: Backend ile doğrulama (cookie otomatik gönderilir)
             try {
                 const freshUser = await authApi.getCurrentUser();
                 saveUser(freshUser);
             } catch {
-                // Cookie invalid or missing
+                // Cookie geçersiz veya yok
                 clearAuth();
             }
 
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await authApi.logout();
         } catch {
-            // Best-effort: even if API call fails, clear local state
+            // API çağrısı başarısız olsa bile yerel durumu temizle
         }
         clearAuth();
         router.push('/login');
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
+        throw new Error('useAuth AuthProvider içinde kullanılmalıdır');
     }
     return context;
 }

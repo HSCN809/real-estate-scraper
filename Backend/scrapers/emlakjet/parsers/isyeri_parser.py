@@ -1,31 +1,18 @@
 # -*- coding: utf-8 -*-
-"""
-İşyeri (Commercial) parser for EmlakJet
-"""
+"""EmlakJet İşyeri parser'ı"""
 
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
 
 class IsyeriParser(BaseEmlakJetParser):
-    """Parser for İşyeri (commercial) listings on EmlakJet"""
+    """EmlakJet işyeri ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("isyeri")
     
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """
-        Parse isyeri-specific details from quick info.
-        
-        Expected format: "Dükkan | 150 m²"
-        
-        Args:
-            quick_info: Quick info text
-            title: Listing title
-            
-        Returns:
-            Dictionary with isyeri fields
-        """
+        """İşyeri detaylarını quick info'dan parse et"""
         details = {
             'isyeri_tipi': '',
             'metrekare': '',
@@ -41,18 +28,18 @@ class IsyeriParser(BaseEmlakJetParser):
             for part in parts:
                 part_lower = part.lower()
                 
-                # Commercial type
+                # İşyeri tipi
                 if any(t in part_lower for t in [
                     'dükkan', 'mağaza', 'ofis', 'büro', 'depo', 'atölye',
                     'fabrika', 'plaza', 'iş hanı', 'çarşı', 'showroom'
                 ]):
                     details['isyeri_tipi'] = part
                 
-                # Floor info
+                # Kat bilgisi
                 elif 'kat' in part_lower:
                     details['kat'] = part
                 
-                # Square meters
+                # Metrekare
                 elif 'm²' in part or 'm2' in part_lower:
                     details['metrekare'] = part
         

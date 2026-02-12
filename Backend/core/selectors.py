@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
-"""
-CSS/XPath Selectors for each platform and category
-Centralized selector management for easy maintenance
-"""
+"""Platform ve kategori bazlı CSS/XPath seçiciler"""
 
 from typing import Dict, Any, Optional
 
 
 # ============================================================================
-# EMLAKJET SELECTORS
+# EmlakJet seçicileri
 # ============================================================================
 
 EMLAKJET_SELECTORS = {
     "common": {
-        # Listing selectors
+        # İlan seçicileri
         "listing_container": "a.styles_wrapper__587DT",
         "title": "h3.styles_title__aKEGQ",
         "location": "span.styles_location__OwJiQ",
@@ -22,14 +19,14 @@ EMLAKJET_SELECTORS = {
         "badge_wrapper": "div.styles_badgewrapper__pS0rt",
         "quick_info": "div.styles_quickinfoWrapper__Vsnk5",
         
-        # Pagination
+        # Sayfalama
         "pagination_list": "ul.styles_list__zqOeW li",
         "active_page": "span.styles_selected__hilA_",
         
-        # Location navigation
+        # Lokasyon navigasyonu
         "location_links": "section.styles_section__xzOd3 a.styles_link__7WOOd",
         
-        # Category menu
+        # Kategori menüsü
         "category_button": "div[role='button']",
         "sub_menu": "ul.styles_wrapper__xd9_i",
         "sub_category": "ul.styles_ulSubMenu__E0zyf li.styles_subMenu2__BskGl",
@@ -95,12 +92,12 @@ EMLAKJET_SELECTORS = {
 
 
 # ============================================================================
-# HEPSIEMLAK SELECTORS
+# HepsiEmlak seçicileri
 # ============================================================================
 
 HEPSIEMLAK_SELECTORS = {
     "common": {
-        # Listing selectors
+        # İlan seçicileri
         "listing_container": "li.listing-item:not(.listing-item--promo)",
         "listing_results": "ul.list-items-container, .search-results",
         "title": "h3",
@@ -110,14 +107,14 @@ HEPSIEMLAK_SELECTORS = {
         "link": "a.card-link",
         "firm": "p.listing-card--owner-info__firm-name",
         
-        # City dropdown
+        # İl açılır menüsü
         "city_dropdown": "div.he-select-base__container, div[data-name='city']",
         "city_list": "div.he-select-base__list, div.he-select__list",
         "city_item": "li.he-select__list-item, li.he-select-base__list-item",
         "city_link": "a.js-city-filter__list-link, span.he-select-base__text",
         "city_radio": "div.he-radio, input[type='radio']",
 
-        # District dropdown
+        # İlçe açılır menüsü
         "county_section": "section.filter-item-wrap.locationCountySec",
         "county_dropdown": "div.js-county-filter div.he-select-base__container",
         "county_placeholder": "span.he-select-base__placeholder",
@@ -125,7 +122,7 @@ HEPSIEMLAK_SELECTORS = {
         "county_item": "li.he-select__list-item, li.he-select-base__list-item",
         "county_text": "span.he-select-base__text",
         
-        # Search button
+        # Arama butonu
         "search_buttons": [
             "a.btn.btn-red.btn-large",
             "button.btn.btn-red.btn-large",
@@ -134,7 +131,7 @@ HEPSIEMLAK_SELECTORS = {
             ".btn-red"
         ],
         
-        # Pagination
+        # Sayfalama
         "pagination": [
             "ul.he-pagination__links li.he-pagination__item a.he-pagination__link",
             ".pagination a",
@@ -198,7 +195,7 @@ HEPSIEMLAK_SELECTORS = {
 
 
 # ============================================================================
-# MAIN SELECTORS DICTIONARY
+# Ana seçici sözlüğü
 # ============================================================================
 
 SELECTORS: Dict[str, Dict[str, Any]] = {
@@ -208,16 +205,7 @@ SELECTORS: Dict[str, Dict[str, Any]] = {
 
 
 def get_selectors(platform: str, category: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get selectors for a specific platform and optionally a category.
-    
-    Args:
-        platform: Platform name ('emlakjet' or 'hepsiemlak')
-        category: Optional category name ('konut', 'arsa', etc.)
-    
-    Returns:
-        Dictionary of selectors
-    """
+    """Platform ve kategori için seçicileri getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")
     
@@ -229,7 +217,7 @@ def get_selectors(platform: str, category: Optional[str] = None) -> Dict[str, An
     if category not in platform_selectors:
         raise ValueError(f"Unknown category '{category}' for platform '{platform}'")
     
-    # Merge common selectors with category-specific ones
+    # Ortak seçicileri kategori seçicileriyle birleştir
     result = {**platform_selectors["common"]}
     result.update(platform_selectors[category])
     
@@ -237,7 +225,7 @@ def get_selectors(platform: str, category: Optional[str] = None) -> Dict[str, An
 
 
 def get_common_selectors(platform: str) -> Dict[str, Any]:
-    """Get common selectors for a platform"""
+    """Platform ortak seçicilerini getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")
     
@@ -245,7 +233,7 @@ def get_common_selectors(platform: str) -> Dict[str, Any]:
 
 
 def get_category_selectors(platform: str, category: str) -> Dict[str, Any]:
-    """Get category-specific selectors only"""
+    """Kategori seçicilerini getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")
     

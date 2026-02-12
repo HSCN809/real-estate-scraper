@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Data validation utilities for scraped listings
-"""
+"""Kazınan ilanlar için veri doğrulama araçları"""
 
 import re
 from typing import Dict, Any, List, Optional, Tuple
@@ -11,11 +9,9 @@ logger = get_logger(__name__)
 
 
 class DataValidator:
-    """
-    Validates and normalizes scraped listing data.
-    """
+    """Kazınan ilan verilerini doğrular ve normalleştirir."""
     
-    # Required fields for each category
+    # Her kategori için zorunlu alanlar
     REQUIRED_FIELDS = {
         "default": ["baslik", "fiyat", "lokasyon"],
         "konut": ["baslik", "fiyat", "lokasyon"],
@@ -24,12 +20,7 @@ class DataValidator:
     }
     
     def __init__(self, category: str = "default"):
-        """
-        Initialize validator.
-        
-        Args:
-            category: Category name for field requirements
-        """
+        """Doğrulayıcıyı kategori bazlı alan gereksinimleriyle başlatır."""
         self.category = category
         self.required_fields = self.REQUIRED_FIELDS.get(
             category, 
@@ -37,18 +28,10 @@ class DataValidator:
         )
     
     def validate_listing(self, data: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """
-        Validate a single listing.
-        
-        Args:
-            data: Listing data dictionary
-            
-        Returns:
-            Tuple of (is_valid, list of error messages)
-        """
+        """Tek bir ilanı doğrular, geçerlilik durumu ve hata listesi döndürür."""
         errors = []
         
-        # Check required fields
+        # Zorunlu alanları kontrol et
         for field in self.required_fields:
             if field not in data or not data[field]:
                 errors.append(f"Missing required field: {field}")
@@ -59,15 +42,7 @@ class DataValidator:
         self, 
         listings: List[Dict[str, Any]]
     ) -> Tuple[List[Dict], List[Dict]]:
-        """
-        Validate a list of listings.
-        
-        Args:
-            listings: List of listing dictionaries
-            
-        Returns:
-            Tuple of (valid_listings, invalid_listings)
-        """
+        """İlan listesini doğrular, geçerli ve geçersiz ilanları ayrı ayrı döndürür."""
         valid = []
         invalid = []
         
@@ -85,59 +60,48 @@ class DataValidator:
         return valid, invalid
     
     def is_valid(self, data: Dict[str, Any]) -> bool:
-        """Quick check if listing is valid"""
+        """İlanın geçerli olup olmadığını hızlıca kontrol eder"""
         is_valid, _ = self.validate_listing(data)
         return is_valid
 
 
 class DataNormalizer:
-    """
-    Normalizes scraped data values.
-    """
+    """Kazınan veri değerlerini normalleştirir."""
     
     @staticmethod
     def normalize_price(price_str: str) -> Optional[float]:
-        """
-        Normalize price string to float.
-        
-        Args:
-            price_str: Price string (e.g., "1.500.000 TL", "2,5 milyon")
-            
-        Returns:
-            Normalized price as float or None
-        """
+        """Fiyat metnini float değere normalleştirir."""
         if not price_str:
             return None
         
         try:
-            # Remove currency symbols and whitespace
+            # Para birimi sembollerini ve boşlukları kaldır
             cleaned = price_str.strip()
             cleaned = re.sub(r'[TL₺$€]', '', cleaned)
             cleaned = cleaned.strip()
             
-            # Handle "milyon" (million)
+            # "milyon" ifadesini işle
             if 'milyon' in cleaned.lower():
                 cleaned = re.sub(r'milyon', '', cleaned, flags=re.IGNORECASE)
                 cleaned = cleaned.replace(',', '.')
                 cleaned = re.sub(r'[^\d.]', '', cleaned)
                 return float(cleaned) * 1_000_000
             
-            # Handle "bin" (thousand)
+            # "bin" ifadesini işle
             if 'bin' in cleaned.lower():
                 cleaned = re.sub(r'bin', '', cleaned, flags=re.IGNORECASE)
                 cleaned = cleaned.replace(',', '.')
                 cleaned = re.sub(r'[^\d.]', '', cleaned)
                 return float(cleaned) * 1_000
             
-            # Standard format: 1.500.000 or 1,500,000
-            # Remove thousand separators (dots or commas followed by 3 digits)
+            # Standart format: 1.500.000 veya 1,500,000 - binlik ayırıcıları kaldır
             cleaned = re.sub(r'\.(?=\d{3})', '', cleaned)
             cleaned = re.sub(r',(?=\d{3})', '', cleaned)
             
-            # Replace remaining comma with dot for decimal
+            # Kalan virgülü ondalık noktasıyla değiştir
             cleaned = cleaned.replace(',', '.')
             
-            # Extract only numbers and decimal point
+            # Sadece rakamları ve ondalık noktasını çıkar
             cleaned = re.sub(r'[^\d.]', '', cleaned)
             
             if cleaned:
@@ -150,29 +114,21 @@ class DataNormalizer:
     
     @staticmethod
     def normalize_area(area_str: str) -> Optional[float]:
-        """
-        Normalize area/metrekare string to float.
-        
-        Args:
-            area_str: Area string (e.g., "150 m²", "2.821 m2")
-            
-        Returns:
-            Normalized area as float or None
-        """
+        """Alan/metrekare metnini float değere normalleştirir."""
         if not area_str:
             return None
         
         try:
-            # Remove unit indicators
+            # Birim göstergelerini kaldır
             cleaned = area_str.strip()
             cleaned = re.sub(r'm[²2]', '', cleaned, flags=re.IGNORECASE)
             cleaned = cleaned.strip()
             
-            # Remove thousand separators
+            # Binlik ayırıcıları kaldır
             cleaned = re.sub(r'\.(?=\d{3})', '', cleaned)
             cleaned = cleaned.replace(',', '.')
             
-            # Extract number
+            # Sayıyı çıkar
             match = re.search(r'[\d.]+', cleaned)
             if match:
                 return float(match.group())
@@ -184,24 +140,16 @@ class DataNormalizer:
     
     @staticmethod
     def normalize_room_count(room_str: str) -> Optional[str]:
-        """
-        Normalize room count string.
-        
-        Args:
-            room_str: Room string (e.g., "3+1", "2 + 1", "Stüdyo")
-            
-        Returns:
-            Normalized room string or None
-        """
+        """Oda sayısı metnini normalleştirir."""
         if not room_str:
             return None
         
         cleaned = room_str.strip()
         
-        # Standardize format: remove spaces around +
+        # Formatı standartlaştır: + etrafındaki boşlukları kaldır
         cleaned = re.sub(r'\s*\+\s*', '+', cleaned)
         
-        # Handle special cases
+        # Özel durumları işle
         if 'stüdyo' in cleaned.lower() or 'studio' in cleaned.lower():
             return "Studio"
         
@@ -209,15 +157,7 @@ class DataNormalizer:
     
     @staticmethod
     def normalize_location(location_str: str) -> Dict[str, str]:
-        """
-        Parse location string into components.
-        
-        Args:
-            location_str: Location string (e.g., "İstanbul / Kadıköy / Moda")
-            
-        Returns:
-            Dictionary with il, ilce, mahalle keys
-        """
+        """Lokasyon metnini il, ilce, mahalle bileşenlerine ayrıştırır."""
         result = {
             'il': '',
             'ilce': '',
@@ -227,7 +167,7 @@ class DataNormalizer:
         if not location_str:
             return result
         
-        # Split by common separators
+        # Yaygın ayırıcılara göre böl
         parts = re.split(r'[/,|]', location_str)
         parts = [p.strip() for p in parts if p.strip()]
         
@@ -242,34 +182,26 @@ class DataNormalizer:
     
     @staticmethod
     def clean_text(text: str) -> str:
-        """
-        Clean text by removing extra whitespace.
-        
-        Args:
-            text: Input text
-            
-        Returns:
-            Cleaned text
-        """
+        """Fazla boşlukları kaldırarak metni temizler."""
         if not text:
             return ""
         
-        # Replace multiple whitespace with single space
+        # Birden fazla boşluğu tek boşlukla değiştir
         cleaned = re.sub(r'\s+', ' ', text)
         return cleaned.strip()
 
 
 def validate_listing(data: Dict[str, Any], category: str = "default") -> bool:
-    """Convenience function to validate a listing"""
+    """İlan doğrulamak için kısayol fonksiyonu"""
     validator = DataValidator(category)
     return validator.is_valid(data)
 
 
 def normalize_price(price_str: str) -> Optional[float]:
-    """Convenience function to normalize price"""
+    """Fiyat normalleştirmek için kısayol fonksiyonu"""
     return DataNormalizer.normalize_price(price_str)
 
 
 def normalize_area(area_str: str) -> Optional[float]:
-    """Convenience function to normalize area"""
+    """Alan normalleştirmek için kısayol fonksiyonu"""
     return DataNormalizer.normalize_area(area_str)

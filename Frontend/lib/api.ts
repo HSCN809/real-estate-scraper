@@ -1,4 +1,4 @@
-// API client for Real Estate Scraper Backend
+// Emlak Scraper Backend API istemcisi
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -104,7 +104,7 @@ export async function getSubtypes(listingType: string, category: string, platfor
     return response.json();
 }
 
-// DB-based listings endpoint
+// Veritabanı tabanlı ilan endpoint'i
 export interface ListingsResponse {
     total: number;
     page: number;
@@ -140,7 +140,7 @@ export async function getListings(params: {
     return response.json();
 }
 
-// Excel export function
+// Excel dışa aktarma fonksiyonu
 export async function exportToExcel(params: {
     platform?: string;
     kategori?: string;
@@ -168,7 +168,7 @@ export async function exportToExcel(params: {
     return response.blob();
 }
 
-// Cities and districts from DB
+// Veritabanından şehirler ve ilçeler
 export async function getCities(): Promise<{ cities: string[] }> {
     const response = await fetch(`${API_BASE_URL}/cities`, {
         credentials: 'include',
@@ -189,7 +189,7 @@ export async function getDistricts(city: string): Promise<{ city: string; distri
     return response.json();
 }
 
-// ==================== Districts GeoJSON API ====================
+// ==================== İlçe GeoJSON API ====================
 
 export interface DistrictIndexEntry {
     file: string;
@@ -221,7 +221,7 @@ export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.
     return response.json();
 }
 
-// ==================== Task Status API (Celery Integration) ====================
+// ==================== Görev Durumu API (Celery Entegrasyonu) ====================
 
 export interface TaskStatus {
     task_id?: string;

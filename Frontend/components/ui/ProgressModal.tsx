@@ -28,7 +28,7 @@ export function ProgressPanel() {
 
     return createPortal(
         <AnimatePresence>
-            {/* No backdrop — user can freely interact with the page */}
+            {/* Kullanıcı sayfayla etkileşime devam edebilir */}
             <motion.div
                 key="progress-panel"
                 initial={{ opacity: 0, x: 100, y: 0 }}
@@ -39,7 +39,7 @@ export function ProgressPanel() {
                 className="fixed bottom-6 right-6 z-50 w-96"
             >
                 <div className="bg-slate-900/95 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl">
-                    {/* Header - Draggable */}
+                    {/* Başlık - Sürüklenebilir */}
                     <div className="p-4 border-b border-slate-800 cursor-move select-none">
                         <div className="flex items-center gap-3">
                             {isFinished ? (
@@ -70,14 +70,14 @@ export function ProgressPanel() {
                                 </p>
                             </div>
 
-                            {/* Task ID badge */}
+                            {/* Görev ID rozeti */}
                             {taskId && (
                                 <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">
                                     {taskId.slice(0, 8)}
                                 </span>
                             )}
 
-                            {/* Minimize button */}
+                            {/* Küçült butonu */}
                             {!isFinished && (
                                 <button
                                     onClick={hidePanel}
@@ -90,9 +90,9 @@ export function ProgressPanel() {
                         </div>
                     </div>
 
-                    {/* Content */}
+                    {/* İçerik */}
                     <div className="p-4 space-y-3">
-                        {/* Progress Bar */}
+                        {/* İlerleme Çubuğu */}
                         <div className="space-y-1.5">
                             <div className="flex justify-between text-xs font-medium text-slate-400">
                                 <span>Ilerleme</span>
@@ -115,7 +115,7 @@ export function ProgressPanel() {
                             </div>
                         </div>
 
-                        {/* Stats */}
+                        {/* İstatistikler */}
                         {status?.current !== undefined && status?.total !== undefined && status.total > 0 && (
                             <div className="flex items-center justify-between text-xs text-slate-500">
                                 <span>{status.current} / {status.total}</span>
@@ -127,14 +127,14 @@ export function ProgressPanel() {
                             </div>
                         )}
 
-                        {/* Details */}
+                        {/* Detaylar */}
                         {status?.details && (
                             <div className="p-2 bg-slate-800/50 rounded-lg text-xs text-slate-400 font-mono truncate">
                                 {status.details}
                             </div>
                         )}
 
-                        {/* Action Buttons */}
+                        {/* Eylem Butonları */}
                         <div className="flex gap-2">
                             {!isFinished ? (
                                 <motion.button
@@ -167,7 +167,7 @@ export function ProgressPanel() {
                                 </motion.button>
                             )}
 
-                            {/* Minimize button when running */}
+                            {/* Çalışırken küçült butonu */}
                             {!isFinished && (
                                 <button
                                     onClick={hidePanel}
@@ -179,7 +179,7 @@ export function ProgressPanel() {
                             )}
                         </div>
 
-                        {/* Background task notice */}
+                        {/* Arka plan bilgilendirmesi */}
                         {!isFinished && (
                             <p className="text-[10px] text-center text-slate-500">
                                 Diger sayfalara gecebilirsiniz, tarama arka planda devam edecek

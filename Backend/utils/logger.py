@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Enhanced logging utilities for the scraper with Celery task support
-"""
+"""Celery görev destekli gelişmiş loglama araçları"""
 
 import os
 import sys
@@ -11,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 from logging.handlers import RotatingFileHandler
 
-# Import from core module
+# Core modülünden içe aktarım
 import sys as _sys
 import os as _os
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
@@ -19,7 +17,7 @@ from core.config import get_config
 
 
 class StructuredFormatter(logging.Formatter):
-    """JSON formatter for structured logging"""
+    """Yapılandırılmış loglama için JSON biçimlendirici"""
 
     def format(self, record):
         log_data = {
@@ -32,15 +30,15 @@ class StructuredFormatter(logging.Formatter):
             "line": record.lineno,
         }
 
-        # Add task_id if present
+        # Varsa task_id ekle
         if hasattr(record, 'task_id'):
             log_data["task_id"] = record.task_id
 
-        # Add extra fields
+        # Ek alanları ekle
         if hasattr(record, 'extra_data'):
             log_data.update(record.extra_data)
 
-        # Add exception info if present
+        # Varsa hata bilgisini ekle
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
@@ -48,14 +46,14 @@ class StructuredFormatter(logging.Formatter):
 
 
 class ColoredFormatter(logging.Formatter):
-    """Colored console formatter"""
+    """Renkli konsol biçimlendirici"""
 
     COLORS = {
-        'DEBUG': '\033[36m',     # Cyan
-        'INFO': '\033[32m',      # Green
-        'WARNING': '\033[33m',   # Yellow
-        'ERROR': '\033[31m',     # Red
-        'CRITICAL': '\033[35m',  # Magenta
+        'DEBUG': '\033[36m',     # Camgöbeği
+        'INFO': '\033[32m',      # Yeşil
+        'WARNING': '\033[33m',   # Sarı
+        'ERROR': '\033[31m',     # Kırmızı
+        'CRITICAL': '\033[35m',  # Eflatun
     }
     RESET = '\033[0m'
 
@@ -63,7 +61,7 @@ class ColoredFormatter(logging.Formatter):
         color = self.COLORS.get(record.levelname, self.RESET)
         record.levelname = f"{color}{record.levelname}{self.RESET}"
 
-        # Add task_id prefix if present
+        # Varsa task_id öneki ekle
         if hasattr(record, 'task_id') and record.task_id:
             record.msg = f"[{record.task_id[:8]}] {record.msg}"
 
@@ -71,14 +69,14 @@ class ColoredFormatter(logging.Formatter):
 
 
 class TaskContextFilter(logging.Filter):
-    """Filter that adds task context to log records"""
+    """Log kayıtlarına görev bağlamı ekleyen filtre"""
 
     def __init__(self, task_id: Optional[str] = None):
         super().__init__()
         self.task_id = task_id
 
     def filter(self, record):
-        # Try to get task_id from Celery current_task
+        # Celery current_task'tan task_id almayı dene
         if not hasattr(record, 'task_id'):
             try:
                 from celery import current_task
@@ -99,38 +97,25 @@ def setup_logger(
     structured: bool = False,
     task_id: Optional[str] = None
 ) -> logging.Logger:
-    """
-    Set up a logger with console and optional file handlers.
-
-    Args:
-        name: Logger name
-        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_to_file: Whether to log to file
-        log_file: Log file path
-        structured: Use JSON structured logging for files
-        task_id: Optional task ID for context
-
-    Returns:
-        Configured logger instance
-    """
+    """Konsol ve isteğe bağlı dosya handler'ları ile logger yapılandırır ve döndürür."""
     config = get_config()
 
-    # Use config values as defaults
+    # Varsayılan değerler olarak config değerlerini kullan
     level = level or config.log_level
     log_to_file = log_to_file if log_to_file is not None else config.log_to_file
     log_file = log_file or config.log_file
 
-    # Create logger
+    # Logger oluştur
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-    # Clear existing handlers
+    # Mevcut handler'ları temizle
     logger.handlers.clear()
 
-    # Add task context filter
+    # Görev bağlamı filtresini ekle
     logger.addFilter(TaskContextFilter(task_id))
 
-    # Console handler with colored format
+    # Renkli biçimli konsol handler'ı
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
     console_format = ColoredFormatter(
@@ -140,14 +125,14 @@ def setup_logger(
     console_handler.setFormatter(console_format)
     logger.addHandler(console_handler)
 
-    # File handler (optional)
+    # Dosya handler'ı (isteğe bağlı)
     if log_to_file:
-        # Create logs directory if needed
+        # Gerekirse log dizinini oluştur
         log_dir = os.path.dirname(log_file)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
-        # Use rotating file handler (max 10MB, keep 5 backups)
+        # Dönen dosya handler'ı kullan (maks 10MB, 5 yedek)
         file_handler = RotatingFileHandler(
             log_file,
             maxBytes=10*1024*1024,  # 10MB
@@ -166,7 +151,7 @@ def setup_logger(
 
         logger.addHandler(file_handler)
 
-    # Structured JSON log file (separate from regular logs)
+    # Yapılandırılmış JSON log dosyası (normal loglardan ayrı)
     if log_to_file:
         json_log_path = log_file.replace('.log', '_structured.jsonl')
         json_handler = RotatingFileHandler(
@@ -183,23 +168,14 @@ def setup_logger(
 
 
 def get_logger(name: str = "scraper", task_id: Optional[str] = None) -> logging.Logger:
-    """
-    Get an existing logger or create a new one.
-
-    Args:
-        name: Logger name
-        task_id: Optional task ID for context
-
-    Returns:
-        Logger instance
-    """
+    """Mevcut bir logger döndürür veya yoksa yeni bir tane oluşturur."""
     logger = logging.getLogger(name)
 
-    # If logger has no handlers, set it up
+    # Logger'da handler yoksa yapılandır
     if not logger.handlers:
         return setup_logger(name, task_id=task_id)
 
-    # Add task context filter if not present
+    # Görev bağlamı filtresi yoksa ekle
     has_task_filter = any(isinstance(f, TaskContextFilter) for f in logger.filters)
     if not has_task_filter:
         logger.addFilter(TaskContextFilter(task_id))
@@ -208,17 +184,14 @@ def get_logger(name: str = "scraper", task_id: Optional[str] = None) -> logging.
 
 
 class ScraperLogger:
-    """
-    Custom logger class with emoji-enhanced output for scraper operations.
-    Supports task ID tracking for Celery tasks.
-    """
+    """Scraper işlemleri için Celery görev takibi destekli özel logger sınıfı."""
 
     def __init__(self, name: str = "scraper", task_id: Optional[str] = None):
         self.logger = get_logger(name, task_id)
         self.task_id = task_id
 
     def _log_with_context(self, level: str, message: str, **extra):
-        """Log with extra context data"""
+        """Ek bağlam verisiyle logla"""
         record = self.logger.makeRecord(
             self.logger.name,
             getattr(logging, level.upper()),
@@ -235,71 +208,63 @@ class ScraperLogger:
         self.logger.handle(record)
 
     def info(self, message: str, **extra):
-        """Log info message"""
+        """Bilgi mesajı logla"""
         self.logger.info(message, extra=extra if extra else None)
 
     def debug(self, message: str, **extra):
-        """Log debug message"""
+        """Debug mesajı logla"""
         self.logger.debug(message, extra=extra if extra else None)
 
     def warning(self, message: str, **extra):
-        """Log warning message"""
+        """Uyarı mesajı logla"""
         self.logger.warning(f"{message}", extra=extra if extra else None)
 
     def error(self, message: str, exc_info: bool = False, **extra):
-        """Log error message"""
+        """Hata mesajı logla"""
         self.logger.error(f"{message}", exc_info=exc_info, extra=extra if extra else None)
 
     def success(self, message: str, **extra):
-        """Log success message (info level with checkmark)"""
+        """Başarı mesajı logla (info seviyesinde)"""
         self.logger.info(f"{message}", extra=extra if extra else None)
 
     def start_operation(self, operation: str, **extra):
-        """Log start of an operation"""
+        """Bir işlemin başlangıcını logla"""
         self.logger.info(f"{operation} baslatiliyor...", extra=extra if extra else None)
 
     def complete_operation(self, operation: str, **extra):
-        """Log completion of an operation"""
+        """Bir işlemin tamamlanmasını logla"""
         self.logger.info(f"{operation} tamamlandi!", extra=extra if extra else None)
 
     def scrape_page(self, page: int, total: int, count: int, **extra):
-        """Log page scraping progress"""
+        """Sayfa kazıma ilerlemesini logla"""
         self.logger.info(
             f"Sayfa {page}/{total}: {count} ilan bulundu",
             extra={"page": page, "total": total, "count": count, **(extra or {})}
         )
 
     def navigate(self, url: str, **extra):
-        """Log navigation"""
+        """Sayfa yönlendirmesini logla"""
         self.logger.info(f"Navigating to: {url}", extra={"url": url, **(extra or {})})
 
     def save_data(self, filename: str, count: int, **extra):
-        """Log data save"""
+        """Veri kaydetmeyi logla"""
         self.logger.info(
             f"{count} kayit {filename} dosyasina kaydedildi",
             extra={"filename": filename, "count": count, **(extra or {})}
         )
 
     def task_progress(self, progress: int, message: str, **extra):
-        """Log task progress update"""
+        """Görev ilerleme güncellemesini logla"""
         self.logger.info(
             f"[%{progress}] {message}",
             extra={"progress": progress, **(extra or {})}
         )
 
 
-# Create default logger instance
+# Varsayılan logger örneğini oluştur
 default_logger = ScraperLogger()
 
 
 def get_task_logger(task_id: str) -> ScraperLogger:
-    """
-    Get a logger instance for a specific Celery task.
-
-    Args:
-        task_id: Celery task ID
-
-    Returns:
-        ScraperLogger configured for the task
-    """
+    """Belirli bir Celery görevi için yapılandırılmış logger örneği döndürür."""
     return ScraperLogger(f"celery.task.{task_id[:8]}", task_id)

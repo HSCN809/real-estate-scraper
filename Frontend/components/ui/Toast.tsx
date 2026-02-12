@@ -42,7 +42,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return (
         <ToastContext.Provider value={{ success, error }}>
             {children}
-            {/* Toast Container */}
+            {/* Bildirim Konteyneri */}
             <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
                 <AnimatePresence>
                     {toasts.map((toast) => (
@@ -65,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                                     }
                                 `}
                             >
-                                {/* Icon */}
+                                {/* İkon */}
                                 <div className={`
                                     flex-shrink-0 p-1.5 rounded-lg
                                     ${toast.type === 'success'
@@ -79,7 +79,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                                     }
                                 </div>
 
-                                {/* Message */}
+                                {/* Mesaj */}
                                 <p className={`
                                     text-sm font-medium flex-1
                                     ${toast.type === 'success' ? 'text-emerald-200' : 'text-red-200'}
@@ -87,7 +87,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                                     {toast.message}
                                 </p>
 
-                                {/* Close */}
+                                {/* Kapat */}
                                 <button
                                     onClick={() => removeToast(toast.id)}
                                     className="flex-shrink-0 text-gray-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
@@ -96,7 +96,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                                 </button>
                             </div>
 
-                            {/* Progress bar */}
+                            {/* İlerleme çubuğu */}
                             <motion.div
                                 initial={{ scaleX: 1 }}
                                 animate={{ scaleX: 0 }}
@@ -117,7 +117,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 export function useToast(): ToastContextType {
     const context = useContext(ToastContext);
     if (context === undefined) {
-        throw new Error('useToast must be used within a ToastProvider');
+        throw new Error('useToast ToastProvider içinde kullanılmalıdır');
     }
     return context;
 }

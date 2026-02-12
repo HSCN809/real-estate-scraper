@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Konut (Housing) parser for HepsiEmlak
-"""
+"""HepsiEmlak Konut parser'ı"""
 
 from typing import Dict, Any
 from selenium.webdriver.common.by import By
@@ -10,13 +8,13 @@ from .base_parser import BaseHepsiemlakParser
 
 
 class KonutParser(BaseHepsiemlakParser):
-    """Parser for Konut (housing) listings on HepsiEmlak"""
+    """HepsiEmlak konut ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("konut")
     
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
-        """Extract konut-specific data"""
+        """Konuta özel verileri çıkar"""
         data = {
             'oda_sayisi': 'Belirtilmemiş',
             'metrekare': 'Belirtilmemiş',

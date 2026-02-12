@@ -38,7 +38,7 @@ export default function LoginPage() {
 
     return (
         <div className="relative min-h-screen overflow-hidden bg-black">
-            {/* Hyperspeed Background */}
+            {/* Arka Plan Efekti */}
             <div className="absolute inset-0 z-0">
                 <Hyperspeed
                     effectOptions={{
@@ -73,15 +73,15 @@ export default function LoginPage() {
                             background: 0x000000,
                             shoulderLines: 0x131318,
                             brokenLines: 0x131318,
-                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Sky blue
-                            rightCars: [0x34d399, 0x10b981, 0x059669], // Emerald green
-                            sticks: 0x38bdf8, // Sky blue
+                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Gök mavisi
+                            rightCars: [0x34d399, 0x10b981, 0x059669], // Zümrüt yeşili
+                            sticks: 0x38bdf8, // Gök mavisi
                         }
                     }}
                 />
             </div>
 
-            {/* Login Form */}
+            {/* Giriş Formu */}
             <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -90,7 +90,7 @@ export default function LoginPage() {
                     className="w-full max-w-md"
                 >
                     <div className="backdrop-blur-xl bg-black/40 rounded-2xl p-8 border border-white/10 shadow-2xl">
-                        {/* Header */}
+                        {/* Başlık */}
                         <div className="text-center mb-8">
                             <motion.div
                                 initial={{ scale: 0 }}
@@ -160,7 +160,7 @@ export default function LoginPage() {
                             </Button>
                         </form>
 
-                        {/* Register Link */}
+                        {/* Kayıt Linki */}
                         <div className="mt-6 text-center">
                             <p className="text-gray-400">
                                 Hesabınız yok mu?{' '}

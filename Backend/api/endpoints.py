@@ -17,17 +17,17 @@ import os
 import io
 import redis
 
-# Celery imports
+# Celery import'ları
 from celery.result import AsyncResult
 from tasks.scraping_tasks import scrape_hepsiemlak_task, scrape_emlakjet_task
 from celery_app import celery_app
 
-# Redis client for task status
+# Görev durumu için Redis istemcisi
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 redis_client = None
 
 def get_redis_client():
-    """Get or create Redis client"""
+    """Redis istemcisini al veya oluştur"""
     global redis_client
     if redis_client is None:
         try:
@@ -38,22 +38,22 @@ def get_redis_client():
             return None
     return redis_client
 
-# Districts data directory
+# İlçe verileri dizini
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
 
-# In-memory cache for district GeoJSON data
+# İlçe GeoJSON verileri için bellek içi önbellek
 _districts_cache: Dict[str, Any] = {}
 _districts_index: Optional[Dict[str, Any]] = None
 
-# Import scrapers (will need refactoring to import cleanly)
-# We will do dynamic imports or ensure the refactor makes them importable
+# Scraper import'ları (temiz import için refactor gerekebilir)
+# Dinamik import veya refactor sonrası doğrudan import yapılacak
 # from scrapers.emlakjet.main import EmlakJetScraper
 # from scrapers.hepsiemlak.main import HepsiemlakScraper
 
 router = APIRouter()
 logger = logging.getLogger("api")
 
-# Category name mappings for display
+# Görüntüleme için kategori adı eşlemeleri
 CATEGORY_NAMES = {
     "konut": "Konut",
     "arsa": "Arsa",
@@ -68,7 +68,7 @@ CATEGORY_NAMES = {
 
 @router.get("/config/categories")
 async def get_categories():
-    """Get all platform categories from config"""
+    """Tüm platform kategorilerini getir"""
     emlakjet = get_emlakjet_config()
     hepsiemlak = get_hepsiemlak_config()
     
@@ -91,11 +91,7 @@ async def get_categories():
 
 @router.get("/config/subtypes")
 async def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
-    """
-    Belirli bir kategori için alt tipleri JSON dosyasından oku.
-    JSON dosyası yoksa boş liste döner.
-    Örnek: /config/subtypes?listing_type=kiralik&category=arsa&platform=hepsiemlak
-    """
+    """Belirli kategori için alt tipleri JSON'dan oku"""
     if platform == "emlakjet":
         from scrapers.emlakjet.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
     else:
@@ -120,7 +116,7 @@ def run_emlakjet_task(request: ScrapeRequest):
         driver = manager.start()
         config = get_emlakjet_config()
 
-        # Reset and start status
+        # Durumu sıfırla ve başlat
         task_status.reset()
         task_status.set_running(True)
         task_status.update("EmlakJet scraper başlatılıyor...", progress=0)
@@ -128,7 +124,7 @@ def run_emlakjet_task(request: ScrapeRequest):
         def progress_callback(message, current=0, total=0, progress=0):
             task_status.update(message=message, current=current, total=total, progress=progress)
 
-        # Construct base URL based on inputs
+        # Girdilere göre temel URL oluştur
         # subtype_path varsa onu kullan, yoksa ana kategori
         if request.subtype_path:
             base_url = config.base_url + request.subtype_path
@@ -178,7 +174,7 @@ def run_hepsiemlak_task(request: ScrapeRequest):
         driver = manager.start()
         db = get_db_session()
 
-        # Reset trackers
+        # Takipçileri sıfırla
         task_status.reset()
         failed_pages_tracker.reset()
 
@@ -260,8 +256,8 @@ def run_hepsiemlak_task(request: ScrapeRequest):
 
 @router.post("/scrape/emlakjet", response_model=ScrapeResponse)
 async def scrape_emlakjet(request: ScrapeRequest):
-    """Start EmlakJet scraping task via Celery"""
-    # Submit task to Celery
+    """Celery ile EmlakJet tarama görevi başlat"""
+    # Görevi Celery'ye gönder
     task = scrape_emlakjet_task.apply_async(
         kwargs={
             "listing_type": request.listing_type,
@@ -274,7 +270,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
         queue="scraping"
     )
 
-    # Initialize task status in Redis
+    # Redis'te görev durumunu başlat
     r = get_redis_client()
     if r:
         initial_status = {
@@ -291,7 +287,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
         }
         r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
 
-    # Also update in-memory status for backward compatibility
+    # Geriye dönük uyumluluk için bellek içi durumu da güncelle
     task_status.reset()
     task_status.set_running(True)
     task_status.update("EmlakJet taraması başlatılıyor...", progress=0)
@@ -306,12 +302,12 @@ async def scrape_emlakjet(request: ScrapeRequest):
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
 async def scrape_hepsiemlak(request: ScrapeRequest):
-    """Start HepsiEmlak scraping task via Celery"""
-    # Validate cities
+    """Celery ile HepsiEmlak tarama görevi başlat"""
+    # Şehirleri doğrula
     if not request.cities or len(request.cities) == 0:
         raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
 
-    # Validate districts if provided
+    # İlçeler belirtildiyse doğrula
     if request.districts:
         for city, districts in request.districts.items():
             if city not in request.cities:
@@ -320,7 +316,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
                     detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok"
                 )
 
-    # Submit task to Celery
+    # Görevi Celery'ye gönder
     task = scrape_hepsiemlak_task.apply_async(
         kwargs={
             "listing_type": request.listing_type,
@@ -333,7 +329,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
         queue="scraping"
     )
 
-    # Initialize task status in Redis
+    # Redis'te görev durumunu başlat
     r = get_redis_client()
     if r:
         initial_status = {
@@ -350,7 +346,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
         }
         r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
 
-    # Also update in-memory status for backward compatibility
+    # Geriye dönük uyumluluk için bellek içi durumu da güncelle
     task_status.reset()
     task_status.set_running(True)
     task_status.update("HepsiEmlak taraması başlatılıyor...", progress=0)
@@ -379,7 +375,7 @@ async def stop_scraping(task_id: Optional[str] = None):
                     break
 
     if not task_id:
-        # Fallback to in-memory status
+        # Bellek içi duruma geri dön
         if task_status.is_running:
             task_status.request_stop()
             return {"status": "stopped", "message": "Durdurma isteği gönderildi."}
@@ -419,8 +415,7 @@ async def stop_scraping(task_id: Optional[str] = None):
 
 
 def _cleanup_orphan_sessions():
-    """Terminate edilen task'ın DB'deki orphan ScrapeSession'larını temizle.
-    worker_concurrency=1 olduğundan, running kalan her session orphan'dır."""
+    """Terminate edilen task'ların orphan session'larını temizle"""
     from database.connection import get_db_session
 
     db = get_db_session()
@@ -453,12 +448,12 @@ async def get_price_analytics(
     db: Session = Depends(get_db)
 ):
     """Veritabanından fiyat verilerini çek - grafikler için (filtrelenebilir)"""
-    # Platform/category/listing_type mapping for display names
+    # Görüntüleme adları için platform/kategori/ilan tipi eşlemeleri
     platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
     category_map = {"konut": "Konut", "arsa": "Arsa", "isyeri": "İşyeri", "devremulk": "Devremülk"}
     listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
 
-    # Convert display names back to db values for filtering
+    # Filtreleme için görüntüleme adlarını DB değerlerine çevir
     db_platform = None
     db_category = None
     db_listing_type = None
@@ -493,7 +488,7 @@ async def get_price_analytics(
         ilan_tipi=db_listing_type
     )
 
-    # Transform to display names
+    # Görüntüleme adlarına dönüştür
     prices = []
     for p in result["prices"]:
         prices.append({
@@ -516,7 +511,7 @@ async def get_city_analytics(
     db: Session = Depends(get_db)
 ):
     """Veritabanından belirli bir şehrin ilanlarını ve istatistiklerini döndür"""
-    # Convert display names to db values
+    # Görüntüleme adlarını DB değerlerine çevir
     db_platform = None
     db_category = None
     db_listing_type = None
@@ -557,10 +552,10 @@ async def get_listing_statistics(
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
     import statistics
 
-    # Build query
+    # Sorgu oluştur
     query = db.query(Listing.fiyat).filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
 
-    # Apply filters
+    # Filtreleri uygula
     if platform and platform != "all":
         platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
         db_platform = platform_map.get(platform, platform.lower())
@@ -576,7 +571,7 @@ async def get_listing_statistics(
         db_type = type_map.get(ilan_tipi, ilan_tipi.lower())
         query = query.filter(Listing.ilan_tipi == db_type)
 
-    # City/district filter
+    # Şehir/ilçe filtresi
     if city or district:
         location_query = db.query(Location.id)
         if city and city != "Belirtilmemiş":
@@ -587,24 +582,24 @@ async def get_listing_statistics(
         if location_ids:
             query = query.filter(Listing.location_id.in_(location_ids))
 
-    # Get prices
+    # Fiyatları al
     prices = [p[0] for p in query.all()]
 
     if not prices:
         return {"error": "Fiyat verisi bulunamadı", "stats": None}
 
-    # Sort prices for percentile calculations
+    # Yüzdelik hesaplamaları için fiyatları sırala
     sorted_prices = sorted(prices)
     n = len(sorted_prices)
 
-    # Calculate percentiles (quartiles)
+    # Yüzdelikleri (çeyreklikleri) hesapla
     def percentile(data, p):
         k = (len(data) - 1) * p / 100
         f = int(k)
         c = f + 1 if f + 1 < len(data) else f
         return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
 
-    # Descriptive statistics (like pandas describe)
+    # Tanımlayıcı istatistikler (pandas describe benzeri)
     describe_stats = {
         "count": n,
         "mean": round(statistics.mean(prices), 2),
@@ -616,29 +611,29 @@ async def get_listing_statistics(
         "max": round(max(prices), 2)
     }
 
-    # Dynamic price range distribution using quantile-based binning
+    # Yüzdelik tabanlı gruplama ile dinamik fiyat aralığı dağılımı
     num_bins = 5
     bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
 
-    # Ensure unique edges
+    # Benzersiz kenarları sağla
     unique_edges = []
     for e in bin_edges:
         if not unique_edges or e > unique_edges[-1]:
             unique_edges.append(e)
 
-    # If not enough unique edges, fall back to equal-width bins
+    # Yeterli benzersiz kenar yoksa eşit genişlikli gruplara dön
     if len(unique_edges) < 3:
         min_p, max_p = min(prices), max(prices)
         bin_width = (max_p - min_p) / num_bins
         unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
 
-    # Count items in each bin
+    # Her gruptaki öğeleri say
     price_ranges = []
     for i in range(len(unique_edges) - 1):
         low = unique_edges[i]
         high = unique_edges[i + 1]
 
-        # Format the range label
+        # Aralık etiketini biçimlendir
         def format_price(p):
             if p >= 1000000:
                 return f"{p/1000000:.1f}M"
@@ -649,8 +644,8 @@ async def get_listing_statistics(
 
         label = f"{format_price(low)} - {format_price(high)}"
 
-        # Count items in range
-        if i == len(unique_edges) - 2:  # Last bin includes upper edge
+        # Aralıktaki öğeleri say
+        if i == len(unique_edges) - 2:  # Son grup üst sınırı dahil eder
             count = sum(1 for p in prices if low <= p <= high)
         else:
             count = sum(1 for p in prices if low <= p < high)
@@ -718,10 +713,7 @@ async def clear_results(db: Session = Depends(get_db)):
 
 @router.get("/results")
 async def get_results(db: Session = Depends(get_db)):
-    """
-    Veritabanından sonuçları döndür.
-    Şehir/platform/kategori bazında gruplanmış ilan özetleri.
-    """
+    """Veritabanından sonuçları döndür"""
     return crud.get_results_for_frontend(db)
 
 @router.get("/listings/preview")
@@ -751,16 +743,16 @@ async def get_listings_preview(
 
 @router.get("/status")
 async def get_status(task_id: Optional[str] = None):
-    """Get task status - supports both Redis-based Celery tasks and in-memory status"""
+    """Görev durumunu al - Redis ve bellek içi durum desteği"""
     r = get_redis_client()
 
-    # If task_id provided, get that specific task
+    # task_id belirtildiyse o görevi al
     if task_id and r:
         key = f"scrape_task:{task_id}"
         data = r.get(key)
         if data:
             status_data = json.loads(data)
-            # Map status to is_running for frontend compatibility
+            # Frontend uyumluluğu için status'ü is_running'e eşle
             status_data["is_running"] = status_data.get("status") in ["pending", "running"]
             return status_data
         else:
@@ -777,7 +769,7 @@ async def get_status(task_id: Optional[str] = None):
                 "details": ""
             }
 
-    # task_id yoksa: Try to find active task from Redis
+    # task_id yoksa: Redis'ten aktif görevi bul
     if r:
         for key in r.scan_iter("scrape_task:*"):
             data = r.get(key)
@@ -787,16 +779,16 @@ async def get_status(task_id: Optional[str] = None):
                     status_data["is_running"] = True
                     return status_data
 
-    # Fallback to in-memory status
+    # Bellek içi duruma geri dön
     return task_status.to_dict()
 
 
 @router.get("/task/{task_id}")
 async def get_task_status(task_id: str):
-    """Get detailed status for a specific Celery task"""
+    """Belirli bir Celery görevi için detaylı durum bilgisi al"""
     r = get_redis_client()
 
-    # Get from Redis
+    # Redis'ten al
     if r:
         key = f"scrape_task:{task_id}"
         data = r.get(key)
@@ -805,7 +797,7 @@ async def get_task_status(task_id: str):
             status_data["is_running"] = status_data.get("status") in ["pending", "running"]
             return status_data
 
-    # Get from Celery directly
+    # Doğrudan Celery'den al
     result = AsyncResult(task_id, app=celery_app)
 
     return {
@@ -819,7 +811,7 @@ async def get_task_status(task_id: str):
 
 @router.get("/tasks/active")
 async def get_active_tasks():
-    """Get all active/pending tasks"""
+    """Tüm aktif/bekleyen görevleri al"""
     r = get_redis_client()
     active_tasks = []
 
@@ -941,7 +933,7 @@ async def export_to_excel(
     import pandas as pd
     from datetime import datetime as dt
 
-    # Get listings (max 10000 for export)
+    # İlanları al (dışa aktarım için maks 10000)
     listings, total = crud.get_listings(
         db,
         platform=platform,
@@ -956,7 +948,7 @@ async def export_to_excel(
     if not listings:
         raise HTTPException(status_code=404, detail="Dışa aktarılacak veri bulunamadı")
 
-    # Convert to dataframe
+    # DataFrame'e dönüştür
     data = []
     for l in listings:
         row = {
@@ -1013,32 +1005,32 @@ async def delete_listing_group(
 
     query = db.query(Listing)
 
-    # Platform filter (convert display name to db name)
+    # Platform filtresi (görüntülenen adı veritabanı adına dönüştür)
     if platform:
         platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
         db_platform = platform_map.get(platform, platform.lower())
         query = query.filter(Listing.platform == db_platform)
 
-    # Category filter
+    # Kategori filtresi
     if kategori:
         category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri",
                        "Devremülk": "devremulk", "Turistik İşletme": "turistik_isletme"}
         db_kategori = category_map.get(kategori, kategori.lower())
         query = query.filter(Listing.kategori == db_kategori)
 
-    # Listing type filter
+    # İlan tipi filtresi
     if ilan_tipi:
         type_map = {"Satılık": "satilik", "Kiralık": "kiralik"}
         db_type = type_map.get(ilan_tipi, ilan_tipi.lower())
         query = query.filter(Listing.ilan_tipi == db_type)
 
-    # Alt kategori filter
+    # Alt kategori filtresi
     if alt_kategori:
-        # Convert "Cafe Bar" to "cafe_bar"
+        # "Cafe Bar" -> "cafe_bar" dönüşümü
         db_alt = alt_kategori.lower().replace(' ', '_')
         query = query.filter(Listing.alt_kategori == db_alt)
 
-    # City/district filter - get location IDs first
+    # Şehir/ilçe filtresi - önce lokasyon ID'lerini al
     if city or district:
         location_query = db.query(Location.id)
         if city and city != "Belirtilmemiş":
@@ -1051,7 +1043,7 @@ async def delete_listing_group(
         else:
             raise HTTPException(status_code=404, detail="Silinecek ilan bulunamadı")
 
-    # Get count and delete
+    # Sayıyı al ve sil
     count = query.count()
     if count == 0:
         raise HTTPException(status_code=404, detail="Silinecek ilan bulunamadı")
@@ -1075,10 +1067,10 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": f"İlan {listing_id} silindi"}
 
 
-# ==================== DISTRICTS GeoJSON ENDPOINTS ====================
+# ==================== İLÇE GeoJSON ENDPOINTLER ====================
 
 def _load_districts_index() -> Dict[str, Any]:
-    """Load and cache the districts index.json"""
+    """İlçe index.json dosyasını yükle ve önbelleğe al"""
     global _districts_index
     if _districts_index is not None:
         return _districts_index
@@ -1094,12 +1086,12 @@ def _load_districts_index() -> Dict[str, Any]:
 
 
 def _load_district_geojson(province_name: str) -> Dict[str, Any]:
-    """Load and cache a province's GeoJSON data"""
-    # Check cache first
+    """İl GeoJSON verisini yükle ve önbelleğe al"""
+    # Önce önbellekte kontrol et
     if province_name in _districts_cache:
         return _districts_cache[province_name]
 
-    # Get filename from index
+    # Index'ten dosya adını al
     index = _load_districts_index()
     province_info = index.get(province_name)
 
@@ -1117,7 +1109,7 @@ def _load_district_geojson(province_name: str) -> Dict[str, Any]:
     with open(filepath, "r", encoding="utf-8") as f:
         geojson_data = json.load(f)
 
-    # Cache it
+    # Önbelleğe al
     _districts_cache[province_name] = geojson_data
 
     return geojson_data
@@ -1125,22 +1117,19 @@ def _load_district_geojson(province_name: str) -> Dict[str, Any]:
 
 @router.get("/districts/index")
 async def get_districts_index():
-    """Get the districts index with all provinces and their district counts"""
+    """Tüm illerin ilçe sayılarıyla index'ini getir"""
     return _load_districts_index()
 
 
 @router.get("/districts/{province_name}")
 async def get_district_geojson(province_name: str):
-    """
-    Get GeoJSON data for a specific province's districts.
-    Uses in-memory caching for fast subsequent requests.
-    """
+    """Belirli bir ilin ilçe GeoJSON verisini getir"""
     return _load_district_geojson(province_name)
 
 
 @router.get("/districts/info/{province_name}")
 async def get_district_info(province_name: str):
-    """Get district list and metadata for a province (without full GeoJSON geometry)"""
+    """İl için ilçe listesini ve meta verilerini getir"""
     index = _load_districts_index()
     province_info = index.get(province_name)
 
@@ -1157,7 +1146,7 @@ async def get_district_info(province_name: str):
 
 @router.post("/districts/cache/clear")
 async def clear_districts_cache():
-    """Clear the in-memory districts cache (admin endpoint)"""
+    """Bellek içi ilçe önbelleğini temizle"""
     global _districts_cache, _districts_index
     cache_size = len(_districts_cache)
     _districts_cache = {}
@@ -1167,7 +1156,7 @@ async def clear_districts_cache():
 
 @router.get("/districts/cache/status")
 async def get_cache_status():
-    """Get current cache status"""
+    """Önbellek durumunu getir"""
     return {
         "cached_provinces": list(_districts_cache.keys()),
         "cache_size": len(_districts_cache),

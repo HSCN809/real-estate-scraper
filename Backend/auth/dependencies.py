@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-FastAPI dependencies for authentication
-"""
+"""Kimlik doğrulama bağımlılıkları"""
 
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
@@ -18,17 +16,14 @@ async def get_current_user(
     request: Request,
     db: Session = Depends(get_db)
 ) -> User:
-    """
-    Dependency to get the current authenticated user from HTTP-only cookie.
-    Raises HTTPException if token is invalid or user not found.
-    """
+    """HTTP-only cookie'den mevcut kullanıcıyı al"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Geçersiz kimlik bilgileri",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Get token from cookie
+    # Cookie'den token al
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise credentials_exception
@@ -38,7 +33,7 @@ async def get_current_user(
     if payload is None:
         raise credentials_exception
 
-    # Check token type
+    # Token tipini kontrol et
     if payload.get("type") != "access":
         raise credentials_exception
 
@@ -67,7 +62,7 @@ async def get_current_user(
 async def get_current_active_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
-    """Dependency to ensure user is an admin"""
+    """Kullanıcının yönetici olduğunu doğrula"""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -80,7 +75,7 @@ async def get_optional_user(
     request: Request,
     db: Session = Depends(get_db)
 ) -> Optional[User]:
-    """Optional authentication - returns None if no valid cookie"""
+    """Opsiyonel kimlik doğrulama - geçerli cookie yoksa None döner"""
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         return None

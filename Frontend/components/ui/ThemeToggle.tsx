@@ -16,7 +16,7 @@ export function ThemeToggle() {
     if (!mounted) {
         return (
             <Button variant="ghost" size="sm" className="w-9 h-9 p-0">
-                <span className="sr-only">Toggle theme</span>
+                <span className="sr-only">Tema değiştir</span>
             </Button>
         );
     }
@@ -33,7 +33,7 @@ export function ThemeToggle() {
             ) : (
                 <Moon className="h-5 w-5 text-gray-700" />
             )}
-            <span className="sr-only">Toggle theme</span>
+            <span className="sr-only">Tema değiştir</span>
         </Button>
     );
 }

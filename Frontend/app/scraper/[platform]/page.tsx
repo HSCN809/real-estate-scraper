@@ -37,11 +37,11 @@ export default function PlatformScraperPage() {
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const { startTracking, activeTask } = useScraping();
 
-    // Dynamic categories from API
+    // API'den dinamik kategoriler
     const [categories, setCategories] = useState<Category[]>([]);
     const [categoriesLoading, setCategoriesLoading] = useState(true);
 
-    // Dynamic subtypes from API (HepsiEmlak only)
+    // API'den alt kategoriler
     const [subtypes, setSubtypes] = useState<Subtype[]>([]);
     const [selectedSubtype, setSelectedSubtype] = useState<Subtype | null>(null);
     const [subtypesLoading, setSubtypesLoading] = useState(false);
@@ -51,7 +51,7 @@ export default function PlatformScraperPage() {
     const platformGradient = platform === 'emlakjet' ? 'gradient-art-blue' : 'gradient-art-pink';
     const platformColor = platform === 'emlakjet' ? 'blue' : 'pink';
 
-    // Fetch categories from API on mount and when platform/listingType changes
+    // Platform/ilan tipi değiştiğinde API'den kategorileri çek
     useEffect(() => {
         const fetchCategories = async () => {
             setCategoriesLoading(true);
@@ -60,7 +60,7 @@ export default function PlatformScraperPage() {
                 const platformCategories = response[platform]?.[listingType] || [];
                 setCategories(platformCategories);
 
-                // Reset category selection if current category not in new list
+                // Mevcut kategori listede yoksa sıfırla
                 if (platformCategories.length > 0) {
                     const currentCategoryExists = platformCategories.some(c => c.id === category);
                     if (!currentCategoryExists) {
@@ -68,7 +68,7 @@ export default function PlatformScraperPage() {
                     }
                 }
             } catch (error) {
-                console.error('Failed to fetch categories:', error);
+                console.error('Kategoriler alınamadı:', error);
                 setCategories([]);
             } finally {
                 setCategoriesLoading(false);
@@ -78,7 +78,7 @@ export default function PlatformScraperPage() {
         fetchCategories();
     }, [platform, listingType]);
 
-    // Fetch subtypes when category changes (Both HepsiEmlak and EmlakJet)
+    // Kategori değiştiğinde alt kategorileri çek
     useEffect(() => {
         const fetchSubtypesData = async () => {
             setSubtypesLoading(true);
@@ -88,7 +88,7 @@ export default function PlatformScraperPage() {
                 const response = await getSubtypes(listingType, category, platform);
                 setSubtypes(response.subtypes || []);
             } catch (error) {
-                console.error('Failed to fetch subtypes:', error);
+                console.error('Alt kategoriler alınamadı:', error);
                 setSubtypes([]);
             } finally {
                 setSubtypesLoading(false);
@@ -102,7 +102,7 @@ export default function PlatformScraperPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Require city selection
+        // Şehir seçimi zorunlu
         if (selectedCities.length === 0) {
             setResult({
                 type: 'error',
@@ -128,7 +128,7 @@ export default function PlatformScraperPage() {
                 ),
             });
 
-            // Start tracking in global context
+            // Global context'te takip başlat
             if (response.task_id) {
                 startTracking(response.task_id, platform);
             }
@@ -153,7 +153,7 @@ export default function PlatformScraperPage() {
 
     return (
         <div className="space-y-8 max-w-4xl relative z-10">
-            {/* Header */}
+            {/* Başlık */}
             <div>
                 <Link href="/scraper">
                     <div className="text-gray-400 hover:text-white mb-4 inline-flex items-center gap-2 transition-colors">
@@ -171,7 +171,7 @@ export default function PlatformScraperPage() {
                 </p>
             </div>
 
-            {/* Configuration Form */}
+            {/* Yapılandırma Formu */}
             <ArtCard glowColor={platformColor}>
                 <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
                     <Sparkles className="w-6 h-6" />
@@ -179,7 +179,7 @@ export default function PlatformScraperPage() {
                 </h2>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Listing Type & Category */}
+                    {/* İlan Tipi ve Kategori */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Select
                             label="İlan Tipi"
@@ -203,7 +203,7 @@ export default function PlatformScraperPage() {
                         />
                     </div>
 
-                    {/* Subcategory - For both HepsiEmlak and EmlakJet */}
+                    {/* Alt Kategori */}
                     <div>
                         <Select
                             label="📋 Alt Kategori (Opsiyonel)"
@@ -233,7 +233,7 @@ export default function PlatformScraperPage() {
                         )}
                     </div>
 
-                    {/* Cities */}
+                    {/* Şehirler */}
                     <div>
                         <label className="text-sm font-medium text-slate-300 mb-2 block">
                             🌍 Şehirler
@@ -309,7 +309,7 @@ export default function PlatformScraperPage() {
                         </p>
                     </div>
 
-                    {/* City Selection Modal */}
+                    {/* Şehir Seçim Modalı */}
                     <CitySelectionModal
                         isOpen={isMapModalOpen}
                         onClose={() => setIsMapModalOpen(false)}
@@ -319,7 +319,7 @@ export default function PlatformScraperPage() {
                         onDistrictsChange={setSelectedDistricts}
                     />
 
-                    {/* Limit Section - Platform'a göre farklı */}
+                    {/* Limit Ayarları */}
                     {platform === 'emlakjet' ? (
                         <div className="flex items-end gap-4">
                             <div className="flex-1">
@@ -390,7 +390,7 @@ export default function PlatformScraperPage() {
                         </div>
                     )}
 
-                    {/* Submit Button */}
+                    {/* Gönder Butonu */}
                     <button
                         type="submit"
                         disabled={isLoading || (activeTask && !activeTask.isFinished)}
@@ -410,7 +410,7 @@ export default function PlatformScraperPage() {
                         )}
                     </button>
 
-                    {/* Result */}
+                    {/* Sonuç */}
                     {result && (
                         <motion.div
                             initial={{ opacity: 0, y: -10 }}

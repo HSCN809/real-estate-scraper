@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Scrapers module initialization
-"""
+"""Scraper modülleri başlatma"""
 
 __all__ = ['emlakjet', 'hepsiemlak']

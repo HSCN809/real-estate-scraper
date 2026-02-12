@@ -33,7 +33,7 @@ const features = [
 export default function LandingPage() {
     return (
         <div className="relative min-h-screen overflow-hidden bg-black">
-            {/* Hyperspeed Background */}
+            {/* Arka Plan Efekti */}
             <div className="absolute inset-0 z-0">
                 <Hyperspeed
                     effectOptions={{
@@ -68,20 +68,20 @@ export default function LandingPage() {
                             background: 0x000000,
                             shoulderLines: 0x131318,
                             brokenLines: 0x131318,
-                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Sky blue
-                            rightCars: [0x34d399, 0x10b981, 0x059669], // Emerald green
+                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Gök mavisi
+                            rightCars: [0x34d399, 0x10b981, 0x059669], // Zümrüt yeşili
                             sticks: 0x38bdf8,
                         }
                     }}
                 />
             </div>
 
-            {/* Gradient Overlay */}
+            {/* Gradyan Kaplama */}
             <div className="absolute inset-0 z-[1] bg-gradient-to-b from-black/60 via-transparent to-black/80" />
 
-            {/* Content */}
+            {/* İçerik */}
             <div className="relative z-10 min-h-screen flex flex-col">
-                {/* Header */}
+                {/* Üst Menü */}
                 <header className="p-6 lg:p-8">
                     <nav className="max-w-7xl mx-auto flex items-center justify-between">
                         <motion.div
@@ -118,7 +118,7 @@ export default function LandingPage() {
                     </nav>
                 </header>
 
-                {/* Hero Section */}
+                {/* Ana Bölüm */}
                 <main className="flex-1 flex items-center justify-center px-6 lg:px-8">
                     <div className="max-w-5xl mx-auto text-center">
                         <motion.div
@@ -138,7 +138,7 @@ export default function LandingPage() {
                     </div>
                 </main>
 
-                {/* Features Section */}
+                {/* Özellikler Bölümü */}
                 <section className="px-6 lg:px-8 pb-16 -mt-8">
                     <div className="max-w-6xl mx-auto">
                         <motion.div
@@ -170,7 +170,7 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* Footer */}
+                {/* Alt Bilgi */}
                 <footer className="px-6 lg:px-8 py-6 border-t border-white/5">
                     <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-500">
                         <p>© 2026 Emlak Scraper. Tüm hakları saklıdır.</p>

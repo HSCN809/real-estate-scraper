@@ -29,12 +29,12 @@ export function SearchableDropdown({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Filter options based on search
+    // Arama metnine göre seçenekleri filtrele
     const filteredOptions = options.filter(opt =>
         opt.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Click outside detection
+    // Dışarı tıklama algılama
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -47,7 +47,7 @@ export function SearchableDropdown({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Focus input when dropdown opens
+    // Dropdown açılınca input'a odaklan
     useEffect(() => {
         if (isOpen && inputRef.current) {
             inputRef.current.focus();
@@ -83,7 +83,7 @@ export function SearchableDropdown({
 
                 {isOpen && (
                     <div className="absolute top-full left-0 mt-1 w-full min-w-[140px] bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                        {/* Search Input */}
+                        {/* Arama Girişi */}
                         <div className="p-2 border-b border-slate-700">
                             <div className="relative">
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -98,9 +98,9 @@ export function SearchableDropdown({
                             </div>
                         </div>
 
-                        {/* Options List */}
+                        {/* Seçenek Listesi */}
                         <div className="max-h-48 overflow-y-auto">
-                            {/* "Tümü" option */}
+                            {/* "Tümü" seçeneği */}
                             <button
                                 type="button"
                                 onClick={() => handleSelect('all')}

@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Base Scraper class with common functionality for all scrapers
-STEALTH MODE - Randomized delays to avoid bot detection
-"""
+"""Tüm scraper'lar için ortak işlevsellik sağlayan temel sınıf - gizli mod"""
 
 import time
 import random
@@ -29,10 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseScraper(ABC):
-    """
-    Base class for all scrapers.
-    Provides common functionality like user input, navigation, and element extraction.
-    """
+    """Tüm scraper'lar için temel sınıf"""
     
     def __init__(
         self,
@@ -42,53 +36,36 @@ class BaseScraper(ABC):
         category: str,
         selected_locations: Optional[Dict] = None
     ):
-        """
-        Initialize the scraper.
-        
-        Args:
-            driver: Selenium WebDriver instance
-            base_url: Base URL for scraping
-            platform: Platform name ('emlakjet' or 'hepsiemlak')
-            category: Category name ('konut', 'arsa', etc.)
-            selected_locations: Pre-selected locations
-        """
+        """Scraper'ı başlat"""
         self.driver = driver
         self.base_url = base_url
         self.platform = platform
         self.category = category
         self.config = get_config()
         
-        # Load selectors for this platform/category
+        # Platform/kategori seçicilerini yükle
         self.selectors = get_selectors(platform, category)
         self.common_selectors = get_common_selectors(platform)
         
-        # Location selection
+        # Lokasyon seçimi
         self.selected_locations = selected_locations or {
             'iller': [],
             'ilceler': [],
             'mahalleler': []
         }
         
-        # Data storage
+        # Veri deposu
         self.all_listings: List[Dict[str, Any]] = []
         
-        # Wait object
+        # Bekleme nesnesi
         self.wait = WebDriverWait(driver, self.config.element_wait_timeout)
     
     # =========================================================================
-    # STEALTH WAIT METHODS - Rastgele bekleme süreleri
+    # Gizli bekleme metotları
     # =========================================================================
     
     def random_wait(self, wait_type: str = "medium") -> float:
-        """
-        Rastgele bekleme süresi - bot tespitinden kaçınmak için.
-        
-        Args:
-            wait_type: "short", "medium", or "long"
-            
-        Returns:
-            Beklenen süre (saniye)
-        """
+        """Bot tespitinden kaçınmak için rastgele bekleme"""
         if wait_type == "short":
             min_wait, max_wait = self.config.random_wait_short
         elif wait_type == "long":
@@ -113,43 +90,24 @@ class BaseScraper(ABC):
         return self.random_wait("long")
     
     # =========================================================================
-    # ABSTRACT METHODS (must be implemented by subclasses)
+    # Alt sınıflar tarafından uygulanması gereken metotlar
     
     @abstractmethod
     def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
-        """
-        Extract data from a single listing element.
-        Must be implemented by each category parser.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with listing data or None if extraction failed
-        """
+        """Tek bir ilan elementinden veri çıkar"""
         pass
     
     @abstractmethod
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """
-        Parse category-specific details from quick info and title.
-        Must be implemented by each category parser.
-        
-        Args:
-            quick_info: Quick info text from listing
-            title: Title text from listing
-            
-        Returns:
-            Dictionary with parsed details
-        """
+        """Kategori detaylarını parse et"""
         pass
     
     # =========================================================================
-    # COMMON ELEMENT EXTRACTION
+    # Ortak element çıkarma metotları
     # =========================================================================
     
     def get_element_text(self, container: WebElement, selector: str) -> str:
-        """Safely get text from an element"""
+        """Elementten güvenli şekilde metin al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.text.strip()
@@ -162,7 +120,7 @@ class BaseScraper(ABC):
         selector: str,
         attribute: str
     ) -> str:
-        """Safely get attribute from an element"""
+        """Elementten güvenli şekilde attribute al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.get_attribute(attribute) or ""
@@ -170,7 +128,7 @@ class BaseScraper(ABC):
             return ""
     
     def find_elements_safe(self, selector: str) -> List[WebElement]:
-        """Safely find elements with logging"""
+        """Element listesini güvenli şekilde bul"""
         try:
             return self.driver.find_elements(By.CSS_SELECTOR, selector)
         except Exception as e:
@@ -178,7 +136,7 @@ class BaseScraper(ABC):
             return []
     
     def wait_for_element(self, selector: str, timeout: Optional[int] = None) -> Optional[WebElement]:
-        """Wait for element to be present"""
+        """Elementin sayfada görünmesini bekle"""
         try:
             wait = WebDriverWait(self.driver, timeout or self.config.element_wait_timeout)
             return wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
@@ -187,7 +145,7 @@ class BaseScraper(ABC):
             return None
     
     def wait_for_clickable(self, selector: str, timeout: Optional[int] = None) -> Optional[WebElement]:
-        """Wait for element to be clickable"""
+        """Elementin tıklanabilir olmasını bekle"""
         try:
             wait = WebDriverWait(self.driver, timeout or self.config.element_wait_timeout)
             return wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
@@ -196,23 +154,15 @@ class BaseScraper(ABC):
             return None
     
     # =========================================================================
-    # USER INPUT METHODS
+    # Kullanıcı girdi metotları
     # =========================================================================
     
     def get_user_choice(self, max_option: int) -> Optional[int]:
-        """
-        Get a single choice from user.
-        
-        Args:
-            max_option: Maximum valid option number
-            
-        Returns:
-            User's choice or None if invalid
-        """
+        """Kullanıcıdan tek seçim al"""
         try:
             user_input = input(f"\nSeçiminiz (1-{max_option}): ").strip()
             
-            # Check for multiple selection markers
+            # Çoklu seçim işaretleyicilerini kontrol et
             if any(char in user_input for char in [',', ' ', '-']):
                 return None
             
@@ -227,7 +177,7 @@ class BaseScraper(ABC):
             return None
     
     def get_user_page_count(self) -> Optional[int]:
-        """Get number of pages to scrape from user"""
+        """Kullanıcıdan sayfa sayısı al"""
         max_pages = self.config.max_pages_per_location
         
         while True:
@@ -263,14 +213,7 @@ class BaseScraper(ABC):
         selected_items: List[Dict],
         item_type: str
     ) -> None:
-        """
-        Handle multiple selection from a list.
-        
-        Args:
-            items: List of items to select from
-            selected_items: List to store selected items (modified in place)
-            item_type: Type name for display (e.g., 'il', 'ilçe')
-        """
+        """Çoklu seçim menüsü"""
         print(f"\n🎯 ÇOKLU {item_type.upper()} SEÇİMİ")
         print("Birden fazla seçim yapmak için numaraları virgülle veya boşlukla ayırarak girin.")
         print("Örnek: 1,3,5 veya 1 3 5 veya 1-5")
@@ -303,16 +246,16 @@ class BaseScraper(ABC):
                 print(f"❌ Hata: {e}")
     
     def _parse_selection_input(self, user_input: str, max_value: int) -> List[int]:
-        """Parse user input for multiple selection"""
+        """Çoklu seçim girdisini parse et"""
         selections: Set[int] = set()
         
-        # Handle comma-separated
+        # Virgülle ayrılmış
         if ',' in user_input:
             parts = user_input.split(',')
-        # Handle space-separated
+        # Boşlukla ayrılmış
         elif ' ' in user_input:
             parts = user_input.split()
-        # Handle range only
+        # Sadece aralık
         elif '-' in user_input and user_input.count('-') == 1:
             try:
                 start, end = map(int, user_input.split('-'))
@@ -321,7 +264,7 @@ class BaseScraper(ABC):
             except ValueError:
                 pass
             return []
-        # Single number
+        # Tek sayı
         else:
             if user_input.isdigit():
                 num = int(user_input)
@@ -329,7 +272,7 @@ class BaseScraper(ABC):
                     return [num]
             return []
         
-        # Process parts
+        # Parçaları işle
         for part in parts:
             part = part.strip()
             if '-' in part:
@@ -351,7 +294,7 @@ class BaseScraper(ABC):
         return sorted(list(selections))
     
     # =========================================================================
-    # DISPLAY METHODS
+    # Görüntüleme metotları
     # =========================================================================
     
     def display_menu(
@@ -362,24 +305,12 @@ class BaseScraper(ABC):
         show_exit: bool = True,
         selected_items: Optional[List] = None
     ) -> int:
-        """
-        Display a menu and return the next option number.
-        
-        Args:
-            title: Menu title
-            items: List of items (strings or dicts with 'name' key)
-            show_back: Whether to show back option
-            show_exit: Whether to show exit option
-            selected_items: List of already selected items
-            
-        Returns:
-            Next available option number
-        """
+        """Menü görüntüle ve sonraki seçenek numarasını döndür"""
         print(f"\n" + "=" * 50)
         print(f"🎯 {title}")
         print("=" * 50)
         
-        # Build set of selected item names
+        # Seçili öğe isimlerinin kümesini oluştur
         selected_names: Set[str] = set()
         if selected_items:
             for item in selected_items:
@@ -388,7 +319,7 @@ class BaseScraper(ABC):
                 elif isinstance(item, str):
                     selected_names.add(item)
         
-        # Display items in 4 columns if more than 12 items
+        # 12'den fazla öğe varsa 4 sütun halinde göster
         if len(items) > 12:
             cols = 4
             col_width = 20
@@ -408,7 +339,7 @@ class BaseScraper(ABC):
                         row += f"{idx + 1:2d}.{mark}{display_name:<{col_width - 5}}"
                 print(row)
         else:
-            # Display items in single column for small lists
+            # Küçük listeler için tek sütun halinde göster
             for i, item in enumerate(items, 1):
                 is_selected = False
                 
@@ -416,7 +347,7 @@ class BaseScraper(ABC):
                     display_name = item['name']
                     is_selected = display_name in selected_names
                     
-                    # Show ad count if available
+                    # Varsa ilan sayısını göster
                     if 'ad_count' in item and item['ad_count'] != "0":
                         display_name = f"{display_name} ({item['ad_count']})"
                 else:
@@ -438,7 +369,7 @@ class BaseScraper(ABC):
         return option_number
     
     def display_selected_locations(self) -> None:
-        """Display currently selected locations"""
+        """Seçili lokasyonları görüntüle"""
         if any(self.selected_locations.values()):
             print(f"\n📍 SEÇİLİ LOKASYONLAR:")
             if self.selected_locations['iller']:
@@ -454,20 +385,11 @@ class BaseScraper(ABC):
             print(f"\n📍 SEÇİLİ LOKASYONLAR: Henüz lokasyon seçilmedi")
     
     # =========================================================================
-    # NAVIGATION METHODS
+    # Navigasyon metotları
     # =========================================================================
     
     def navigate_to(self, url: str, wait_time: Optional[float] = None) -> bool:
-        """
-        Navigate to a URL.
-        
-        Args:
-            url: URL to navigate to
-            wait_time: Time to wait after navigation
-            
-        Returns:
-            True if successful, False otherwise
-        """
+        """Belirtilen URL'ye git"""
         try:
             wait = wait_time or self.config.wait_between_pages
             print(f"\n🌐 Sayfaya gidiliyor: {url}")
@@ -481,20 +403,15 @@ class BaseScraper(ABC):
             return False
     
     def get_max_pages(self) -> int:
-        """Get maximum number of pages available (to be overridden)"""
+        """Mevcut maksimum sayfa sayısını al"""
         return 1
     
     # =========================================================================
-    # SCRAPING METHODS
+    # Tarama metotları
     # =========================================================================
     
     def scrape_current_page(self) -> List[Dict[str, Any]]:
-        """
-        Scrape all listings on the current page.
-        
-        Returns:
-            List of listing data dictionaries
-        """
+        """Mevcut sayfadaki tüm ilanları tara"""
         listings = []
         
         try:
@@ -539,26 +456,16 @@ class BaseScraper(ABC):
         return listings
     
     def scrape_pages(self, target_url: str, max_pages: int, on_page_scraped=None) -> bool:
-        """
-        Scrape multiple pages.
-
-        Args:
-            target_url: Base URL for scraping
-            max_pages: Maximum number of pages to scrape
-            on_page_scraped: Optional callback called after each page with the new listings
-
-        Returns:
-            True if should skip (no listings), False otherwise
-        """
+        """Birden fazla sayfayı tara"""
         first_page_count = 0
         
         for current_page in range(1, max_pages + 1):
-            # Stop checker control
+            # Durdurma kontrolü
             if hasattr(self, '_stop_checker') and self._stop_checker and self._stop_checker():
                 logger.info("Stop requested, ending page scraping")
                 break
 
-            # Listing limit control
+            # İlan limiti kontrolü
             if hasattr(self, '_max_listings') and self._max_listings > 0 and len(self.all_listings) >= self._max_listings:
                 logger.info(f"Listing limit reached ({self._max_listings}), ending page scraping")
                 break
@@ -566,7 +473,7 @@ class BaseScraper(ABC):
             print(f"\n🔍 Sayfa {current_page} taranıyor...")
 
             try:
-                # Construct page URL
+                # Sayfa URL'sini oluştur
                 if current_page > 1:
                     separator = '&' if '?' in target_url else '?'
                     page_url = f"{target_url}{separator}sayfa={current_page}"
@@ -576,7 +483,7 @@ class BaseScraper(ABC):
                 self.driver.get(page_url)
                 time.sleep(self.config.wait_between_pages)
                 
-                # Check for zero listings (EmlakJet)
+                # Sıfır ilan kontrolü (EmlakJet)
                 if current_page == 1:
                     try:
                         no_results = self.driver.find_elements(
@@ -589,7 +496,7 @@ class BaseScraper(ABC):
                     except:
                         pass
                 
-                # Scrape page
+                # Sayfayı tara
                 listings = self.scrape_current_page()
                 self.all_listings.extend(listings)
 
@@ -607,6 +514,6 @@ class BaseScraper(ABC):
                 print(f"   ❌ Sayfa {current_page} taranırken hata: {e}")
                 continue
         
-        # Skip if no listings on first page
+        # İlk sayfada ilan yoksa atla
         return first_page_count == 0 and max_pages == 1
     

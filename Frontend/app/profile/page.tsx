@@ -57,7 +57,7 @@ export default function ProfilePage() {
             return;
         }
 
-        // Validate password strength
+        // Şifre gücünü kontrol et
         if (passwordData.new_password.length < 8) {
             toast.error('Şifre en az 8 karakter olmalıdır');
             return;
@@ -92,7 +92,7 @@ export default function ProfilePage() {
         }
     };
 
-    // Animation variants
+    // Animasyon varyantları
     const container = {
         hidden: { opacity: 0 },
         show: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -110,7 +110,7 @@ export default function ProfilePage() {
             initial="hidden"
             animate="show"
         >
-            {/* Header */}
+            {/* Başlık */}
             <motion.header variants={item}>
                 <div className="flex items-center gap-4 mb-3">
                     <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20">
@@ -124,7 +124,7 @@ export default function ProfilePage() {
             </motion.header>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Profile Information */}
+                {/* Profil Bilgileri */}
                 <motion.div variants={item}>
                     <ArtCard glowColor="purple" className="h-full">
                         <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -165,7 +165,7 @@ export default function ProfilePage() {
                     </ArtCard>
                 </motion.div>
 
-                {/* Change Password */}
+                {/* Şifre Değiştir */}
                 <motion.div variants={item}>
                     <ArtCard glowColor="blue" className="h-full">
                         <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">

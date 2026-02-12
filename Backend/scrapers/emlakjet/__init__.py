@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-EmlakJet Scraper module
-"""
+"""EmlakJet Scraper modülü"""
 
 from .main import EmlakJetScraper
 from .parsers import (

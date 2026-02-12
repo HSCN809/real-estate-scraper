@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Base parser for EmlakJet listings
-"""
+"""EmlakJet ilan parser'ı temel sınıfı"""
 
 from typing import Dict, Any, Optional, List
 from selenium.webdriver.common.by import By
@@ -16,26 +14,18 @@ from core.selectors import get_selectors, get_common_selectors
 
 
 class BaseEmlakJetParser:
-    """
-    Base parser for EmlakJet listings.
-    Provides common element extraction methods.
-    """
+    """EmlakJet ilanları için temel parser"""
     
     PLATFORM = "emlakjet"
     
     def __init__(self, category: str):
-        """
-        Initialize parser.
-        
-        Args:
-            category: Category name ('konut', 'arsa', etc.)
-        """
+        """Parser'ı başlat"""
         self.category = category
         self.selectors = get_selectors(self.PLATFORM, category)
         self.common_selectors = get_common_selectors(self.PLATFORM)
     
     def get_element_text(self, container: WebElement, selector: str) -> str:
-        """Safely get text from an element"""
+        """Elementten güvenli şekilde metin al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.text.strip()
@@ -48,7 +38,7 @@ class BaseEmlakJetParser:
         selector: str,
         attribute: str
     ) -> str:
-        """Safely get attribute from an element"""
+        """Elementten güvenli şekilde attribute al"""
         try:
             element = container.find_element(By.CSS_SELECTOR, selector)
             return element.get_attribute(attribute) or ""
@@ -56,7 +46,7 @@ class BaseEmlakJetParser:
             return ""
     
     def extract_badges(self, container: WebElement) -> List[str]:
-        """Extract badge texts from listing"""
+        """İlan rozetlerini çıkar"""
         badges = []
         try:
             badge_selector = self.common_selectors.get("badge_wrapper", "div.styles_badgewrapper__pS0rt")
@@ -70,15 +60,7 @@ class BaseEmlakJetParser:
         return badges
     
     def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
-        """
-        Extract common data fields from a listing container.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with common fields
-        """
+        """İlan konteynerinden ortak verileri çıkar"""
         title_sel = self.common_selectors.get("title", "h3.styles_title__aKEGQ")
         location_sel = self.common_selectors.get("location", "span.styles_location__OwJiQ")
         price_sel = self.common_selectors.get("price", "span.styles_price__F3pMQ")
@@ -102,41 +84,24 @@ class BaseEmlakJetParser:
             'resim_url': image_url,
             'one_cikan': 'ÖNE ÇIKAN' in badges,
             'yeni': 'YENİ' in badges,
-            '_quick_info': quick_info,  # For category-specific parsing
+            '_quick_info': quick_info,  # Kategoriye özel parse işlemi için
         }
     
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """
-        Parse category-specific details. Override in subclasses.
-        
-        Args:
-            quick_info: Quick info text
-            title: Listing title
-            
-        Returns:
-            Dictionary with category-specific fields
-        """
+        """Kategori detaylarını parse et, alt sınıflarda override edilmeli"""
         return {}
     
     def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
-        """
-        Extract complete listing data.
-        
-        Args:
-            container: WebElement containing the listing
-            
-        Returns:
-            Dictionary with all listing data or None if invalid
-        """
+        """Tam ilan verisini çıkar"""
         try:
-            # Get common data
+            # Ortak verileri al
             data = self.extract_common_data(container)
             
-            # Skip if missing required fields
+            # Zorunlu alanlar eksikse atla
             if not all([data.get('baslik'), data.get('lokasyon'), data.get('fiyat')]):
                 return None
             
-            # Get category-specific details
+            # Kategoriye özel detayları al
             quick_info = data.pop('_quick_info', '')
             category_data = self.parse_category_details(quick_info, data.get('baslik', ''))
             data.update(category_data)
@@ -147,7 +112,7 @@ class BaseEmlakJetParser:
             return None
     
     def get_csv_fields(self) -> List[str]:
-        """Get CSV field names for this category"""
+        """Bu kategori için CSV alan adlarını getir"""
         return self.selectors.get('csv_fields', [
             'baslik', 'lokasyon', 'fiyat', 'ilan_url', 'resim_url',
             'one_cikan', 'yeni', 'tarih'

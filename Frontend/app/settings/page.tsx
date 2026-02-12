@@ -66,7 +66,7 @@ export default function SettingsPage() {
             </motion.header>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* System Status */}
+                {/* Sistem Durumu */}
                 <motion.section variants={item} aria-labelledby="system-status-title">
                     <ArtCard glowColor="blue" className="h-full">
                         <h2 id="system-status-title" className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -108,7 +108,7 @@ export default function SettingsPage() {
                     </ArtCard>
                 </motion.section>
 
-                {/* Preferences */}
+                {/* Tercihler */}
                 <motion.section variants={item} aria-labelledby="preferences-title">
                     <ArtCard glowColor="purple" className="h-full">
                         <h2 id="preferences-title" className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -117,7 +117,7 @@ export default function SettingsPage() {
                         </h2>
 
                         <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-                            {/* Sound Toggle */}
+                            {/* Ses Ayarı */}
                             <div className="flex items-center justify-between p-2">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 rounded-lg bg-pink-500/20" aria-hidden="true">
@@ -143,7 +143,7 @@ export default function SettingsPage() {
                                 </button>
                             </div>
 
-                            {/* Auto Download Toggle */}
+                            {/* Otomatik İndirme Ayarı */}
                             <div className="flex items-center justify-between p-2">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 rounded-lg bg-orange-500/20" aria-hidden="true">

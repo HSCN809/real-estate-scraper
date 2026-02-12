@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-Database connection configuration
-PostgreSQL (Docker) veya SQLite (lokal) destekli
-"""
+"""Veritabanı bağlantı konfigürasyonu"""
 
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Database URL - PostgreSQL veya SQLite
-# Docker için: DATABASE_URL=postgresql://user:pass@host:port/dbname
-# Lokal için: DATABASE_URL belirtilmezse SQLite kullanılır
+# Veritabanı URL - PostgreSQL veya SQLite
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 if DATABASE_URL:
@@ -34,15 +29,12 @@ else:
         echo=False
     )
 
-# Session factory
+# Oturum fabrikası
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
-    """
-    Dependency function for FastAPI endpoints.
-    Yields a database session and ensures cleanup.
-    """
+    """FastAPI endpoint'leri için veritabanı oturumu"""
     db = SessionLocal()
     try:
         yield db
@@ -51,8 +43,5 @@ def get_db():
 
 
 def get_db_session():
-    """
-    Get a database session for non-FastAPI use (e.g., scrapers).
-    Remember to close the session when done.
-    """
+    """FastAPI dışı kullanım için veritabanı oturumu"""
     return SessionLocal()

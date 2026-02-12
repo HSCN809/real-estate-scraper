@@ -21,7 +21,7 @@ class AuthError extends Error {
 function extractErrorMessage(error: any, fallback: string): string {
     const detail = error?.detail;
     if (typeof detail === 'string') return detail;
-    // FastAPI 422 validation errors return detail as array
+    // FastAPI 422 doğrulama hataları detail'i dizi olarak döner
     if (Array.isArray(detail) && detail.length > 0) {
         const firstError = detail[0];
         return firstError?.msg || firstError?.message || fallback;

@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Authentication API endpoints
-"""
+"""Kimlik doğrulama API endpoint'leri"""
 
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
@@ -26,10 +24,7 @@ IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 
 def _set_auth_cookie(response: Response, token: str):
-    """Set HTTP-only auth cookie on response.
-    Production: secure=True + samesite=none (HTTPS required)
-    Development: secure=False + samesite=lax (HTTP localhost)
-    """
+    """HTTP-only auth cookie'yi ayarla"""
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
@@ -42,7 +37,7 @@ def _set_auth_cookie(response: Response, token: str):
 
 
 def _clear_auth_cookie(response: Response):
-    """Clear auth cookie from response"""
+    """Auth cookie'yi temizle"""
     response.delete_cookie(
         key=COOKIE_NAME,
         path="/",
@@ -53,8 +48,8 @@ def _clear_auth_cookie(response: Response):
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
-    """Register a new user"""
-    # Check if username exists
+    """Yeni kullanıcı kaydı"""
+    # Kullanıcı adı var mı kontrol et
     existing = db.query(User).filter(
         or_(User.username == user_data.username, User.email == user_data.email)
     ).first()
@@ -70,7 +65,7 @@ async def register(user_data: UserCreate, response: Response, db: Session = Depe
             detail="Bu e-posta adresi zaten kullanılıyor"
         )
 
-    # Create user
+    # Kullanıcı oluştur
     user = User(
         username=user_data.username,
         email=user_data.email,
@@ -82,7 +77,7 @@ async def register(user_data: UserCreate, response: Response, db: Session = Depe
     db.commit()
     db.refresh(user)
 
-    # Generate token and set cookie
+    # Token oluştur ve cookie'ye ayarla
     token_data = {"sub": user.id, "username": user.username}
     access_token = create_access_token(token_data)
     _set_auth_cookie(response, access_token)
@@ -92,8 +87,8 @@ async def register(user_data: UserCreate, response: Response, db: Session = Depe
 
 @router.post("/login", response_model=UserResponse)
 async def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
-    """Authenticate user and return token via cookie"""
-    # Find user by username or email
+    """Kullanıcı doğrulama ve cookie ile token döndür"""
+    # Kullanıcı adı veya e-posta ile kullanıcıyı bul
     user = db.query(User).filter(
         or_(User.username == credentials.username, User.email == credentials.username)
     ).first()
@@ -110,11 +105,11 @@ async def login(credentials: UserLogin, response: Response, db: Session = Depend
             detail="Hesap devre dışı"
         )
 
-    # Update last login
+    # Son giriş zamanını güncelle
     user.last_login = datetime.utcnow()
     db.commit()
 
-    # Generate token and set cookie
+    # Token oluştur ve cookie'ye ayarla
     token_data = {"sub": user.id, "username": user.username}
     access_token = create_access_token(token_data)
     _set_auth_cookie(response, access_token)
@@ -124,7 +119,7 @@ async def login(credentials: UserLogin, response: Response, db: Session = Depend
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
+    """Mevcut kullanıcı bilgisini getir"""
     return UserResponse.model_validate(current_user)
 
 
@@ -134,7 +129,7 @@ async def update_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update user profile (username/email)"""
+    """Kullanıcı profilini güncelle"""
     if update_data.username and update_data.username != current_user.username:
         existing = db.query(User).filter(
             User.username == update_data.username,
@@ -171,7 +166,7 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Change user password"""
+    """Kullanıcı şifresini değiştir"""
     if not verify_password(password_data.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,6 +181,6 @@ async def change_password(
 
 @router.post("/logout")
 async def logout(response: Response):
-    """Logout user by clearing auth cookie"""
+    """Auth cookie temizleyerek çıkış yap"""
     _clear_auth_cookie(response)
     return {"message": "Oturum kapatıldı"}

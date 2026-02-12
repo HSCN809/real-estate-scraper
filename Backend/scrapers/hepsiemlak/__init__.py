@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-HepsiEmlak Scraper module
-"""
+"""HepsiEmlak Scraper modülü"""
 
 from .main import HepsiemlakScraper
 from .parsers import (

@@ -47,7 +47,7 @@ export default function Dashboard() {
       animate="show"
       aria-labelledby="dashboard-title"
     >
-      {/* Artistic Header */}
+      {/* Başlık */}
       <motion.header variants={item}>
         <h1 id="dashboard-title" className="art-title gradient-art-pink mb-3">
           Dashboard
@@ -57,13 +57,13 @@ export default function Dashboard() {
         </p>
       </motion.header>
 
-      {/* Stats Grid - Bold Artistic Layout */}
+      {/* İstatistikler */}
       <motion.section
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
         variants={container}
         aria-label="İstatistikler"
       >
-        {/* Large Featured Stat */}
+        {/* Ana İstatistik */}
         <motion.article variants={item} className="lg:col-span-2 lg:row-span-2">
           <ArtCard glowColor="pink" className="h-full">
             <div className="flex flex-col h-full justify-between">
@@ -86,7 +86,7 @@ export default function Dashboard() {
                 <Sparkles className="w-8 h-8 text-pink-400" aria-hidden="true" />
               </div>
 
-              {/* Mini Stats */}
+              {/* Alt İstatistikler */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl bg-gradient-to-br from-pink-500/10 to-transparent border border-pink-500/20">
                   <p className="text-xs text-gray-400 mb-1">Bu Ay</p>
@@ -105,7 +105,7 @@ export default function Dashboard() {
           </ArtCard>
         </motion.article>
 
-        {/* Small Stats with SpotlightCard */}
+        {/* Küçük İstatistikler */}
         <motion.article variants={item}>
           <SpotlightCard className="h-full" spotlightColor="rgba(56, 189, 248, 0.15)">
             <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 w-fit mb-4">
@@ -148,7 +148,7 @@ export default function Dashboard() {
         </motion.article>
       </motion.section>
 
-      {/* Platform Cards - Creative Layout */}
+      {/* Platform Kartları */}
       <motion.section variants={item} aria-labelledby="platform-section-title">
         <h2 id="platform-section-title" className="text-3xl font-black gradient-art-blue mb-6">
           Platform Seçimi
@@ -160,12 +160,12 @@ export default function Dashboard() {
         variants={container}
         aria-label="Platform seçimi"
       >
-        {/* EmlakJet */}
+        {/* EmlakJet Kartı */}
         <motion.article variants={item}>
           <Link href="/scraper/emlakjet" aria-label="EmlakJet platformunda taramaya başla">
             <ArtCard glowColor="blue" className="group cursor-pointer">
               <div className="relative">
-                {/* Decorative Element */}
+                {/* Dekoratif Eleman */}
                 <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" aria-hidden="true" />
 
                 <div className="relative">
@@ -184,7 +184,7 @@ export default function Dashboard() {
                     <Sparkles className="w-8 h-8 text-blue-400 group-hover:rotate-12 transition-transform" aria-hidden="true" />
                   </header>
 
-                  {/* Features */}
+                  {/* Özellikler */}
                   <ul className="flex flex-wrap gap-2 mb-4" aria-label="Desteklenen kategoriler">
                     {['Konut', 'Arsa', 'İşyeri', 'Turistik'].map((feature) => (
                       <li
@@ -206,12 +206,12 @@ export default function Dashboard() {
           </Link>
         </motion.article>
 
-        {/* HepsiEmlak */}
+        {/* HepsiEmlak Kartı */}
         <motion.article variants={item}>
           <Link href="/scraper/hepsiemlak" aria-label="HepsiEmlak platformunda taramaya başla">
             <ArtCard glowColor="pink" className="group cursor-pointer">
               <div className="relative">
-                {/* Decorative Element */}
+                {/* Dekoratif Eleman */}
                 <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" aria-hidden="true" />
 
                 <div className="relative">
@@ -230,7 +230,7 @@ export default function Dashboard() {
                     <Zap className="w-8 h-8 text-pink-400 group-hover:rotate-12 transition-transform" aria-hidden="true" />
                   </header>
 
-                  {/* Features */}
+                  {/* Özellikler */}
                   <ul className="flex flex-wrap gap-2 mb-4" aria-label="Desteklenen kategoriler">
                     {['Konut', 'Arsa', 'İşyeri', 'Devremülk'].map((feature) => (
                       <li

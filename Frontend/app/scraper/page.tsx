@@ -50,7 +50,7 @@ export default function ScraperPage() {
             animate="show"
             aria-labelledby="scraper-title"
         >
-            {/* Header */}
+            {/* Başlık */}
             <motion.header variants={item}>
                 <h1 id="scraper-title" className="art-title gradient-art-blue mb-3">
                     Platform Seçimi
@@ -60,17 +60,17 @@ export default function ScraperPage() {
                 </p>
             </motion.header>
 
-            {/* Platform Cards */}
+            {/* Platform Kartları */}
             <nav className="grid grid-cols-1 gap-8" aria-label="Platform seçimi">
                 {platforms.map((platform, index) => (
                     <motion.article key={platform.id} variants={item}>
                         <Link href={`/scraper/${platform.id}`} aria-label={`${platform.name} platformunda taramaya başla`}>
                             <ArtCard glowColor={platform.glowColor} className="group cursor-pointer relative overflow-visible">
-                                {/* Decorative floating element */}
+                                {/* Dekoratif yüzen eleman */}
                                 <div className={`absolute -z-10 -inset-4 bg-gradient-to-r ${platform.gradient} opacity-0 group-hover:opacity-20 blur-3xl transition-opacity duration-500 rounded-3xl`} aria-hidden="true" />
 
                                 <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
-                                    {/* Icon Section */}
+                                    {/* İkon Bölümü */}
                                     <figure className="relative" aria-hidden="true">
                                         <span className="text-8xl md:text-9xl group-hover:scale-110 transition-transform duration-300 block">
                                             {platform.icon}
@@ -79,7 +79,7 @@ export default function ScraperPage() {
                                             } group-hover:rotate-12 transition-transform`} />
                                     </figure>
 
-                                    {/* Content */}
+                                    {/* İçerik */}
                                     <div className="flex-1">
                                         <h2 className={`text-5xl md:text-6xl font-black mb-3 ${index === 0 ? 'gradient-art-blue' : 'gradient-art-pink'
                                             }`}>
@@ -89,7 +89,7 @@ export default function ScraperPage() {
                                             {platform.tagline}
                                         </p>
 
-                                        {/* Features Grid */}
+                                        {/* Özellik Listesi */}
                                         <ul className="grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={`${platform.name} desteklenen kategoriler`}>
                                             {platform.features.map((feature) => (
                                                 <li
@@ -106,7 +106,7 @@ export default function ScraperPage() {
                                         </ul>
                                     </div>
 
-                                    {/* Arrow */}
+                                    {/* Ok İşareti */}
                                     <span className="text-6xl opacity-50 group-hover:opacity-100 group-hover:translate-x-4 transition-all duration-300" aria-hidden="true">
                                         →
                                     </span>
@@ -117,7 +117,7 @@ export default function ScraperPage() {
                 ))}
             </nav>
 
-            {/* Info Card */}
+            {/* Bilgi Kartı */}
             <motion.aside variants={item} aria-label="İpucu">
                 <ArtCard glowColor="purple">
                     <div className="flex items-start gap-4">

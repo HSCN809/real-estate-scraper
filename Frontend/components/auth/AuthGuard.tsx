@@ -20,16 +20,16 @@ export function AuthGuard({ children }: AuthGuardProps) {
             const isPublicRoute = publicRoutes.includes(pathname);
 
             if (!isAuthenticated && !isPublicRoute) {
-                // Not authenticated and trying to access protected route
+                // Giriş yapılmamış ve korumalı sayfaya erişmeye çalışıyor
                 router.push('/homepage');
             } else if (isAuthenticated && (pathname === '/login' || pathname === '/register' || pathname === '/homepage')) {
-                // Already authenticated and trying to access auth/homepage route
+                // Giriş yapılmış ve auth/homepage sayfasına erişmeye çalışıyor
                 router.push('/');
             }
         }
     }, [isAuthenticated, isLoading, pathname, router]);
 
-    // Show loading spinner while checking auth
+    // Auth kontrol edilirken yükleniyor
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -38,14 +38,14 @@ export function AuthGuard({ children }: AuthGuardProps) {
         );
     }
 
-    // For public routes, always render
+    // Public sayfalar her zaman gösterilir
     if (publicRoutes.includes(pathname)) {
         return <>{children}</>;
     }
 
-    // For protected routes, only render if authenticated
+    // Korumalı sayfalar sadece giriş yapılmışsa gösterilir
     if (!isAuthenticated) {
-        return null; // Will redirect in useEffect
+        return null; // useEffect'te yönlendirilecek
     }
 
     return <>{children}</>;

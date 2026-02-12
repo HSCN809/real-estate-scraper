@@ -1,4 +1,4 @@
-// API types for Real Estate Scraper
+// Emlak Scraper API tipleri
 
 export interface ScrapeRequest {
   category: string;

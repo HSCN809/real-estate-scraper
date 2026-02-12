@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-HepsiEmlak Subcategory Fetcher & Cache Manager
-Selenium ile bir kez çeker, JSON'a kaydeder, sonra hep dosyadan okur
-"""
+"""HepsiEmlak alt kategori çekici ve önbellek yöneticisi - Selenium ile bir kez çeker, JSON'a kaydeder, sonra hep dosyadan okur"""
 
 import json
 import os
@@ -48,10 +45,7 @@ def save_subcategories_to_json(data: Dict[str, Dict[str, List[Dict]]]):
 
 
 def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
-    """
-    Tüm kategori/listing_type kombinasyonları için subcategories çek.
-    Bu fonksiyon sadece bir kez çalıştırılmalı (veya güncelleme gerektiğinde).
-    """
+    """Tüm kategori/listing_type kombinasyonları için alt kategorileri Selenium ile çek"""
     config = get_hepsiemlak_config()
     all_subcategories = {}
     
@@ -146,10 +140,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
 
 
 def fetch_subtypes(listing_type: str, category: str) -> List[Dict]:
-    """
-    JSON dosyasından subcategories oku.
-    Dosya yoksa boş liste döner.
-    """
+    """JSON dosyasından alt kategorileri oku; dosya yoksa boş liste döndürür"""
     data = load_subcategories_from_json()
     return data.get(listing_type, {}).get(category, [])
 

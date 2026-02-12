@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-HepsiEmlak parsers module
-"""
+"""HepsiEmlak parser modülleri"""
 
 from .base_parser import BaseHepsiemlakParser
 from .konut_parser import KonutParser

@@ -1,38 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-Arsa (Land) parser for EmlakJet
-"""
+"""EmlakJet Arsa parser'ı"""
 
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
 
 class ArsaParser(BaseEmlakJetParser):
-    """Parser for Arsa (land) listings on EmlakJet"""
+    """EmlakJet arsa ilanları parser'ı"""
     
     def __init__(self):
         super().__init__("arsa")
     
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """
-        Parse arsa-specific details from quick info and title.
-        
-        Expected format: "Tarla | 2.821 m²"
-        
-        Args:
-            quick_info: Quick info text
-            title: Listing title
-            
-        Returns:
-            Dictionary with arsa fields
-        """
+        """Arsa detaylarını quick info ve başlıktan parse et"""
         details = {
             'arsa_tipi': '',
             'metrekare': '',
             'imar_durumu': ''
         }
         
-        # Parse quick info
+        # Quick info'yu parse et
         if quick_info:
             try:
                 parts = [part.strip() for part in quick_info.split('|')]
@@ -40,18 +27,18 @@ class ArsaParser(BaseEmlakJetParser):
                 for part in parts:
                     part_lower = part.lower()
                     
-                    # Land type
+                    # Arsa tipi
                     if any(t in part_lower for t in ['tarla', 'arsa', 'arazi', 'bahçe', 'zeytinlik', 'bağ']):
                         details['arsa_tipi'] = part
                     
-                    # Square meters
+                    # Metrekare
                     elif 'm²' in part or 'm2' in part_lower:
                         details['metrekare'] = part
             
             except Exception:
                 pass
         
-        # Parse title for imar (zoning) status
+        # Başlıktan imar durumunu parse et
         if title:
             title_lower = title.lower()
             
@@ -63,7 +50,7 @@ class ArsaParser(BaseEmlakJetParser):
             elif 'tapulu' in title_lower:
                 details['imar_durumu'] = 'Tapulu'
             
-            # Check for kat karşılığı
+            # Kat karşılığı kontrolü
             if 'kat' in title_lower and 'karşılığı' in title_lower:
                 details['arsa_tipi'] = 'Kat Karşılığı Arsa'
         

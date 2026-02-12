@@ -19,7 +19,7 @@ import { Bar, Doughnut, Pie, Line } from 'react-chartjs-2';
 import { ScrapeResult } from '@/types';
 import { BarChart3, PieChart, TrendingUp, Building2, MapPin, DollarSign, Layers, Clock } from 'lucide-react';
 
-// Register Chart.js components
+// Chart.js bileşenlerini kaydet
 ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -33,7 +33,7 @@ ChartJS.register(
     Filler
 );
 
-// Chart colors
+// Grafik renkleri
 const COLORS = {
     blue: 'rgba(59, 130, 246, 0.8)',
     blueBg: 'rgba(59, 130, 246, 0.2)',
@@ -59,7 +59,7 @@ const CHART_PALETTE = [
     'rgba(34, 197, 94, 0.8)', 'rgba(239, 68, 68, 0.8)'
 ];
 
-// Common chart options
+// Ortak grafik seçenekleri
 const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -105,7 +105,7 @@ interface ResultsChartsProps {
     listingTypeFilter: string;
 }
 
-// Chart Card Component
+// Grafik Kartı Bileşeni
 function ChartCard({ title, icon: Icon, children, className = '' }: {
     title: string;
     icon: React.ElementType;
@@ -128,10 +128,10 @@ function ChartCard({ title, icon: Icon, children, className = '' }: {
 }
 
 export function ResultsCharts({ results, priceData, categoryFilter, listingTypeFilter }: ResultsChartsProps) {
-    // Check if price charts should be shown (only when BOTH category AND listing type filters are active)
+    // Fiyat grafikleri yalnızca kategori VE ilan tipi filtreleri seçiliyken gösterilir
     const showPriceCharts = categoryFilter !== 'all' && listingTypeFilter !== 'all';
 
-    // 1. City Distribution - Top 10 cities by listing count
+    // 1. Şehir dağılımı - İlan sayısına göre ilk 10
     const cityDistributionData = useMemo(() => {
         const cityCount: Record<string, number> = {};
         results.forEach(r => {
@@ -156,7 +156,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [results]);
 
-    // 2. Platform Comparison
+    // 2. Platform karşılaştırması
     const platformData = useMemo(() => {
         const platformCount: Record<string, number> = {};
         results.forEach(r => {
@@ -174,7 +174,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [results]);
 
-    // 3. Listing Type (Satılık vs Kiralık)
+    // 3. İlan tipi (Satılık vs Kiralık)
     const listingTypeData = useMemo(() => {
         const typeCount: Record<string, number> = {};
         results.forEach(r => {
@@ -193,7 +193,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [results]);
 
-    // 4. Category Distribution
+    // 4. Kategori dağılımı
     const categoryData = useMemo(() => {
         const catCount: Record<string, number> = {};
         results.forEach(r => {
@@ -211,7 +211,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [results]);
 
-    // 5. City Average Price - Top 10
+    // 5. Şehir ortalama fiyat - İlk 10
     const cityPriceData = useMemo(() => {
         const cityPrices: Record<string, number[]> = {};
         priceData.forEach(p => {
@@ -239,7 +239,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [priceData]);
 
-    // 6. Price Histogram - Quantile-based bins for meaningful distribution
+    // 6. Fiyat histogramı - Anlamlı dağılım için kantil tabanlı aralıklar
     const priceHistogramData = useMemo(() => {
         if (priceData.length === 0) {
             return { labels: [], datasets: [{ label: 'İlan Sayısı', data: [], backgroundColor: COLORS.blue }] };
@@ -248,7 +248,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         const prices = priceData.map(p => p.price).sort((a, b) => a - b);
         const n = prices.length;
 
-        // Dynamic formatting based on price value
+        // Fiyat değerine göre dinamik formatlama
         const formatPrice = (price: number): string => {
             if (price >= 1000000) {
                 return `${(price / 1000000).toFixed(1)}M`;
@@ -259,7 +259,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
             }
         };
 
-        // Calculate quantile edges (10 bins = 9 cut points)
+        // Kantil kenarlarını hesapla (10 aralık = 9 kesim noktası)
         const numBins = 10;
         const edges: number[] = [prices[0]]; // Start with min
 
@@ -269,7 +269,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         }
         edges.push(prices[n - 1]); // End with max
 
-        // Remove duplicate edges and create unique bins
+        // Tekrar eden kenarları kaldır
         const uniqueEdges: number[] = [edges[0]];
         for (let i = 1; i < edges.length; i++) {
             if (edges[i] > uniqueEdges[uniqueEdges.length - 1]) {
@@ -277,7 +277,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
             }
         }
 
-        // Create labels and count items in each bin
+        // Etiketler oluştur ve her aralıktaki öğeleri say
         const bins: number[] = [];
         const labels: string[] = [];
 
@@ -289,7 +289,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
             // Count items in this range
             let count = 0;
             if (i === uniqueEdges.length - 2) {
-                // Last bin includes upper edge
+                // Son aralık üst sınırı da içerir
                 count = prices.filter(p => p >= low && p <= high).length;
             } else {
                 count = prices.filter(p => p >= low && p < high).length;
@@ -309,7 +309,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [priceData]);
 
-    // 7. Platform Price Comparison
+    // 7. Platform fiyat karşılaştırması
     const platformPriceData = useMemo(() => {
         const platformPrices: Record<string, number[]> = {};
         priceData.forEach(p => {
@@ -335,12 +335,12 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [priceData]);
 
-    // 8. Scraping History (by date)
+    // 8. Tarama geçmişi (tarihe göre)
     const scrapingHistoryData = useMemo(() => {
         const dateCount: Record<string, number> = {};
         results.forEach(r => {
             if (r.date) {
-                const datePart = r.date.split(' ')[0]; // Get only date part
+                const datePart = r.date.split(' ')[0]; // Sadece tarih kısmını al
                 dateCount[datePart] = (dateCount[datePart] || 0) + (r.count || 0);
             }
         });
@@ -363,7 +363,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         };
     }, [results]);
 
-    // Pie/Doughnut options (no scales)
+    // Pasta grafik seçenekleri
     const pieOptions = {
         responsive: true,
         maintainAspectRatio: false,
@@ -380,7 +380,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         }
     };
 
-    // Horizontal bar options
+    // Yatay çubuk grafik seçenekleri
     const horizontalBarOptions = {
         ...commonOptions,
         indexAxis: 'y' as const,
@@ -390,7 +390,7 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         }
     };
 
-    // Line chart options
+    // Çizgi grafik seçenekleri
     const lineOptions = {
         ...commonOptions,
         plugins: {

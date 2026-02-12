@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Pydantic schemas for authentication
-"""
+"""Kimlik doğrulama Pydantic şemaları"""
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
@@ -33,7 +31,7 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    username: str  # Can be username or email
+    username: str  # Kullanıcı adı veya e-posta olabilir
     password: str
 
 
