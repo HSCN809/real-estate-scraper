@@ -76,5 +76,5 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV CHROME_HEADLESS=false
 ENV DISPLAY=:99
 
-# Baslat: Xvfb + Celery worker
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && celery -A celery_app worker --loglevel=info --concurrency=1 -Q scraping"]
+# Baslat: Xvfb + Celery worker (lock dosyasi temizlenerek)
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && celery -A celery_app worker --loglevel=info --concurrency=1 -Q scraping"]

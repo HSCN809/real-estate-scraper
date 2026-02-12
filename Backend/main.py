@@ -7,6 +7,8 @@ FastAPI application definition
 import sys
 import os
 import logging
+import time
+from contextlib import asynccontextmanager
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,24 +26,37 @@ from database.models import Base
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def init_database():
-    """Create database tables if they don't exist"""
-    Base.metadata.create_all(bind=engine)
+def init_database(max_retries=5, retry_delay=3):
+    """Create database tables if they don't exist (retry destekli)"""
+    for attempt in range(1, max_retries + 1):
+        try:
+            Base.metadata.create_all(bind=engine)
+            if DATABASE_URL and DATABASE_URL.startswith('postgresql'):
+                logger.info("PostgreSQL veritabanina baglandi")
+            else:
+                logger.info("SQLite veritabani kullaniliyor")
+            return
+        except Exception as e:
+            if attempt < max_retries:
+                logger.warning(f"Veritabani baglantisi basarisiz (deneme {attempt}/{max_retries}): {e}")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Veritabani baglantisi {max_retries} denemede kurulamadi: {e}")
+                raise
 
-    # Log database type
-    if DATABASE_URL and DATABASE_URL.startswith('postgresql'):
-        logger.info("PostgreSQL veritabanina baglandi")
-    else:
-        logger.info("SQLite veritabani kullaniliyor")
-
-# Initialize database on startup
-init_database()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_database()
+    yield
+    # Shutdown
 
 # Initialize FastAPI App
 app = FastAPI(
     title="Real Estate Scraper API",
     description="API for EmlakJet and HepsiEmlak scrapers",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS
