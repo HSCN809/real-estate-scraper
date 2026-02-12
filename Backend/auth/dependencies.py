@@ -3,8 +3,7 @@
 FastAPI dependencies for authentication
 """
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -12,17 +11,15 @@ from database.connection import get_db
 from database.models import User
 from .security import decode_token
 
-# HTTP Bearer token scheme
-security = HTTPBearer()
-optional_security = HTTPBearer(auto_error=False)
+COOKIE_NAME = "session_token"
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Dependency to get the current authenticated user.
+    Dependency to get the current authenticated user from HTTP-only cookie.
     Raises HTTPException if token is invalid or user not found.
     """
     credentials_exception = HTTPException(
@@ -31,7 +28,11 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token = credentials.credentials
+    # Get token from cookie
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise credentials_exception
+
     payload = decode_token(token)
 
     if payload is None:
@@ -71,14 +72,15 @@ async def get_current_active_admin(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    request: Request,
     db: Session = Depends(get_db)
 ) -> Optional[User]:
-    """Optional authentication - returns None if no token provided"""
-    if credentials is None:
+    """Optional authentication - returns None if no valid cookie"""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
         return None
 
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     if payload is None or payload.get("type") != "access":
         return None
 

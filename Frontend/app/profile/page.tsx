@@ -10,7 +10,7 @@ import { User, Lock, Save, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-
 import * as authApi from '@/lib/auth-api';
 
 export default function ProfilePage() {
-    const { user, updateUser, getAccessToken } = useAuth();
+    const { user, updateUser } = useAuth();
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -35,10 +35,7 @@ export default function ProfilePage() {
         setIsUpdatingProfile(true);
 
         try {
-            const token = getAccessToken();
-            if (!token) throw new Error('Oturum bulunamadı');
-
-            const updatedUser = await authApi.updateProfile(token, {
+            const updatedUser = await authApi.updateProfile({
                 username: profileData.username !== user?.username ? profileData.username : undefined,
                 email: profileData.email !== user?.email ? profileData.email : undefined,
             });
@@ -82,10 +79,7 @@ export default function ProfilePage() {
         setIsChangingPassword(true);
 
         try {
-            const token = getAccessToken();
-            if (!token) throw new Error('Oturum bulunamadı');
-
-            await authApi.changePassword(token, {
+            await authApi.changePassword({
                 current_password: passwordData.current_password,
                 new_password: passwordData.new_password,
             });

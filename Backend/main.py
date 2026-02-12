@@ -59,10 +59,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS - explicit origins required for cookie credentials
+ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

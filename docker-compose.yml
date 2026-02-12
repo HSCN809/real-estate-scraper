@@ -4,15 +4,15 @@ services:
     image: postgres:16-alpine
     container_name: real-estate-db
     environment:
-      POSTGRES_USER: scraper
-      POSTGRES_PASSWORD: scraper_password
-      POSTGRES_DB: real_estate
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scraper -d real_estate"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,18 +44,23 @@ services:
       dockerfile: Dockerfile
     container_name: real-estate-api
     ports:
-      - "8000:8000"
+      - "${FASTAPI_PORT:-8000}:8000"
     volumes:
       # Log dosyalari
       - ./Backend/logs:/app/logs
       # Export ciktilari
       - ./Backend/outputs:/app/outputs
     environment:
-      - FASTAPI_HOST=0.0.0.0
-      - FASTAPI_PORT=8000
-      - DATABASE_URL=postgresql://scraper:scraper_password@db:5432/real_estate
-      - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=INFO
+      - FASTAPI_HOST=${FASTAPI_HOST}
+      - FASTAPI_PORT=${FASTAPI_PORT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_DAYS=${ACCESS_TOKEN_EXPIRE_DAYS}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - LOG_LEVEL=${LOG_LEVEL}
     depends_on:
       db:
         condition: service_healthy
@@ -85,10 +90,10 @@ services:
       # Export ciktilari
       - ./Backend/outputs:/app/outputs
     environment:
-      - DATABASE_URL=postgresql://scraper:scraper_password@db:5432/real_estate
-      - REDIS_URL=redis://redis:6379/0
-      - CHROME_HEADLESS=false
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CHROME_HEADLESS=${CHROME_HEADLESS}
+      - LOG_LEVEL=${LOG_LEVEL}
     depends_on:
       db:
         condition: service_healthy
@@ -111,9 +116,9 @@ services:
     ports:
       - "5555:5555"
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=${REDIS_URL}
       - FLOWER_PORT=5555
-      - FLOWER_BASIC_AUTH=admin:admin123
+      - FLOWER_BASIC_AUTH=${FLOWER_BASIC_AUTH}
     depends_on:
       redis:
         condition: service_healthy
@@ -137,7 +142,7 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NODE_ENV=development
       - WATCHPACK_POLLING=true
     command: sh -c "npm install && npm run dev"

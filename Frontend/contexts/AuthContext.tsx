@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, LoginCredentials, RegisterData, LoginResponse } from '@/types/auth';
+import type { User, LoginCredentials, RegisterData } from '@/types/auth';
 import * as authApi from '@/lib/auth-api';
 
 interface AuthContextType {
@@ -11,14 +11,12 @@ interface AuthContextType {
     isAuthenticated: boolean;
     login: (credentials: LoginCredentials) => Promise<void>;
     register: (data: RegisterData) => Promise<void>;
-    logout: () => void;
+    logout: () => Promise<void>;
     updateUser: (user: User) => void;
-    getAccessToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -26,31 +24,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
-    const saveAuth = (response: LoginResponse) => {
-        sessionStorage.setItem(TOKEN_KEY, response.access_token);
-        sessionStorage.setItem(USER_KEY, JSON.stringify(response.user));
-        setUser(response.user);
+    const saveUser = (user: User) => {
+        sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+        setUser(user);
     };
 
     const clearAuth = useCallback(() => {
-        sessionStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(USER_KEY);
         setUser(null);
-    }, []);
-
-    const getAccessToken = useCallback((): string | null => {
-        if (typeof window === 'undefined') return null;
-        return sessionStorage.getItem(TOKEN_KEY);
     }, []);
 
     // Initialize auth state on mount
     useEffect(() => {
         const initAuth = async () => {
-            const token = sessionStorage.getItem(TOKEN_KEY);
             const storedUser = sessionStorage.getItem(USER_KEY);
 
-            if (token && storedUser) {
-                // Önce mevcut kullanıcıyı yükle (hızlı yükleme için)
+            // Layer 1: Instant restore from sessionStorage (fast UI paint)
+            if (storedUser) {
                 try {
                     const parsedUser = JSON.parse(storedUser);
                     setUser(parsedUser);
@@ -59,17 +49,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setIsLoading(false);
                     return;
                 }
-
-                // Arka planda token'ı doğrula
-                try {
-                    const freshUser = await authApi.getCurrentUser(token);
-                    setUser(freshUser);
-                    sessionStorage.setItem(USER_KEY, JSON.stringify(freshUser));
-                } catch {
-                    // Token geçersizse oturumu temizle
-                    clearAuth();
-                }
             }
+
+            // Layer 2: Validate against backend (cookie sent automatically)
+            try {
+                const freshUser = await authApi.getCurrentUser();
+                saveUser(freshUser);
+            } catch {
+                // Cookie invalid or missing
+                clearAuth();
+            }
+
             setIsLoading(false);
         };
 
@@ -77,18 +67,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [clearAuth]);
 
     const login = async (credentials: LoginCredentials) => {
-        const response = await authApi.login(credentials);
-        saveAuth(response);
+        const user = await authApi.login(credentials);
+        saveUser(user);
         router.push('/');
     };
 
     const register = async (data: RegisterData) => {
-        const response = await authApi.register(data);
-        saveAuth(response);
+        const user = await authApi.register(data);
+        saveUser(user);
         router.push('/');
     };
 
-    const logout = useCallback(() => {
+    const logout = useCallback(async () => {
+        try {
+            await authApi.logout();
+        } catch {
+            // Best-effort: even if API call fails, clear local state
+        }
         clearAuth();
         router.push('/login');
     }, [clearAuth, router]);
@@ -108,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 register,
                 logout,
                 updateUser,
-                getAccessToken,
             }}
         >
             {children}

@@ -16,7 +16,7 @@ class UserCreate(BaseModel):
     @field_validator('username')
     @classmethod
     def username_alphanumeric(cls, v):
-        if not re.match(r'^[a-zA-Z0-9_]+$', v):
+        if not re.match(r'^[a-zA-ZçÇğĞıİöÖşŞüÜ0-9_]+$', v):
             raise ValueError('Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir')
         return v
 
@@ -77,6 +77,6 @@ class UpdateProfileRequest(BaseModel):
     @field_validator('username')
     @classmethod
     def username_alphanumeric(cls, v):
-        if v is not None and not re.match(r'^[a-zA-Z0-9_]+$', v):
+        if v is not None and not re.match(r'^[a-zA-ZçÇğĞıİöÖşŞüÜ0-9_]+$', v):
             raise ValueError('Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir')
         return v

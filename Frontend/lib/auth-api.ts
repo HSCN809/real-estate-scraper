@@ -1,7 +1,6 @@
 import type {
     LoginCredentials,
     RegisterData,
-    LoginResponse,
     User,
     ChangePasswordData,
     UpdateProfileData
@@ -19,10 +18,11 @@ class AuthError extends Error {
     }
 }
 
-export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
+export async function login(credentials: LoginCredentials): Promise<User> {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(credentials),
     });
 
@@ -34,10 +34,11 @@ export async function login(credentials: LoginCredentials): Promise<LoginRespons
     return response.json();
 }
 
-export async function register(data: RegisterData): Promise<LoginResponse> {
+export async function register(data: RegisterData): Promise<User> {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data),
     });
 
@@ -49,9 +50,9 @@ export async function register(data: RegisterData): Promise<LoginResponse> {
     return response.json();
 }
 
-export async function getCurrentUser(token: string): Promise<User> {
+export async function getCurrentUser(): Promise<User> {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
     });
 
     if (!response.ok) {
@@ -61,13 +62,11 @@ export async function getCurrentUser(token: string): Promise<User> {
     return response.json();
 }
 
-export async function updateProfile(token: string, data: UpdateProfileData): Promise<User> {
+export async function updateProfile(data: UpdateProfileData): Promise<User> {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data),
     });
 
@@ -79,13 +78,11 @@ export async function updateProfile(token: string, data: UpdateProfileData): Pro
     return response.json();
 }
 
-export async function changePassword(token: string, data: ChangePasswordData): Promise<void> {
+export async function changePassword(data: ChangePasswordData): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data),
     });
 
@@ -93,4 +90,11 @@ export async function changePassword(token: string, data: ChangePasswordData): P
         const error = await response.json().catch(() => ({ detail: 'Şifre değiştirme başarısız' }));
         throw new AuthError(error.detail || 'Şifre değiştirme başarısız', response.status);
     }
+}
+
+export async function logout(): Promise<void> {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+    });
 }

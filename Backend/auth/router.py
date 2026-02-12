@@ -3,25 +3,53 @@
 Authentication API endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime
 
 from database.connection import get_db
 from database.models import User
-from .security import verify_password, get_password_hash, create_access_token
+from .security import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_DAYS
 from .dependencies import get_current_user
 from .schemas import (
-    UserCreate, UserLogin, UserResponse, TokenResponse,
+    UserCreate, UserLogin, UserResponse,
     ChangePasswordRequest, UpdateProfileRequest
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+COOKIE_NAME = "session_token"
+COOKIE_MAX_AGE = ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # seconds
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+
+def _set_auth_cookie(response: Response, token: str):
+    """Set HTTP-only auth cookie on response.
+    SameSite=none requires Secure=true. Chromium treats localhost as secure context.
+    """
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=COOKIE_MAX_AGE,
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response: Response):
+    """Clear auth cookie from response"""
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+    )
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
     """Register a new user"""
     # Check if username exists
     existing = db.query(User).filter(
@@ -51,19 +79,17 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    # Generate token
+    # Generate token and set cookie
     token_data = {"sub": user.id, "username": user.username}
     access_token = create_access_token(token_data)
+    _set_auth_cookie(response, access_token)
 
-    return TokenResponse(
-        access_token=access_token,
-        user=UserResponse.model_validate(user)
-    )
+    return UserResponse.model_validate(user)
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    """Authenticate user and return token"""
+@router.post("/login", response_model=UserResponse)
+async def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Authenticate user and return token via cookie"""
     # Find user by username or email
     user = db.query(User).filter(
         or_(User.username == credentials.username, User.email == credentials.username)
@@ -85,14 +111,12 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     user.last_login = datetime.utcnow()
     db.commit()
 
-    # Generate token
+    # Generate token and set cookie
     token_data = {"sub": user.id, "username": user.username}
     access_token = create_access_token(token_data)
+    _set_auth_cookie(response, access_token)
 
-    return TokenResponse(
-        access_token=access_token,
-        user=UserResponse.model_validate(user)
-    )
+    return UserResponse.model_validate(user)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -155,3 +179,10 @@ async def change_password(
     db.commit()
 
     return {"message": "Şifre başarıyla değiştirildi"}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Logout user by clearing auth cookie"""
+    _clear_auth_cookie(response)
+    return {"message": "Oturum kapatıldı"}
