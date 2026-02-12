@@ -119,9 +119,9 @@ class EmlakJetScraper(BaseScraper):
             
             for link in location_links:
                 try:
-                    location_name = link.text.strip()
+                    location_name = link.text.strip().split()[0]
                     location_url = link.get_attribute("href")
-                    
+
                     if location_name and location_url:
                         location_options.append({
                             'name': location_name,
@@ -385,13 +385,10 @@ class EmlakJetScraper(BaseScraper):
 
             # Step 1: Select provinces
             if cities:
-                # İsim eşleştirme: sidebar'daki isimler "İstanbul Satılık Ev" formatında,
-                # frontend'den gelen "İstanbul" — startswith ile eşleştir
                 api_indices = []
                 cities_lower = [c.lower() for c in cities]
                 for idx, p in enumerate(all_provinces, 1):
-                    province_name = p['name'].split(' ')[0].lower()  # "İstanbul Satılık Ev" → "istanbul"
-                    if province_name in cities_lower:
+                    if p['name'].lower() in cities_lower:
                         api_indices.append(idx)
 
                 if not api_indices:
