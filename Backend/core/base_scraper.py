@@ -538,14 +538,15 @@ class BaseScraper(ABC):
         
         return listings
     
-    def scrape_pages(self, target_url: str, max_pages: int) -> bool:
+    def scrape_pages(self, target_url: str, max_pages: int, on_page_scraped=None) -> bool:
         """
         Scrape multiple pages.
-        
+
         Args:
             target_url: Base URL for scraping
             max_pages: Maximum number of pages to scrape
-            
+            on_page_scraped: Optional callback called after each page with the new listings
+
         Returns:
             True if should skip (no listings), False otherwise
         """
@@ -591,10 +592,14 @@ class BaseScraper(ABC):
                 # Scrape page
                 listings = self.scrape_current_page()
                 self.all_listings.extend(listings)
-                
+
+                # Her sayfa sonrası callback (DB'ye anında kaydetme için)
+                if on_page_scraped and listings:
+                    on_page_scraped(listings)
+
                 if current_page == 1:
                     first_page_count = len(listings)
-                
+
                 print(f"   ✅ Sayfa {current_page}: {len(listings)} ilan bulundu")
                 
             except Exception as e:
@@ -605,14 +610,3 @@ class BaseScraper(ABC):
         # Skip if no listings on first page
         return first_page_count == 0 and max_pages == 1
     
-    # =========================================================================
-    # MAIN SCRAPING FLOW
-    # =========================================================================
-    
-    @abstractmethod
-    def start_scraping(self) -> None:
-        """
-        Main scraping entry point.
-        Must be implemented by each scraper.
-        """
-        pass

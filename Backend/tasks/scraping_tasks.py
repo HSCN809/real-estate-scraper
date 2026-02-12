@@ -233,23 +233,7 @@ def scrape_hepsiemlak_task(
             stop_checker=stop_checker
         )
 
-        # Update session with results
-        if scrape_session:
-            total_listings = getattr(scraper, 'total_scraped_count', 0)
-            new_listings = getattr(scraper, 'new_listings_count', 0)
-            duplicate_listings = getattr(scraper, 'duplicate_count', 0)
-
-            crud.update_scrape_session(
-                db,
-                scrape_session.id,
-                total_listings=total_listings,
-                new_listings=new_listings,
-                duplicate_listings=duplicate_listings
-            )
-            crud.complete_scrape_session(db, scrape_session.id, status="completed")
-            db.commit()
-
-            logger.info(f"[Task {task_id}] Scraping completed: total={total_listings}, new={new_listings}")
+        _final_status = "completed"
 
         progress_manager.complete(
             message=f"Tarama tamamlandı! {getattr(scraper, 'total_scraped_count', 0)} ilan bulundu."
@@ -266,10 +250,7 @@ def scrape_hepsiemlak_task(
     except StopRequested:
         logger.info(f"[Task {task_id}] Task stopped by user request")
         progress_manager.set_stopped_early()
-
-        if scrape_session and db:
-            crud.complete_scrape_session(db, scrape_session.id, status="stopped")
-            db.commit()
+        _final_status = "stopped"
 
         return {
             "status": "stopped",
@@ -280,27 +261,45 @@ def scrape_hepsiemlak_task(
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
         progress_manager.fail("Zaman limiti aşıldı")
-
-        if scrape_session and db:
-            crud.complete_scrape_session(db, scrape_session.id, status="timeout")
-            db.commit()
-
+        _final_status = "timeout"
         raise
 
     except Exception as e:
         logger.error(f"[Task {task_id}] Task failed with error: {e}", exc_info=True)
         progress_manager.fail(str(e))
-
-        if scrape_session and db:
-            crud.complete_scrape_session(db, scrape_session.id, status="failed", error_message=str(e))
-            db.commit()
-
+        _final_status = "failed"
+        _error_msg = str(e)
         raise
 
     finally:
-        if db:
-            db.close()
-        manager.stop()
+        # Her durumda (SIGTERM dahil) session'ı kapat ve kaydet
+        try:
+            if scrape_session and db:
+                total_listings = getattr(scraper, 'total_scraped_count', 0) if scraper else 0
+                new_listings = getattr(scraper, 'new_listings_count', 0) if scraper else 0
+                duplicate_listings = getattr(scraper, 'duplicate_count', 0) if scraper else 0
+
+                crud.update_scrape_session(
+                    db, scrape_session.id,
+                    total_listings=total_listings,
+                    new_listings=new_listings,
+                    duplicate_listings=duplicate_listings
+                )
+                status = locals().get('_final_status', 'terminated')
+                error_msg = locals().get('_error_msg', None)
+                crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
+                db.commit()
+                logger.info(f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})")
+        except Exception as save_err:
+            logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        finally:
+            if db:
+                db.close()
+            manager.stop()
 
 
 @celery_app.task(bind=True, name="scrape_emlakjet")
@@ -405,22 +404,10 @@ def scrape_emlakjet_task(
             stop_checker=stop_checker,
         )
 
-        # Save listings to DB
-        total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
-            db, scraper, category, listing_type, alt_kategori, scrape_session.id
-        )
+        _final_status = "completed"
 
-        # Update session with results
-        crud.update_scrape_session(
-            db, scrape_session.id,
-            total_listings=total_listings,
-            new_listings=new_count,
-            duplicate_listings=unchanged_count
-        )
-        crud.complete_scrape_session(db, scrape_session.id, status="completed")
-        db.commit()
-
-        logger.info(f"[Task {task_id}] Scraping completed: total={total_listings}, new={new_count}")
+        total_listings = len(getattr(scraper, 'all_listings', []))
+        logger.info(f"[Task {task_id}] Scraping completed: {total_listings} listings collected")
         progress_manager.complete(
             message=f"EmlakJet taraması tamamlandı! {total_listings} ilan bulundu."
         )
@@ -429,28 +416,12 @@ def scrape_emlakjet_task(
             "status": "completed",
             "task_id": task_id,
             "total_listings": total_listings,
-            "new_listings": new_count,
-            "duplicates": unchanged_count
         }
 
     except StopRequested:
         logger.info(f"[Task {task_id}] Task stopped by user")
         progress_manager.set_stopped_early()
-
-        # Save whatever we have so far to DB
-        if scraper and db and scrape_session:
-            total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
-                db, scraper, category, listing_type, alt_kategori, scrape_session.id
-            )
-            crud.update_scrape_session(
-                db, scrape_session.id,
-                total_listings=total_listings,
-                new_listings=new_count,
-                duplicate_listings=unchanged_count
-            )
-            crud.complete_scrape_session(db, scrape_session.id, status="stopped")
-            db.commit()
-            logger.info(f"[Task {task_id}] Saved {total_listings} listings before stop")
+        _final_status = "stopped"
 
         return {
             "status": "stopped",
@@ -461,94 +432,42 @@ def scrape_emlakjet_task(
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
         progress_manager.fail("Zaman limiti aşıldı")
-
-        if scraper and db and scrape_session:
-            total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
-                db, scraper, category, listing_type, alt_kategori, scrape_session.id
-            )
-            crud.update_scrape_session(
-                db, scrape_session.id,
-                total_listings=total_listings,
-                new_listings=new_count,
-                duplicate_listings=unchanged_count
-            )
-            crud.complete_scrape_session(db, scrape_session.id, status="timeout")
-            db.commit()
-
+        _final_status = "timeout"
         raise
 
     except Exception as e:
         logger.error(f"[Task {task_id}] Task failed: {e}", exc_info=True)
         progress_manager.fail(str(e))
-
-        if scraper and db and scrape_session:
-            try:
-                total_listings, new_count, unchanged_count = _save_emlakjet_listings_to_db(
-                    db, scraper, category, listing_type, alt_kategori, scrape_session.id
-                )
-                crud.update_scrape_session(
-                    db, scrape_session.id,
-                    total_listings=total_listings,
-                    new_listings=new_count,
-                    duplicate_listings=unchanged_count
-                )
-                crud.complete_scrape_session(db, scrape_session.id, status="failed", error_message=str(e))
-                db.commit()
-            except Exception:
-                db.rollback()
-
+        _final_status = "failed"
+        _error_msg = str(e)
         raise
 
     finally:
-        if db:
-            db.close()
-        manager.stop()
-
-
-def _save_emlakjet_listings_to_db(db, scraper, category, listing_type, alt_kategori, scrape_session_id):
-    """
-    EmlakJet scraper'ın all_listings verisini DB'ye kaydet.
-    Returns (total_count, new_count, unchanged_count)
-    """
-    from database import crud
-
-    all_listings = getattr(scraper, 'all_listings', [])
-    if not all_listings:
-        return 0, 0, 0
-
-    new_count = 0
-    updated_count = 0
-    unchanged_count = 0
-
-    for data in all_listings:
+        # Her durumda (SIGTERM dahil) session'ı kapat
+        # Listing'ler zaten sayfa bazlı kaydedildi, tekrar kaydetmeye gerek yok
         try:
-            listing, status = crud.upsert_listing(
-                db,
-                data=data,
-                platform="emlakjet",
-                kategori=category,
-                ilan_tipi=listing_type,
-                alt_kategori=alt_kategori,
-                scrape_session_id=scrape_session_id
-            )
-            if status == 'created':
-                new_count += 1
-            elif status == 'updated':
-                updated_count += 1
-            elif status == 'unchanged':
-                unchanged_count += 1
-        except Exception as e:
-            logger.warning(f"Failed to save EmlakJet listing: {e}")
-            continue
+            if scrape_session and db:
+                total_listings = len(getattr(scraper, 'all_listings', [])) if scraper else 0
 
-    try:
-        db.commit()
-        logger.info(f"EmlakJet DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged")
-    except Exception as e:
-        logger.error(f"EmlakJet DB commit failed: {e}")
-        db.rollback()
-
-    return len(all_listings), new_count, unchanged_count
+                crud.update_scrape_session(
+                    db, scrape_session.id,
+                    total_listings=total_listings,
+                )
+                status = locals().get('_final_status', 'terminated')
+                error_msg = locals().get('_error_msg', None)
+                crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
+                db.commit()
+                logger.info(f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})")
+        except Exception as save_err:
+            logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        finally:
+            if db:
+                db.close()
+            manager.stop()
 
 
 class StopRequested(Exception):

@@ -165,16 +165,26 @@ def create_listing(
 
     # Get or create location
     il = data.get('il')
+    ilce = data.get('ilce')
+    mahalle = data.get('mahalle')
+
     if not il or il == 'Belirtilmemiş':
         # Fallback: lokasyon alanından parse et
         lokasyon = data.get('lokasyon', '')
         if lokasyon:
-            il = lokasyon.split(',')[0].strip()
+            # EmlakJet formatı: "İstanbul / Kadıköy / Caferağa"
+            # HepsiEmlak formatı: "İstanbul, Kadıköy"
+            if '/' in lokasyon:
+                parts = [p.strip() for p in lokasyon.split('/')]
+            else:
+                parts = [p.strip() for p in lokasyon.split(',')]
+            il = parts[0] if len(parts) > 0 else None
+            if not ilce and len(parts) > 1:
+                ilce = parts[1]
+            if not mahalle and len(parts) > 2:
+                mahalle = parts[2]
     if not il:
         il = 'Belirtilmemiş'
-
-    ilce = data.get('ilce')
-    mahalle = data.get('mahalle')
 
     location = get_or_create_location(db, il, ilce, mahalle)
 
@@ -736,11 +746,8 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
                     "turistik_isletme": "Turistik İşletme", "turistik_tesis": "Turistik Tesis"}
     listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
 
-    # Get listings grouped by city, platform, category, listing_type, alt_kategori
+    # İl + İlçe bazında gruplama (mahalle aggregate ediliyor)
     results = []
-
-    # Query distinct combinations
-    from sqlalchemy import distinct
 
     combinations = db.query(
         Location.il,
@@ -791,7 +798,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
             "file_size": 0,
             "file_size_mb": 0,
             "status": "completed",
-            "files": []  # No files since data is in DB
+            "files": []
         })
 
     return results

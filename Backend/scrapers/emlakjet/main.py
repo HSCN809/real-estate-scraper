@@ -474,7 +474,46 @@ class EmlakJetScraper(BaseScraper):
                         url_max_pages = self.get_max_pages(target['url'])
                         print(f"📊 {url_max_pages} sayfa mevcut, tamamı taranacak.")
 
-                        should_skip = self.scrape_pages(target['url'], url_max_pages)
+                        # Her sayfa sonrası DB'ye anında kaydetme callback'i
+                        def make_page_callback(prov_name, dist_name, tgt):
+                            def _on_page_scraped(page_listings):
+                                # Il/ilçe/mahalle bilgisini ekle
+                                for listing in page_listings:
+                                    listing['il'] = prov_name
+                                    if tgt['type'] == 'mahalle':
+                                        listing['ilce'] = dist_name
+                                        listing['mahalle'] = tgt['label'].split('/')[-1].strip()
+                                    elif tgt['type'] == 'ilce':
+                                        listing['ilce'] = dist_name
+
+                                # DB'ye anında kaydet
+                                if self.db:
+                                    from database import crud
+                                    for data in page_listings:
+                                        try:
+                                            crud.upsert_listing(
+                                                self.db,
+                                                data=data,
+                                                platform="emlakjet",
+                                                kategori=self.category,
+                                                ilan_tipi=self.listing_type,
+                                                alt_kategori=self.subtype_name,
+                                                scrape_session_id=self.scrape_session_id
+                                            )
+                                        except Exception as e:
+                                            logger.warning(f"Sayfa bazlı DB kayıt hatası: {e}")
+                                    try:
+                                        self.db.commit()
+                                        logger.info(f"💾 {len(page_listings)} ilan anında DB'ye kaydedildi")
+                                    except Exception as e:
+                                        logger.error(f"Sayfa bazlı DB commit hatası: {e}")
+                                        self.db.rollback()
+                            return _on_page_scraped
+
+                        page_callback = make_page_callback(province['name'], district['name'], target)
+
+                        listings_before = len(self.all_listings)
+                        should_skip = self.scrape_pages(target['url'], url_max_pages, on_page_scraped=page_callback)
 
                         # Progress tracking
                         if progress_callback:
@@ -506,12 +545,8 @@ class EmlakJetScraper(BaseScraper):
             if self._is_listing_limit_reached():
                 print(f"\n🎯 İlan limitine ulaşıldı: {len(self.all_listings)} / {self._max_listings}")
             
-            # Save data (only Excel)
+            # DB kaydetme sayfa bazlı yapılıyor
             if self.all_listings:
-                self.exporter.save_excel(
-                    self.all_listings,
-                    prefix=self.get_file_prefix()
-                )
                 print(f"\n✅ Scraping tamamlandı! Toplam {len(self.all_listings)} ilan bulundu.")
             else:
                 print("\n❌ Hiç ilan bulunamadı!")
@@ -520,138 +555,3 @@ class EmlakJetScraper(BaseScraper):
             logger.error(f"API Scraping error: {e}")
             raise e
 
-    def start_scraping(self):
-        """Main scraping entry point - Sequential city processing"""
-        print(f"\n🚀 EmlakJet {self.category.capitalize()} Scraper başlatılıyor")
-        
-        try:
-            # Step 1: Select provinces
-            provinces = self.select_provinces()
-            if not provinces:
-                print("❌ İl seçilmedi!")
-                return
-            
-            # Get page count from user (applies to all)
-            user_max_pages = self.get_user_page_count()
-            if user_max_pages is None:
-                return
-            
-            # Step 2: Process each province sequentially
-            for prov_idx, province in enumerate(provinces, 1):
-                # Get listing count for this province
-                listing_count = self.get_listing_count(province['url'])
-                
-                print("\n" + "=" * 70)
-                print(f"🏙️  İL {prov_idx}/{len(provinces)}: {province['name']} (Toplam İlan: {listing_count})")
-                print("=" * 70)
-                
-                # Select districts for this province
-                districts, process_neighborhoods = self.select_districts_for_province(province)
-                if not districts:
-                    print(f"⏭️  {province['name']} atlandı.")
-                    continue
-                
-                # Process each district
-                for dist_idx, district in enumerate(districts, 1):
-                    # Check if this is province-level (no district selection)
-                    if district.get('url') == province.get('url'):
-                        # Scrape entire province directly
-                        targets = [{'url': province['url'], 'label': province['name'], 'type': 'il'}]
-                    elif process_neighborhoods:
-                        # Select neighborhoods for this district
-                        print(f"\n📍 İlçe {dist_idx}/{len(districts)}: {district['name']}")
-                        neighborhoods = self.select_neighborhoods_for_district(district)
-                        if not neighborhoods:
-                            continue
-                        
-                        # Check if district-level or neighborhood-level
-                        if len(neighborhoods) == 1 and neighborhoods[0].get('url') == district.get('url'):
-                            targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
-                        else:
-                            targets = [{'url': n['url'], 'label': f"{n.get('il', '')} / {n.get('ilce', '')} / {n['name']}", 'type': 'mahalle'} for n in neighborhoods]
-                    else:
-                        # Scrape district directly without neighborhood selection
-                        targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
-                    
-                    # Scrape targets
-                    for target in targets:
-                        print(f"\n📍 Taranıyor: {target['label']}")
-                        
-                        url_max_pages = self.get_max_pages(target['url'])
-                        max_pages = min(user_max_pages, url_max_pages)
-                        print(f"📊 {url_max_pages} sayfa mevcut, {max_pages} sayfa taranacak.")
-                        
-                        should_skip = self.scrape_pages(target['url'], max_pages)
-                        if should_skip:
-                            print("⏭️  Bu lokasyon atlandı.")
-            
-            # Save data (only Excel)
-            if self.all_listings:
-                self.exporter.save_excel(
-                    self.all_listings,
-                    prefix=f"emlakjet_{self.category}_ilanlari"
-                )
-                print(f"\n✅ Scraping tamamlandı! Toplam {len(self.all_listings)} ilan bulundu.")
-            else:
-                print("\n❌ Hiç ilan bulunamadı!")
-            
-        except KeyboardInterrupt:
-            print("\n⏹️  İşlem kullanıcı tarafından iptal edildi.")
-            if self.all_listings:
-                self.exporter.save_excel(self.all_listings, prefix=f"emlakjet_{self.category}_partial")
-                print(f"💾 {len(self.all_listings)} ilan kaydedildi.")
-        except Exception as e:
-            logger.error(f"Scraping error: {e}")
-            print(f"❌ Scraping sırasında hata: {e}")
-
-
-def main():
-    """Main entry point for EmlakJet scraper"""
-    print("\n" + "=" * 60)
-    print("🏠 EMLAKJET SCRAPER")
-    print("=" * 60)
-    
-    # Category selection
-    categories = ['konut', 'arsa', 'isyeri', 'turistik_tesis']
-    print("\nKategori Seçin:")
-    for i, cat in enumerate(categories, 1):
-        print(f"{i}. {cat.capitalize()}")
-    print(f"{len(categories) + 1}. Çıkış")
-    
-    try:
-        choice = int(input(f"\nSeçiminiz (1-{len(categories) + 1}): "))
-        if choice == len(categories) + 1:
-            print("👋 Çıkış yapılıyor...")
-            return
-        
-        if 1 <= choice <= len(categories):
-            category = categories[choice - 1]
-        else:
-            print("❌ Geçersiz seçim!")
-            return
-    except ValueError:
-        print("❌ Geçersiz giriş!")
-        return
-    
-    # Start scraper
-    manager = DriverManager()
-    
-    try:
-        driver = manager.start()
-        
-        config = get_emlakjet_config()
-        base_url = config.base_url + config.categories['satilik'].get(category, '')
-        
-        scraper = EmlakJetScraper(driver, base_url, category)
-        scraper.start_scraping()
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        print(f"❌ Hata: {e}")
-    
-    finally:
-        manager.stop()
-
-
-if __name__ == "__main__":
-    main()

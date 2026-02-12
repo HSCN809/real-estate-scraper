@@ -842,6 +842,19 @@ class HepsiemlakScraper(BaseScraper):
                     city_listings.extend(page_listings)
                     print(f"   ✓ {len(page_listings)} ilan işlendi")
 
+                    # Her sayfa sonrası DB'ye anında kaydet
+                    if page_listings and self.db:
+                        new_c, updated_c, unchanged_c = save_listings_to_db(
+                            self.db,
+                            page_listings,
+                            platform="hepsiemlak",
+                            kategori=self.category,
+                            ilan_tipi=self.listing_type,
+                            alt_kategori=self.subtype_name,
+                            scrape_session_id=self.scrape_session_id
+                        )
+                        logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
+
                 if page < pages_to_scrape:
                     self.random_medium_wait()  # Stealth: sayfalar arası
 
@@ -1037,6 +1050,19 @@ class HepsiemlakScraper(BaseScraper):
                         district_listings.extend(page_listings)
                         print(f"   ✓ {len(page_listings)} ilan işlendi")
 
+                        # Her sayfa sonrası DB'ye anında kaydet
+                        if page_listings and self.db:
+                            new_c, updated_c, unchanged_c = save_listings_to_db(
+                                self.db,
+                                page_listings,
+                                platform="hepsiemlak",
+                                kategori=self.category,
+                                ilan_tipi=self.listing_type,
+                                alt_kategori=self.subtype_name,
+                                scrape_session_id=self.scrape_session_id
+                            )
+                            logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
+
                     if page < pages_to_scrape:
                         self.random_medium_wait()
 
@@ -1069,59 +1095,11 @@ class HepsiemlakScraper(BaseScraper):
         return all_results
 
     def _save_district_data(self, city: str, district: str, listings: List[Dict[str, Any]]):
-        """Her ilçe için ayrı klasörde dosya kaydet"""
+        """İlçe istatistiklerini güncelle (DB kaydetme sayfa bazlı yapılıyor)"""
         if not listings:
             return
-
-        # Türkçe karakter normalizasyonu
-        import unicodedata
-
-        def normalize_name(name: str) -> str:
-            """Klasör adı için normalize et"""
-            name = unicodedata.normalize('NFC', name)
-            replacements = {
-                'İ': 'i', 'I': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c',
-                'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c'
-            }
-            for tr, en in replacements.items():
-                name = name.replace(tr, en)
-            return name.lower().replace(' ', '_')
-
-        city_slug = normalize_name(city)
-        district_slug = normalize_name(district)
-
-        # Klasör yapısı: .../satilik/konut/daire/ankara/cankaya/
-        subfolder = f"{city_slug}/{district_slug}"
-
-        # Dosya prefix: hepsiemlak_satilik_konut_daire_ankara_cankaya
-        file_prefix = f"{self.get_file_prefix()}_{city_slug}_{district_slug}"
-
-        try:
-            self.exporter.save_excel(
-                listings,
-                prefix=file_prefix,
-                timestamp=True,
-                subfolder=subfolder
-            )
-            logger.info(f"💾 {city}/{district} - {len(listings)} ilan kaydedildi")
-
-            # Veritabanına kaydet
-            self.total_scraped_count += len(listings)
-            if self.db:
-                new_c, updated_c, unchanged_c = save_listings_to_db(
-                    self.db,
-                    listings,
-                    platform="hepsiemlak",
-                    kategori=self.category,
-                    ilan_tipi=self.listing_type,
-                    alt_kategori=self.subtype_name,
-                    scrape_session_id=self.scrape_session_id
-                )
-                self.new_listings_count += new_c
-                self.duplicate_count += unchanged_c  # unchanged = mevcut ilan
-                print(f"   💾 DB: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
-        except Exception as e:
-            logger.error(f"❌ {city}/{district} kaydetme hatası: {e}")
+        self.total_scraped_count += len(listings)
+        logger.info(f"✅ {city}/{district} - {len(listings)} ilan toplandı")
 
     def scrape_current_page(self, fallback_city: str = None, fallback_district: str = None) -> List[Dict[str, Any]]:
         """
@@ -1265,33 +1243,10 @@ class HepsiemlakScraper(BaseScraper):
                     )
 
                     if city_listings:
-                        # Şehir bazlı kayıt
                         all_results[city] = city_listings
                         total_listings_count += len(city_listings)
                         self.total_scraped_count += len(city_listings)
-
-                        # Şehir bazlı tarama için kaydet
-                        print(f"\n💾 {city} verileri kaydediliyor...")
-                        self.exporter.save_by_city(
-                            {city: city_listings},
-                            prefix=self.get_file_prefix(),
-                            format="excel"
-                        )
-
-                        # Veritabanına kaydet
-                        if self.db:
-                            new_c, updated_c, unchanged_c = save_listings_to_db(
-                                self.db,
-                                city_listings,
-                                platform="hepsiemlak",
-                                kategori=self.category,
-                                ilan_tipi=self.listing_type,
-                                alt_kategori=self.subtype_name,
-                                scrape_session_id=self.scrape_session_id
-                            )
-                            self.new_listings_count += new_c
-                            self.duplicate_count += unchanged_c
-                            print(f"   💾 DB: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
+                        # DB kaydetme scrape_city içinde sayfa bazlı yapılıyor
 
                 self.random_medium_wait()  # Stealth: şehirler arası
 
@@ -1485,122 +1440,3 @@ class HepsiemlakScraper(BaseScraper):
             logger.error(f"❌ API tarama hatası: {e}")
             raise e
 
-    def start_scraping(self):
-        """Main scraping entry point"""
-        print(f"\n🚀 HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper")
-        
-        try:
-            # Get cities
-            cities = self.get_cities()
-            if not cities:
-                print("❌ Şehir bulunamadı!")
-                return
-            
-            # Select cities
-            selected_cities = self.select_cities(cities)
-            if not selected_cities:
-                print("❌ Şehir seçilmedi!")
-                return
-            
-            # Scrape each city
-            all_results = {}
-            for city in selected_cities:
-                city_listings = self.scrape_city(city)
-                if city_listings:
-                    all_results[city] = city_listings
-                self.random_medium_wait()  # Stealth: şehirler arası
-            
-            # Save data
-            if all_results:
-                self.exporter.save_by_city(
-                    all_results,
-                    prefix=self.get_file_prefix(),
-                    format="excel",
-                    city_district_map=self.selected_districts if self.selected_districts else None
-                )
-                
-                total = sum(len(v) for v in all_results.values())
-                print(f"\n🎉 TOPLAM: {len(all_results)} şehir, {total} ilan")
-            else:
-                print("❌ Hiç ilan bulunamadı!")
-            
-        except KeyboardInterrupt:
-            print("\n⏹️  İşlem kullanıcı tarafından iptal edildi.")
-            if all_results:
-                self.exporter.save_by_city(
-                    all_results,
-                    prefix=f"{self.get_file_prefix()}_partial",
-                    format="excel",
-                    city_district_map=self.selected_districts if self.selected_districts else None
-                )
-                total = sum(len(v) for v in all_results.values())
-                print(f"💾 {len(all_results)} şehir, {total} ilan kaydedildi.")
-        except Exception as e:
-            logger.error(f"Scraping error: {e}")
-            print(f"❌ Hata: {e}")
-
-
-def main():
-    """Main entry point for HepsiEmlak scraper"""
-    print("\n" + "=" * 60)
-    print("🏠 HEPSİEMLAK SCRAPER")
-    print("=" * 60)
-    
-    # Listing type selection
-    print("\nİlan Tipi Seçin:")
-    print("1. Satılık")
-    print("2. Kiralık")
-    print("3. Çıkış")
-    
-    try:
-        type_choice = int(input("\nSeçiminiz (1-3): "))
-        if type_choice == 3:
-            print("👋 Çıkış yapılıyor...")
-            return
-        
-        listing_type = "satilik" if type_choice == 1 else "kiralik"
-    except ValueError:
-        print("❌ Geçersiz giriş!")
-        return
-    
-    # Category selection
-    categories = ['konut', 'arsa', 'isyeri', 'devremulk', 'turistik_isletme']
-    print("\nKategori Seçin:")
-    for i, cat in enumerate(categories, 1):
-        print(f"{i}. {cat.capitalize()}")
-    print(f"{len(categories) + 1}. Çıkış")
-    
-    try:
-        choice = int(input(f"\nSeçiminiz (1-{len(categories) + 1}): "))
-        if choice == len(categories) + 1:
-            print("👋 Çıkış yapılıyor...")
-            return
-        
-        if 1 <= choice <= len(categories):
-            category = categories[choice - 1]
-        else:
-            print("❌ Geçersiz seçim!")
-            return
-    except ValueError:
-        print("❌ Geçersiz giriş!")
-        return
-    
-    # Start scraper
-    manager = DriverManager()
-    
-    try:
-        driver = manager.start()
-        
-        scraper = HepsiemlakScraper(driver, listing_type, category)
-        scraper.start_scraping()
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        print(f"❌ Hata: {e}")
-    
-    finally:
-        manager.stop()
-
-
-if __name__ == "__main__":
-    main()
