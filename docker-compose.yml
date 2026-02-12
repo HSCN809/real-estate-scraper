@@ -113,10 +113,13 @@ services:
     container_name: real-estate-flower
     ports:
       - "5555:5555"
+    volumes:
+      - flower_data:/app/flower_data
     environment:
       - CELERY_BROKER_URL=${REDIS_URL}
       - FLOWER_PORT=5555
       - FLOWER_BASIC_AUTH=${FLOWER_BASIC_AUTH}
+      - FLOWER_DB=/app/flower_data/flower.db
     depends_on:
       real-estate-redis:
         condition: service_healthy
@@ -136,9 +139,9 @@ services:
     volumes:
       # Source code mount for hot reload
       - ./Frontend:/app
-      # Anonymous volume for node_modules (prevents overwrite)
-      - /app/node_modules
-      - /app/.next
+      # Named volumes for node_modules and .next (prevents overwrite)
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_HEPSIEMLAK_MAX_PAGES=${NEXT_PUBLIC_HEPSIEMLAK_MAX_PAGES}
@@ -161,4 +164,12 @@ networks:
 
 volumes:
   postgres_data:
+    name: real-estate-postgres-data
   redis_data:
+    name: real-estate-redis-data
+  frontend_node_modules:
+    name: real-estate-frontend-node-modules
+  frontend_next:
+    name: real-estate-frontend-next
+  flower_data:
+    name: real-estate-flower-data
