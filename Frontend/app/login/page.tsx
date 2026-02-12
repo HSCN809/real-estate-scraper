@@ -3,18 +3,19 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/Toast';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import dynamic from 'next/dynamic';
-import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
 const Hyperspeed = dynamic(() => import('@/components/ui/Hyperspeed'), { ssr: false });
 
 export default function LoginPage() {
     const { login } = useAuth();
+    const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState({
         username: '',
@@ -23,13 +24,13 @@ export default function LoginPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
         setIsLoading(true);
 
         try {
             await login(formData);
+            toast.success('Giriş başarılı!');
         } catch (err: any) {
-            setError(err.message || 'Giriş başarısız');
+            toast.error(err.message || 'Giriş başarısız');
         } finally {
             setIsLoading(false);
         }
@@ -106,18 +107,6 @@ export default function LoginPage() {
                                 Emlak Scraper'a giriş yapın
                             </p>
                         </div>
-
-                        {/* Error Message */}
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-6 p-4 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center gap-3"
-                            >
-                                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                                <p className="text-red-300 text-sm">{error}</p>
-                            </motion.div>
-                        )}
 
                         {/* Form */}
                         <form onSubmit={handleSubmit} className="space-y-6">

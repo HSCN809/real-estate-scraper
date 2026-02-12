@@ -3,18 +3,19 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/Toast';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import dynamic from 'next/dynamic';
-import { UserPlus, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { UserPlus, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
 const Hyperspeed = dynamic(() => import('@/components/ui/Hyperspeed'), { ssr: false });
 
 export default function RegisterPage() {
     const { register } = useAuth();
+    const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [formData, setFormData] = useState({
@@ -26,29 +27,28 @@ export default function RegisterPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
 
         // Validate passwords match
         if (formData.password !== formData.confirmPassword) {
-            setError('Şifreler eşleşmiyor');
+            toast.error('Şifreler eşleşmiyor');
             return;
         }
 
         // Validate password strength
         if (formData.password.length < 8) {
-            setError('Şifre en az 8 karakter olmalıdır');
+            toast.error('Şifre en az 8 karakter olmalıdır');
             return;
         }
         if (!/[A-Z]/.test(formData.password)) {
-            setError('Şifre en az bir büyük harf içermelidir');
+            toast.error('Şifre en az bir büyük harf içermelidir');
             return;
         }
         if (!/[a-z]/.test(formData.password)) {
-            setError('Şifre en az bir küçük harf içermelidir');
+            toast.error('Şifre en az bir küçük harf içermelidir');
             return;
         }
         if (!/\d/.test(formData.password)) {
-            setError('Şifre en az bir rakam içermelidir');
+            toast.error('Şifre en az bir rakam içermelidir');
             return;
         }
 
@@ -60,8 +60,9 @@ export default function RegisterPage() {
                 email: formData.email,
                 password: formData.password,
             });
+            toast.success('Hesap başarıyla oluşturuldu!');
         } catch (err: any) {
-            setError(err.message || 'Kayıt başarısız');
+            toast.error(err.message || 'Kayıt başarısız');
         } finally {
             setIsLoading(false);
         }
@@ -138,18 +139,6 @@ export default function RegisterPage() {
                                 Emlak Scraper'a katılın
                             </p>
                         </div>
-
-                        {/* Error Message */}
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-6 p-4 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center gap-3"
-                            >
-                                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                                <p className="text-red-300 text-sm">{error}</p>
-                            </motion.div>
-                        )}
 
                         {/* Form */}
                         <form onSubmit={handleSubmit} className="space-y-5">

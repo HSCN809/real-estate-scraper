@@ -3,17 +3,18 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/Toast';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ArtCard } from '@/components/ui/ArtCard';
-import { User, Lock, Save, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Save, Eye, EyeOff } from 'lucide-react';
 import * as authApi from '@/lib/auth-api';
 
 export default function ProfilePage() {
     const { user, updateUser } = useAuth();
+    const toast = useToast();
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
-    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -31,7 +32,6 @@ export default function ProfilePage() {
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
-        setMessage(null);
         setIsUpdatingProfile(true);
 
         try {
@@ -41,9 +41,9 @@ export default function ProfilePage() {
             });
 
             updateUser(updatedUser);
-            setMessage({ type: 'success', text: 'Profil başarıyla güncellendi' });
+            toast.success('Profil başarıyla güncellendi');
         } catch (err: any) {
-            setMessage({ type: 'error', text: err.message || 'Profil güncellenirken hata oluştu' });
+            toast.error(err.message || 'Profil güncellenirken hata oluştu');
         } finally {
             setIsUpdatingProfile(false);
         }
@@ -51,28 +51,27 @@ export default function ProfilePage() {
 
     const handlePasswordChange = async (e: React.FormEvent) => {
         e.preventDefault();
-        setMessage(null);
 
         if (passwordData.new_password !== passwordData.confirm_password) {
-            setMessage({ type: 'error', text: 'Yeni şifreler eşleşmiyor' });
+            toast.error('Yeni şifreler eşleşmiyor');
             return;
         }
 
         // Validate password strength
         if (passwordData.new_password.length < 8) {
-            setMessage({ type: 'error', text: 'Şifre en az 8 karakter olmalıdır' });
+            toast.error('Şifre en az 8 karakter olmalıdır');
             return;
         }
         if (!/[A-Z]/.test(passwordData.new_password)) {
-            setMessage({ type: 'error', text: 'Şifre en az bir büyük harf içermelidir' });
+            toast.error('Şifre en az bir büyük harf içermelidir');
             return;
         }
         if (!/[a-z]/.test(passwordData.new_password)) {
-            setMessage({ type: 'error', text: 'Şifre en az bir küçük harf içermelidir' });
+            toast.error('Şifre en az bir küçük harf içermelidir');
             return;
         }
         if (!/\d/.test(passwordData.new_password)) {
-            setMessage({ type: 'error', text: 'Şifre en az bir rakam içermelidir' });
+            toast.error('Şifre en az bir rakam içermelidir');
             return;
         }
 
@@ -84,10 +83,10 @@ export default function ProfilePage() {
                 new_password: passwordData.new_password,
             });
 
-            setMessage({ type: 'success', text: 'Şifre başarıyla değiştirildi' });
+            toast.success('Şifre başarıyla değiştirildi');
             setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
         } catch (err: any) {
-            setMessage({ type: 'error', text: err.message || 'Şifre değiştirilirken hata oluştu' });
+            toast.error(err.message || 'Şifre değiştirilirken hata oluştu');
         } finally {
             setIsChangingPassword(false);
         }
@@ -123,27 +122,6 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </motion.header>
-
-            {/* Message */}
-            {message && (
-                <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`p-4 rounded-lg flex items-center gap-3 ${
-                        message.type === 'success'
-                            ? 'bg-green-500/20 border border-green-500/30'
-                            : 'bg-red-500/20 border border-red-500/30'
-                    }`}
-                >
-                    {message.type === 'success'
-                        ? <CheckCircle className="w-5 h-5 text-green-400" />
-                        : <AlertCircle className="w-5 h-5 text-red-400" />
-                    }
-                    <p className={message.type === 'success' ? 'text-green-300' : 'text-red-300'}>
-                        {message.text}
-                    </p>
-                </motion.div>
-            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Profile Information */}

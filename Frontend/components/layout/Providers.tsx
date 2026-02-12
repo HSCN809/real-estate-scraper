@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { ReactNode } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ToastProvider } from '@/components/ui/Toast';
 
 interface ProvidersProps {
     children: ReactNode;
@@ -11,9 +12,11 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
     return (
         <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
-            <AuthProvider>
-                {children}
-            </AuthProvider>
+            <ToastProvider>
+                <AuthProvider>
+                    {children}
+                </AuthProvider>
+            </ToastProvider>
         </NextThemesProvider>
     );
 }
