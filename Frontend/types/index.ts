@@ -7,7 +7,8 @@ export interface ScrapeRequest {
   subtype_path?: string;  // Alt tip URL path'i
   cities?: string[];
   districts?: Record<string, string[]>;  // İl -> [İlçeler] mapping
-  max_pages: number;
+  max_pages?: number;           // HepsiEmlak için sayfa limiti
+  max_listings?: number;        // EmlakJet için ilan limiti
 }
 
 export interface ScrapeResponse {

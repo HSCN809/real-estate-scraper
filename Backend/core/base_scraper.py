@@ -535,8 +535,18 @@ class BaseScraper(ABC):
         first_page_count = 0
         
         for current_page in range(1, max_pages + 1):
+            # Stop checker control
+            if hasattr(self, '_stop_checker') and self._stop_checker and self._stop_checker():
+                logger.info("Stop requested, ending page scraping")
+                break
+
+            # Listing limit control
+            if hasattr(self, '_max_listings') and self._max_listings > 0 and len(self.all_listings) >= self._max_listings:
+                logger.info(f"Listing limit reached ({self._max_listings}), ending page scraping")
+                break
+
             print(f"\n🔍 Sayfa {current_page} taranıyor...")
-            
+
             try:
                 # Construct page URL
                 if current_page > 1:

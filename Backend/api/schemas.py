@@ -8,7 +8,8 @@ class ScrapeRequest(BaseModel):
     subtype_path: Optional[str] = None  # Alt tip URL path'i (örn: "/kiralik/tarla")
     cities: Optional[List[str]] = None
     districts: Optional[Dict[str, List[str]]] = None  # İl -> [İlçeler] mapping
-    max_pages: int = 1
+    max_pages: int = 1                                # HepsiEmlak için sayfa limiti
+    max_listings: Optional[int] = None                # EmlakJet için ilan limiti
 
 class ScrapeResponse(BaseModel):
     status: str

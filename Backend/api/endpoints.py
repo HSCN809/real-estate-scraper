@@ -269,7 +269,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
             "subtype_path": request.subtype_path,
             "cities": request.cities,
             "districts": request.districts,
-            "max_pages": request.max_pages
+            "max_listings": request.max_listings or 0,
         },
         queue="scraping"
     )

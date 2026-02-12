@@ -311,7 +311,8 @@ def scrape_emlakjet_task(
     subtype_path: Optional[str],
     cities: List[str],
     districts: Optional[Dict[str, List[str]]],
-    max_pages: int = 50
+    max_listings: int = 0,
+    max_pages: int = 50,  # deprecated, kept for backward compat
 ):
     """
     EmlakJet scraping task - runs in Celery worker
@@ -369,9 +370,9 @@ def scrape_emlakjet_task(
         scraper.start_scraping_api(
             cities=cities,
             districts=districts,
-            max_pages=max_pages,
+            max_listings=max_listings,
             progress_callback=progress_callback,
-            stop_checker=stop_checker
+            stop_checker=stop_checker,
         )
 
         progress_manager.complete(message="EmlakJet taraması tamamlandı!")

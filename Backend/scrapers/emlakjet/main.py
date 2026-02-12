@@ -321,10 +321,11 @@ class EmlakJetScraper(BaseScraper):
             return [district]  # Return district itself if no neighborhoods
         
         if api_mode:
-             # In API mode default to ALL neighborhoods for now if district selected
-             # Ideally we could filter by neighborhood list too
-             return [district] # For speed in API mode maybe skip neighborhood drill down or scrape district root?
-             # Let's return district root to scrape all listings in district
+            # API modunda tüm mahalleleri dön — mahalle bazlı scraping için
+            for n in neighborhoods:
+                n['il'] = province_name
+                n['ilce'] = district_name
+            return neighborhoods
         
         print("\n1. Tüm mahalleleri tara")
         print("2. Mahalle seç")
@@ -352,10 +353,22 @@ class EmlakJetScraper(BaseScraper):
         else:
             return [district]  # Fallback to district
     
-    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_pages: int = 1, progress_callback=None):
+    def _is_stop_requested(self) -> bool:
+        """Check if stop has been requested"""
+        return self._stop_checker is not None and self._stop_checker()
+
+    def _is_listing_limit_reached(self) -> bool:
+        """Check if max listing limit has been reached"""
+        return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
+
+    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None, stop_checker=None):
         """API entry point for scraping without user interaction"""
+        self._stop_checker = stop_checker
+        self._max_listings = max_listings
+
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
-        print(f"\n🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper başlatılıyor")
+        limit_info = f" (limit: {max_listings} ilan)" if max_listings > 0 else " (limitsiz)"
+        print(f"\n🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper başlatılıyor{limit_info}")
 
         if progress_callback:
             progress_callback(f"{self.category.capitalize()}{subtype_info} taraması başlatılıyor...", 0, 100, 0)
@@ -387,10 +400,13 @@ class EmlakJetScraper(BaseScraper):
                  logger.error("No cities provided for API scrape")
                  return
 
-            user_max_pages = max_pages
-
             # Step 2: Process each province sequentially
+            stopped = False
             for prov_idx, province in enumerate(provinces, 1):
+                if self._is_stop_requested() or self._is_listing_limit_reached():
+                    stopped = True
+                    break
+
                 # Get listing count for this province
                 listing_count = self.get_listing_count(province['url'])
 
@@ -410,56 +426,81 @@ class EmlakJetScraper(BaseScraper):
                     logger.info(f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}")
 
                 # Select districts for this province
-                # We pass api_mode=True
                 selected_districts, process_neighborhoods = self.select_districts_for_province(
                     province,
                     api_mode=True,
                     api_districts=api_districts_for_province
                 )
-                
+
                 if not selected_districts:
                     print(f"⏭️  {province['name']} atlandı.")
                     continue
-                
+
                 # Process each district
                 for dist_idx, district in enumerate(selected_districts, 1):
+                    if self._is_stop_requested() or self._is_listing_limit_reached():
+                        stopped = True
+                        break
+
                     # Check if this is province-level (no district selection)
                     if district.get('url') == province.get('url'):
-                        # Scrape entire province directly
                         targets = [{'url': province['url'], 'label': province['name'], 'type': 'il'}]
                     elif process_neighborhoods:
-                        # Select neighborhoods for this district
-                        # api_mode=True returns just district root usually
                         print(f"\n📍 İlçe {dist_idx}/{len(selected_districts)}: {district['name']}")
                         neighborhoods = self.select_neighborhoods_for_district(district, api_mode=True)
                         if not neighborhoods:
                             continue
-                        
-                        # Check if district-level or neighborhood-level
+
                         if len(neighborhoods) == 1 and neighborhoods[0].get('url') == district.get('url'):
                             targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
                         else:
                             targets = [{'url': n['url'], 'label': f"{n.get('il', '')} / {n.get('ilce', '')} / {n['name']}", 'type': 'mahalle'} for n in neighborhoods]
                     else:
-                        # Scrape district directly without neighborhood selection
                         targets = [{'url': district['url'], 'label': f"{district.get('il', '')} / {district['name']}", 'type': 'ilce'}]
-                    
+
                     # Scrape targets
-                    for target in targets:
-                        print(f"\n📍 Taranıyor: {target['label']}")
-                        
+                    total_targets = len(targets)
+                    for target_idx, target in enumerate(targets, 1):
+                        if self._is_stop_requested() or self._is_listing_limit_reached():
+                            stopped = True
+                            break
+
+                        print(f"\n📍 Taranıyor: {target['label']} ({target_idx}/{total_targets})")
+
                         url_max_pages = self.get_max_pages(target['url'])
-                        max_pages_to_scrape = min(user_max_pages, url_max_pages)
-                        print(f"📊 {url_max_pages} sayfa mevcut, {max_pages_to_scrape} sayfa taranacak.")
-                        
-                        should_skip = self.scrape_pages(target['url'], max_pages_to_scrape)
-                        
+                        print(f"📊 {url_max_pages} sayfa mevcut, tamamı taranacak.")
+
+                        should_skip = self.scrape_pages(target['url'], url_max_pages)
+
+                        # Progress tracking
                         if progress_callback:
-                            # Refine progress based on district progress
-                            pass
+                            province_base = ((prov_idx - 1) / len(provinces)) * 100
+                            province_range = 100 / len(provinces)
+                            district_range = province_range / max(len(selected_districts), 1)
+                            target_range = district_range / max(total_targets, 1)
+                            overall = province_base + (dist_idx - 1) * district_range + target_idx * target_range
+
+                            collected = len(self.all_listings)
+                            limit_str = f" / {self._max_listings}" if self._max_listings > 0 else ""
+                            progress_callback(
+                                f"{province['name']} > {district['name']} > {target['label'].split('/')[-1].strip()}",
+                                target_idx,
+                                total_targets,
+                                min(int(overall), 99),
+                            )
 
                         if should_skip:
                             print("⏭️  Bu lokasyon atlandı.")
+                        else:
+                            print(f"   📦 Toplam: {len(self.all_listings)} ilan toplandı")
+
+                    if stopped:
+                        break
+                if stopped:
+                    break
+
+            if self._is_listing_limit_reached():
+                print(f"\n🎯 İlan limitine ulaşıldı: {len(self.all_listings)} / {self._max_listings}")
             
             # Save data (only Excel)
             if self.all_listings:

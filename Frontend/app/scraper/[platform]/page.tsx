@@ -25,6 +25,8 @@ export default function PlatformScraperPage() {
     const [selectedDistricts, setSelectedDistricts] = useState<Record<string, string[]>>({});
     const [maxPages, setMaxPages] = useState(1);
     const [scrapeAllPages, setScrapeAllPages] = useState(false);
+    const [maxListings, setMaxListings] = useState(1000);
+    const [scrapeAllListings, setScrapeAllListings] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -114,8 +116,11 @@ export default function PlatformScraperPage() {
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
                 cities: selectedCities,
-                districts: selectedDistricts,  // Ilce verilerini gonder
-                max_pages: scrapeAllPages ? 9999 : (maxPages || 1),
+                districts: selectedDistricts,
+                ...(platform === 'emlakjet'
+                    ? { max_listings: scrapeAllListings ? 0 : (maxListings || 1000) }
+                    : { max_pages: scrapeAllPages ? 9999 : (maxPages || 1) }
+                ),
             });
 
             // Start tracking in global context
@@ -309,39 +314,75 @@ export default function PlatformScraperPage() {
                         onDistrictsChange={setSelectedDistricts}
                     />
 
-                    {/* Max Pages & Scrape All */}
-                    <div className="flex items-end gap-4">
-                        <div className="flex-1">
-                            <Input
-                                label="📄 Maksimum Sayfa"
-                                type="number"
-                                min={1}
-                                max={50}
-                                value={maxPages || ''}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '') {
-                                        setMaxPages(0); // Geçici olarak 0, submit'te 1 olarak işlenecek
-                                    } else {
-                                        const num = parseInt(val);
-                                        setMaxPages(Math.min(50, Math.max(1, num || 1)));
-                                    }
-                                }}
-                                onBlur={() => {
-                                    if (maxPages < 1) setMaxPages(1);
-                                }}
-                                disabled={scrapeAllPages}
-                                className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
-                            />
+                    {/* Limit Section - Platform'a göre farklı */}
+                    {platform === 'emlakjet' ? (
+                        <div className="flex items-end gap-4">
+                            <div className="flex-1">
+                                <Input
+                                    label="📊 Maksimum İlan Sayısı"
+                                    type="number"
+                                    min={100}
+                                    max={50000}
+                                    step={100}
+                                    value={maxListings || ''}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '') {
+                                            setMaxListings(0);
+                                        } else {
+                                            const num = parseInt(val);
+                                            setMaxListings(Math.min(50000, Math.max(100, num || 1000)));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (maxListings < 100) setMaxListings(100);
+                                    }}
+                                    disabled={scrapeAllListings}
+                                    className={scrapeAllListings ? 'opacity-50 cursor-not-allowed' : ''}
+                                />
+                            </div>
+                            <div className="pb-3">
+                                <Checkbox
+                                    label="Tümünü Tara (Limit Yok)"
+                                    checked={scrapeAllListings}
+                                    onChange={setScrapeAllListings}
+                                />
+                            </div>
                         </div>
-                        <div className="pb-3">
-                            <Checkbox
-                                label="Tüm Sayfaları Tara"
-                                checked={scrapeAllPages}
-                                onChange={setScrapeAllPages}
-                            />
+                    ) : (
+                        <div className="flex items-end gap-4">
+                            <div className="flex-1">
+                                <Input
+                                    label="📄 Maksimum Sayfa"
+                                    type="number"
+                                    min={1}
+                                    max={50}
+                                    value={maxPages || ''}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '') {
+                                            setMaxPages(0);
+                                        } else {
+                                            const num = parseInt(val);
+                                            setMaxPages(Math.min(50, Math.max(1, num || 1)));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (maxPages < 1) setMaxPages(1);
+                                    }}
+                                    disabled={scrapeAllPages}
+                                    className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
+                                />
+                            </div>
+                            <div className="pb-3">
+                                <Checkbox
+                                    label="Tüm Sayfaları Tara"
+                                    checked={scrapeAllPages}
+                                    onChange={setScrapeAllPages}
+                                />
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Submit Button */}
                     <button
