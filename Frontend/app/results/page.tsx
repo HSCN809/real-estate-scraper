@@ -17,17 +17,15 @@ import {
     MapPin,
     Eye,
     X,
-    List,
     Filter,
     Calendar,
-    Map,
-    BarChart3,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight
 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getResults, exportToExcel } from '@/lib/api';
 import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
@@ -55,12 +53,22 @@ interface RichResult extends ScrapeResult {
 }
 
 export default function ResultsPage() {
+    const searchParams = useSearchParams();
+    const viewParam = searchParams.get('view') as 'map' | 'table' | 'charts' | null;
+
     const [results, setResults] = useState<RichResult[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [viewMode, setViewMode] = useState<'table' | 'map' | 'charts'>('map');
+    const [viewMode, setViewMode] = useState<'table' | 'map' | 'charts'>(viewParam || 'map');
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+    // URL parametresi değiştiğinde viewMode güncelle
+    useEffect(() => {
+        if (viewParam && ['map', 'table', 'charts'].includes(viewParam)) {
+            setViewMode(viewParam);
+        }
+    }, [viewParam]);
 
     // Filtreler
     const [platformFilter, setPlatformFilter] = useState<string>('all');
@@ -415,40 +423,6 @@ export default function ResultsPage() {
                 </div>
 
                 <nav className="flex items-center gap-3" aria-label="Sayfa kontrolleri">
-                    {/* Görünüm Değiştir */}
-                    <fieldset className="flex rounded-xl overflow-hidden border border-slate-700" role="group" aria-label="Görünüm modu">
-                        <button
-                            onClick={() => setViewMode('map')}
-                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
-                            title="Harita"
-                            aria-pressed={viewMode === 'map'}
-                        >
-                            <Map className="w-4 h-4" aria-hidden="true" />
-                            <span className="text-sm font-medium">Harita</span>
-                        </button>
-                        <button
-                            onClick={() => setViewMode('table')}
-                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
-                            title="Tablo"
-                            aria-pressed={viewMode === 'table'}
-                        >
-                            <List className="w-4 h-4" aria-hidden="true" />
-                            <span className="text-sm font-medium">Tablo</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setPriceDataLoading(true); // Yükleniyor durumunu hemen göster
-                                setViewMode('charts');
-                            }}
-                            className={`px-3 py-2.5 transition-colors flex items-center gap-2 ${viewMode === 'charts' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:text-white'}`}
-                            title="Grafikler"
-                            aria-pressed={viewMode === 'charts'}
-                        >
-                            <BarChart3 className="w-4 h-4" aria-hidden="true" />
-                            <span className="text-sm font-medium">Grafikler</span>
-                        </button>
-                    </fieldset>
-
                     {/* Excel Dışa Aktarma Butonu */}
                     <button
                         onClick={async () => {

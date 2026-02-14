@@ -2,17 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2 } from 'lucide-react';
+import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2, Map, List, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useScraping } from '@/contexts/ScrapingContext';
 import { useState, useRef, useEffect } from 'react';
 
-// Ana navigasyon öğeleri (Profil ve Ayarlar dropdown'a taşındı)
+// Ana navigasyon öğeleri
 const navItems = [
     { href: '/', label: 'Dashboard', icon: Home },
     { href: '/scraper', label: 'Scraper', icon: Search },
-    { href: '/results', label: 'Sonuçlar', icon: FileText },
+];
+
+// Sonuçlar alt menü öğeleri
+const resultsSubItems = [
+    { href: '/results?view=map', label: 'Harita', icon: Map },
+    { href: '/results?view=table', label: 'Tablo', icon: List },
+    { href: '/results?view=charts', label: 'Grafikler', icon: BarChart3 },
 ];
 
 // Dropdown menü öğeleri
@@ -26,15 +32,21 @@ export function Header() {
     const { user, logout } = useAuth();
     const { activeTask, isPanelVisible, showPanel } = useScraping();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isResultsOpen, setIsResultsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const resultsRef = useRef<HTMLDivElement>(null);
 
     const showMiniIndicator = activeTask && !activeTask.isFinished && !isPanelVisible;
+    const isResultsActive = pathname.startsWith('/results');
 
     // Dropdown dışına tıklandığında kapat
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsDropdownOpen(false);
+            }
+            if (resultsRef.current && !resultsRef.current.contains(event.target as Node)) {
+                setIsResultsOpen(false);
             }
         }
 
@@ -87,6 +99,54 @@ export function Header() {
                             </Link>
                         );
                     })}
+
+                    {/* Sonuçlar Dropdown */}
+                    <div className="relative" ref={resultsRef}>
+                        <button
+                            onClick={() => setIsResultsOpen(!isResultsOpen)}
+                            className={cn(
+                                'flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-200 group',
+                                isResultsActive
+                                    ? 'bg-sky-500/15 text-sky-400'
+                                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                            )}
+                        >
+                            <FileText className={cn(
+                                'w-[18px] h-[18px] flex-shrink-0 transition-colors',
+                                isResultsActive ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'
+                            )} />
+                            <span className={cn(
+                                'text-sm font-medium whitespace-nowrap',
+                                isResultsActive ? 'text-sky-100' : ''
+                            )}>
+                                Sonuçlar
+                            </span>
+                            <ChevronDown className={cn(
+                                'w-3.5 h-3.5 transition-transform duration-200',
+                                isResultsOpen && 'rotate-180',
+                                isResultsActive ? 'text-sky-400' : 'text-slate-500'
+                            )} />
+                        </button>
+
+                        {isResultsOpen && (
+                            <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border border-slate-700/50 backdrop-blur-xl bg-slate-900/95 shadow-2xl shadow-black/30 overflow-hidden p-1.5">
+                                {resultsSubItems.map((sub) => {
+                                    const SubIcon = sub.icon;
+                                    return (
+                                        <Link
+                                            key={sub.href}
+                                            href={sub.href}
+                                            onClick={() => setIsResultsOpen(false)}
+                                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-300 hover:text-slate-100 hover:bg-slate-800/60"
+                                        >
+                                            <SubIcon className="w-4 h-4 text-slate-500" />
+                                            <span className="text-sm font-medium">{sub.label}</span>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </nav>
 
                 {/* Mini İlerleme Göstergesi */}
