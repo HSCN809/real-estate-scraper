@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { ArtCard } from '@/components/ui/ArtCard';
 import {
     Chart as ChartJS,
@@ -17,7 +17,7 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut, Pie, Line } from 'react-chartjs-2';
 import { ScrapeResult } from '@/types';
-import { BarChart3, PieChart, TrendingUp, Building2, MapPin, DollarSign, Layers, Clock } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Building2, MapPin, DollarSign, Layers, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Chart.js bileşenlerini kaydet
 ChartJS.register(
@@ -105,7 +105,10 @@ interface ResultsChartsProps {
     listingTypeFilter: string;
 }
 
-// Grafik Kartı Bileşeni
+// Sabit kart yüksekliği (header + chart + padding)
+const CARD_HEIGHT = 'h-[420px]';
+
+// Grafik Kartı Bileşeni - Carousel item olarak
 function ChartCard({ title, icon: Icon, children, className = '' }: {
     title: string;
     icon: React.ElementType;
@@ -113,17 +116,32 @@ function ChartCard({ title, icon: Icon, children, className = '' }: {
     className?: string;
 }) {
     return (
-        <ArtCard glowColor="blue" className={`${className}`}>
-            <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                    <Icon className="w-5 h-5 text-blue-400" />
+        <div className="snap-center flex-shrink-0 w-[85vw] md:w-[600px] lg:w-[700px]">
+            <ArtCard glowColor="blue" className={`${CARD_HEIGHT} flex flex-col ${className}`}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                        <Icon className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">{title}</h3>
                 </div>
-                <h3 className="text-lg font-bold text-white">{title}</h3>
-            </div>
-            <div className="h-[280px]">
-                {children}
-            </div>
-        </ArtCard>
+                <div className="flex-1 min-h-0">
+                    {children}
+                </div>
+            </ArtCard>
+        </div>
+    );
+}
+
+// Placeholder Kartı - Fiyat filtreleri seçilmediğinde
+function PlaceholderCard({ title, icon: Icon }: { title: string; icon: React.ElementType }) {
+    return (
+        <div className="snap-center flex-shrink-0 w-[85vw] md:w-[600px] lg:w-[700px]">
+            <ArtCard glowColor="blue" className={`${CARD_HEIGHT} flex flex-col items-center justify-center text-center`}>
+                <Icon className="w-12 h-12 text-gray-600 mb-4" />
+                <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
+                <p className="text-gray-400 text-sm">Fiyat analizini görmek için<br /><span className="text-amber-400">Kategori</span> ve <span className="text-amber-400">İlan Tipi</span> filtresi seçin</p>
+            </ArtCard>
+        </div>
     );
 }
 
@@ -399,6 +417,61 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         }
     };
 
+    // Carousel state
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const totalSlides = showPriceCharts ? 8 : 8; // Her zaman 8 kart (placeholder dahil)
+
+    // Scroll event'inde aktif index'i güncelle
+    const handleScroll = useCallback(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+        const children = Array.from(container.children) as HTMLElement[];
+        if (children.length === 0) return;
+
+        const containerCenter = container.scrollLeft + container.clientWidth / 2;
+        let closestIndex = 0;
+        let closestDistance = Infinity;
+
+        children.forEach((child, index) => {
+            const childCenter = child.offsetLeft + child.offsetWidth / 2;
+            const distance = Math.abs(containerCenter - childCenter);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = index;
+            }
+        });
+
+        setActiveIndex(closestIndex);
+    }, []);
+
+    useEffect(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [handleScroll]);
+
+    // Belirli bir slide'a kaydır
+    const scrollToIndex = useCallback((index: number) => {
+        const container = scrollRef.current;
+        if (!container) return;
+        const children = Array.from(container.children) as HTMLElement[];
+        if (!children[index]) return;
+
+        const child = children[index];
+        const scrollLeft = child.offsetLeft - (container.clientWidth / 2) + (child.offsetWidth / 2);
+        container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+    }, []);
+
+    const scrollPrev = useCallback(() => {
+        scrollToIndex(Math.max(0, activeIndex - 1));
+    }, [activeIndex, scrollToIndex]);
+
+    const scrollNext = useCallback(() => {
+        scrollToIndex(Math.min(totalSlides - 1, activeIndex + 1));
+    }, [activeIndex, totalSlides, scrollToIndex]);
+
     if (results.length === 0) {
         return (
             <div className="text-center py-20 text-gray-400">
@@ -408,77 +481,119 @@ export function ResultsCharts({ results, priceData, categoryFilter, listingTypeF
         );
     }
 
+    // Grafik başlıkları (dot indicator için)
+    const chartTitles = [
+        'Şehir Dağılımı', 'Platform', 'Satılık/Kiralık', 'Kategori',
+        'Şehir Fiyat', 'Fiyat Aralığı', 'Platform Fiyat', 'Tarama Geçmişi'
+    ];
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[calc(100vh-300px)] overflow-y-auto pr-2 pb-4">
-            {/* 1. City Distribution */}
-            <ChartCard title="Şehir Bazlı İlan Dağılımı" icon={MapPin}>
-                <Bar data={cityDistributionData} options={horizontalBarOptions} />
-            </ChartCard>
-
-            {/* 2. Platform Comparison */}
-            <ChartCard title="Platform Karşılaştırması" icon={Building2}>
-                <Doughnut data={platformData} options={pieOptions} />
-            </ChartCard>
-
-            {/* 3. Listing Type */}
-            <ChartCard title="Satılık vs Kiralık" icon={Layers}>
-                <Pie data={listingTypeData} options={pieOptions} />
-            </ChartCard>
-
-            {/* 4. Category Distribution */}
-            <ChartCard title="Kategori Dağılımı" icon={PieChart}>
-                <Doughnut data={categoryData} options={pieOptions} />
-            </ChartCard>
-
-            {/* 5. City Average Price - Conditional */}
-            {showPriceCharts ? (
-                <ChartCard title="Şehir Bazlı Ortalama Fiyat" icon={DollarSign}>
-                    <Bar data={cityPriceData} options={horizontalBarOptions} />
+        <div className="relative">
+            {/* Carousel Container */}
+            <div
+                ref={scrollRef}
+                className="flex gap-6 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4 px-[calc(50%-min(42.5vw,350px))]"
+            >
+                {/* 1. Şehir Dağılımı */}
+                <ChartCard title="Şehir Bazlı İlan Dağılımı" icon={MapPin}>
+                    <Bar data={cityDistributionData} options={horizontalBarOptions} />
                 </ChartCard>
-            ) : (
-                <ArtCard glowColor="blue" className="flex flex-col items-center justify-center text-center">
-                    <DollarSign className="w-12 h-12 text-gray-600 mb-4" />
-                    <h3 className="text-lg font-bold text-white mb-2">Şehir Bazlı Ortalama Fiyat</h3>
-                    <p className="text-gray-400 text-sm">Fiyat analizini görmek için<br /><span className="text-amber-400">Kategori</span> ve <span className="text-amber-400">İlan Tipi</span> filtresi seçin</p>
-                </ArtCard>
-            )}
 
-            {/* 6. Price Histogram - Conditional */}
-            {showPriceCharts ? (
-                <ChartCard title="Fiyat Aralığı Dağılımı" icon={BarChart3}>
-                    <Bar data={priceHistogramData} options={{
-                        ...commonOptions,
-                        plugins: { ...commonOptions.plugins, legend: { display: false } }
-                    }} />
+                {/* 2. Platform Karşılaştırması */}
+                <ChartCard title="Platform Karşılaştırması" icon={Building2}>
+                    <Doughnut data={platformData} options={pieOptions} />
                 </ChartCard>
-            ) : (
-                <ArtCard glowColor="blue" className="flex flex-col items-center justify-center text-center">
-                    <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
-                    <h3 className="text-lg font-bold text-white mb-2">Fiyat Aralığı Dağılımı</h3>
-                    <p className="text-gray-400 text-sm">Fiyat analizini görmek için<br /><span className="text-amber-400">Kategori</span> ve <span className="text-amber-400">İlan Tipi</span> filtresi seçin</p>
-                </ArtCard>
-            )}
 
-            {/* 7. Platform Price Comparison - Conditional */}
-            {showPriceCharts ? (
-                <ChartCard title="Platform Fiyat Karşılaştırması" icon={TrendingUp}>
-                    <Bar data={platformPriceData} options={{
-                        ...commonOptions,
-                        plugins: { ...commonOptions.plugins, legend: { display: false } }
-                    }} />
+                {/* 3. Satılık vs Kiralık */}
+                <ChartCard title="Satılık vs Kiralık" icon={Layers}>
+                    <Pie data={listingTypeData} options={pieOptions} />
                 </ChartCard>
-            ) : (
-                <ArtCard glowColor="blue" className="flex flex-col items-center justify-center text-center">
-                    <TrendingUp className="w-12 h-12 text-gray-600 mb-4" />
-                    <h3 className="text-lg font-bold text-white mb-2">Platform Fiyat Karşılaştırması</h3>
-                    <p className="text-gray-400 text-sm">Fiyat analizini görmek için<br /><span className="text-amber-400">Kategori</span> ve <span className="text-amber-400">İlan Tipi</span> filtresi seçin</p>
-                </ArtCard>
-            )}
 
-            {/* 8. Scraping History */}
-            <ChartCard title="Tarama Geçmişi" icon={Clock}>
-                <Line data={scrapingHistoryData} options={lineOptions} />
-            </ChartCard>
+                {/* 4. Kategori Dağılımı */}
+                <ChartCard title="Kategori Dağılımı" icon={PieChart}>
+                    <Doughnut data={categoryData} options={pieOptions} />
+                </ChartCard>
+
+                {/* 5. Şehir Bazlı Ortalama Fiyat */}
+                {showPriceCharts ? (
+                    <ChartCard title="Şehir Bazlı Ortalama Fiyat" icon={DollarSign}>
+                        <Bar data={cityPriceData} options={horizontalBarOptions} />
+                    </ChartCard>
+                ) : (
+                    <PlaceholderCard title="Şehir Bazlı Ortalama Fiyat" icon={DollarSign} />
+                )}
+
+                {/* 6. Fiyat Aralığı Dağılımı */}
+                {showPriceCharts ? (
+                    <ChartCard title="Fiyat Aralığı Dağılımı" icon={BarChart3}>
+                        <Bar data={priceHistogramData} options={{
+                            ...commonOptions,
+                            plugins: { ...commonOptions.plugins, legend: { display: false } }
+                        }} />
+                    </ChartCard>
+                ) : (
+                    <PlaceholderCard title="Fiyat Aralığı Dağılımı" icon={BarChart3} />
+                )}
+
+                {/* 7. Platform Fiyat Karşılaştırması */}
+                {showPriceCharts ? (
+                    <ChartCard title="Platform Fiyat Karşılaştırması" icon={TrendingUp}>
+                        <Bar data={platformPriceData} options={{
+                            ...commonOptions,
+                            plugins: { ...commonOptions.plugins, legend: { display: false } }
+                        }} />
+                    </ChartCard>
+                ) : (
+                    <PlaceholderCard title="Platform Fiyat Karşılaştırması" icon={TrendingUp} />
+                )}
+
+                {/* 8. Tarama Geçmişi */}
+                <ChartCard title="Tarama Geçmişi" icon={Clock}>
+                    <Line data={scrapingHistoryData} options={lineOptions} />
+                </ChartCard>
+            </div>
+
+            {/* Navigasyon Okları */}
+            <button
+                onClick={scrollPrev}
+                disabled={activeIndex === 0}
+                className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-slate-800/80 border border-slate-700/50 backdrop-blur-sm transition-all ${
+                    activeIndex === 0 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 hover:scale-110'
+                }`}
+                aria-label="Önceki grafik"
+            >
+                <ChevronLeft className="w-5 h-5 text-white" />
+            </button>
+            <button
+                onClick={scrollNext}
+                disabled={activeIndex === totalSlides - 1}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-slate-800/80 border border-slate-700/50 backdrop-blur-sm transition-all ${
+                    activeIndex === totalSlides - 1 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 hover:scale-110'
+                }`}
+                aria-label="Sonraki grafik"
+            >
+                <ChevronRight className="w-5 h-5 text-white" />
+            </button>
+
+            {/* Dot Indicator + Başlık */}
+            <div className="flex flex-col items-center gap-2 mt-4">
+                <span className="text-sm text-gray-400 font-medium">{chartTitles[activeIndex]}</span>
+                <div className="flex items-center gap-2">
+                    {Array.from({ length: totalSlides }).map((_, i) => (
+                        <button
+                            key={i}
+                            onClick={() => scrollToIndex(i)}
+                            className={`rounded-full transition-all duration-300 ${
+                                i === activeIndex
+                                    ? 'w-6 h-2.5 bg-blue-500'
+                                    : 'w-2.5 h-2.5 bg-slate-600 hover:bg-slate-500'
+                            }`}
+                            aria-label={`${chartTitles[i]} grafiğine git`}
+                        />
+                    ))}
+                </div>
+                <span className="text-xs text-gray-500">{activeIndex + 1} / {totalSlides}</span>
+            </div>
         </div>
     );
 }
