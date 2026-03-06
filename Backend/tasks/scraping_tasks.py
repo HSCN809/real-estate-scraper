@@ -189,12 +189,6 @@ def scrape_hepsiemlak_task(
                 total=total,
                 progress=progress
             )
-            # Kümülatif toplam ilan sayısını takip et (sadece değiştiğinde sayacı güncelle)
-            cumulative_total = getattr(scraper, 'total_scraped_count', 0)
-            if not hasattr(progress_callback, 'last_total'):
-                progress_callback.last_total = -1
-            if cumulative_total != progress_callback.last_total:
-                progress_callback.last_total = cumulative_total
             # Durdurma isteğini kontrol et
             if progress_manager.is_stop_requested():
                 logger.info(f"[Task {task_id}] Stop requested, raising exception")
@@ -369,12 +363,6 @@ def scrape_emlakjet_task(
                 total=total,
                 progress=progress
             )
-            # Kümülatif toplam ilan sayısını takip et (sadece değiştiğinde sayacı güncelle)
-            cumulative_total = getattr(scraper, 'total_new_listings', 0)
-            if not hasattr(progress_callback, 'last_total'):
-                progress_callback.last_total = -1
-            if cumulative_total != progress_callback.last_total:
-                progress_callback.last_total = cumulative_total
             if progress_manager.is_stop_requested():
                 raise StopRequested("User requested stop")
 
