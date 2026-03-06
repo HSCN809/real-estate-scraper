@@ -272,10 +272,10 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                         animate={{ scale: 1, y: 0 }}
                         exit={{ scale: 0.95, y: 20 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        className="max-w-2xl w-full max-h-[75vh] overflow-y-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <SpotlightCard className="p-8">
+                        <SpotlightCard className="p-4">
                             {/* Header */}
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-4">
@@ -312,7 +312,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 gap-4 mb-6">
-                                <GlassCard variant="default" neonBorder="emerald" glow className="p-5">
+                                <GlassCard variant="default" neonBorder="emerald" glow className="p-3">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="p-2 bg-emerald-500/20 rounded-lg">
                                             <Database className="w-5 h-5 text-emerald-400" />
@@ -329,7 +329,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                                     </motion.p>
                                 </GlassCard>
 
-                                <GlassCard variant="default" neonBorder="blue" glow className="p-5">
+                                <GlassCard variant="default" neonBorder="blue" glow className="p-3">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="p-2 bg-blue-500/20 rounded-lg">
                                             <TrendIcon className="w-5 h-5 text-blue-400" />
@@ -381,7 +381,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                                                 { label: 'Medyan', value: formatPrice(cityStats.stats.median), color: 'text-amber-400' },
                                                 { label: 'Q3', value: formatPrice(cityStats.stats.q75), color: 'text-white' },
                                             ].map((stat, idx) => (
-                                                <GlassCard key={idx} variant="dark" className="p-3 text-center">
+                                                <GlassCard key={idx} variant="dark" className="p-2 text-center">
                                                     <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
                                                     <motion.p
                                                         initial={{ opacity: 0, scale: 0.9 }}
@@ -393,11 +393,11 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                                                     </motion.p>
                                                 </GlassCard>
                                             ))}
-                                            <GlassCard variant="dark" className="p-3 text-center">
+                                            <GlassCard variant="dark" className="p-2 text-center">
                                                 <p className="text-gray-500 text-xs mb-1">Max</p>
                                                 <p className="text-white font-semibold text-lg">{formatPrice(cityStats.stats.max)} ₺</p>
                                             </GlassCard>
-                                            <GlassCard variant="dark" className="p-3 text-center">
+                                            <GlassCard variant="dark" className="p-2 text-center">
                                                 <p className="text-gray-500 text-xs mb-1">Ortalama</p>
                                                 <p className="text-blue-400 font-semibold text-lg">{formatPrice(cityStats.stats.mean)} ₺</p>
                                             </GlassCard>
@@ -431,7 +431,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                                                     <div className="w-36 text-xs text-gray-400 truncate font-medium" title={range.range}>
                                                         {range.range}
                                                     </div>
-                                                    <div className="flex-1 h-7 bg-slate-800/80 rounded-full overflow-hidden">
+                                                    <div className="flex-1 h-5 bg-slate-800/80 rounded-full overflow-hidden">
                                                         <motion.div
                                                             initial={{ width: 0 }}
                                                             animate={{ width: `${range.percentage}%` }}
