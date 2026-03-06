@@ -20,7 +20,7 @@ EMLAKJET_SELECTORS = {
         "quick_info": "div.styles_quickinfoWrapper__Vsnk5",
         
         # Sayfalama
-        "pagination_list": "ul.styles_list__zqOeW li",
+        "pagination_list": "ul.styles_list__zqOeW li:not([class*='arrow'])",
         "active_page": "span.styles_selected__hilA_",
         
         # Lokasyon navigasyonu

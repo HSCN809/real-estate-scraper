@@ -96,12 +96,13 @@ class HepsiemlakScraper(BaseScraper):
         base_url = base_config.base_url + category_path
         
         super().__init__(driver, base_url, "hepsiemlak", category)
-        
+
         self.listing_type = listing_type
         self.hepsiemlak_config = base_config
         self.selected_cities = selected_cities or []
         self.selected_districts = selected_districts or {}  # İlçe filtreleme
         self.subtype_path = subtype_path  # Kaydet
+        self.total_new_listings = 0  # Global kümülatif yeni ilan sayacı
 
         # Alt kategori adını çıkar
         subtype_name = None
@@ -752,12 +753,13 @@ class HepsiemlakScraper(BaseScraper):
                     pages_to_scrape = 1
 
             city_listings = []
+            total_new_listings = 0  # Sadece yeni eklenen ilan sayısı
 
             # Sayfaları tara
             for page in range(1, pages_to_scrape + 1):
                 # Durdurma kontrolü - her sayfa başında kontrol et
                 if is_stop_requested():
-                    print(f"\n⚠️ Durdurma isteği alındı! {len(city_listings)} ilan kaydediliyor...")
+                    print(f"\n⚠️ Durdurma isteği alındı! {total_new_listings} yeni ilan kaydediliyor...")
                     break
                 
                 print(f"\n📄 Sayfa {page}/{pages_to_scrape} taranıyor...")
@@ -826,6 +828,7 @@ class HepsiemlakScraper(BaseScraper):
                             alt_kategori=self.subtype_name,
                             scrape_session_id=self.scrape_session_id
                         )
+                        total_new_listings += new_c  # Yeni eklenenleri say
                         logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                 if page < pages_to_scrape:
@@ -833,10 +836,10 @@ class HepsiemlakScraper(BaseScraper):
 
             print(f"\n{'=' * 70}")
             print(f"✅ {city.upper()} TAMAMLANDI")
-            print(f"📊 Toplam {len(city_listings)} ilan toplandı")
+            print(f"📊 Toplam {total_new_listings} yeni ilan toplandı")
             print("=" * 70)
 
-            logger.info(f"✅ {city} - {len(city_listings)} ilan toplandı")
+            logger.info(f"✅ {city} - {total_new_listings} yeni ilan toplandı")
             return city_listings
 
         except Exception as e:
@@ -846,6 +849,7 @@ class HepsiemlakScraper(BaseScraper):
     def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None, stop_checker=None) -> Dict[str, List[Dict[str, Any]]]:
         """Bir şehir için belirtilen ilçeleri ayrı ayrı tara ve kaydet"""
         all_results = {}  # İlçe -> İlanlar mapping
+        total_new_listings = 0  # Sadece yeni eklenen ilan sayısı
 
         # Durdurma denetleyicisini belirle
         _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
@@ -1026,6 +1030,7 @@ class HepsiemlakScraper(BaseScraper):
                                 alt_kategori=self.subtype_name,
                                 scrape_session_id=self.scrape_session_id
                             )
+                            total_new_listings += new_c  # Yeni eklenenleri say
                             logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                     if page < pages_to_scrape:
@@ -1052,19 +1057,19 @@ class HepsiemlakScraper(BaseScraper):
         total_listings = sum(len(listings) for listings in all_results.values())
         print(f"\n{'=' * 70}")
         print(f"✅ {city.upper()} - TÜM İLÇELER TAMAMLANDI")
-        print(f"📊 Toplam {total_listings} ilan toplandı")
+        print(f"📊 Toplam {self.total_new_listings} yeni ilan toplandı")
         print(f"🎯 Taranan ilçeler: {', '.join(all_results.keys())}")
         print("=" * 70)
 
-        logger.info(f"✅ {city} - {total_listings} ilan toplandı ({len(all_results)} ilçe)")
+        logger.info(f"✅ {city} - {self.total_new_listings} yeni ilan toplandı ({len(all_results)} ilçe)")
         return all_results
 
     def _save_district_data(self, city: str, district: str, listings: List[Dict[str, Any]]):
         """İlçe istatistiklerini güncelle (DB kaydetme sayfa bazlı yapılıyor)"""
         if not listings:
             return
-        self.total_scraped_count += len(listings)
-        logger.info(f"✅ {city}/{district} - {len(listings)} ilan toplandı")
+        # Not: Bu fonksiyon artık kullanılmıyor, yeni ilan sayısı callback içinde hesaplanıyor
+        logger.info(f"✅ {city}/{district} - {len(listings)} ilan işlendi")
 
     def scrape_current_page(self, fallback_city: str = None, fallback_district: str = None) -> List[Dict[str, Any]]:
         """Mevcut sayfadaki tüm ilanları tara; lokasyon bulunamazsa fallback_city ve fallback_district kullanılır"""
