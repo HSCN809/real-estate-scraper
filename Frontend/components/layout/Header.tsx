@@ -57,7 +57,7 @@ function Header() {
     const isDropdownItemActive = dropdownMenuItems.some(item => pathname === item.href);
 
     return (
-        <header className="fixed top-0 left-0 right-0 h-16 z-50 border-b border-slate-700/50 backdrop-blur-xl bg-slate-900/90">
+        <header className="fixed top-0 left-0 right-0 h-16 z-50 border-b border-white/10 backdrop-blur-xl bg-black/80">
             <div className="h-full max-w-7xl mx-auto px-6 flex items-center">
                 {/* Logo */}
                 <Link href="/" className="flex items-center gap-3 mr-12">
@@ -83,16 +83,16 @@ function Header() {
                                     'flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-200 group',
                                     isActive
                                         ? 'bg-sky-500/15 text-sky-400'
-                                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/10'
                                 )}
                             >
                                 <Icon className={cn(
                                     'w-[18px] h-[18px] flex-shrink-0 transition-colors',
-                                    isActive ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'
+                                    isActive ? 'text-sky-400' : 'text-gray-500 group-hover:text-gray-300'
                                 )} />
                                 <span className={cn(
                                     'text-sm font-medium whitespace-nowrap',
-                                    isActive ? 'text-sky-100' : ''
+                                    isActive ? 'text-white' : ''
                                 )}>
                                     {item.label}
                                 </span>
@@ -108,28 +108,28 @@ function Header() {
                                 'flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-200 group',
                                 isResultsActive
                                     ? 'bg-sky-500/15 text-sky-400'
-                                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/10'
                             )}
                         >
                             <FileText className={cn(
                                 'w-[18px] h-[18px] flex-shrink-0 transition-colors',
-                                isResultsActive ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'
+                                isResultsActive ? 'text-sky-400' : 'text-gray-500 group-hover:text-gray-300'
                             )} />
                             <span className={cn(
                                 'text-sm font-medium whitespace-nowrap',
-                                isResultsActive ? 'text-sky-100' : ''
+                                isResultsActive ? 'text-white' : ''
                             )}>
                                 Sonuçlar
                             </span>
                             <ChevronDown className={cn(
                                 'w-3.5 h-3.5 transition-transform duration-200',
                                 isResultsOpen && 'rotate-180',
-                                isResultsActive ? 'text-sky-400' : 'text-slate-500'
+                                isResultsActive ? 'text-sky-400' : 'text-gray-500'
                             )} />
                         </button>
 
                         {isResultsOpen && (
-                            <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border border-slate-700/50 backdrop-blur-xl bg-slate-900/95 shadow-2xl shadow-black/30 overflow-hidden p-1.5">
+                            <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border border-white/10 backdrop-blur-xl bg-black/95 shadow-2xl shadow-black/50 overflow-hidden p-1.5">
                                 {resultsSubItems.map((sub) => {
                                     const SubIcon = sub.icon;
                                     return (
@@ -137,9 +137,9 @@ function Header() {
                                             key={sub.href}
                                             href={sub.href}
                                             onClick={() => setIsResultsOpen(false)}
-                                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-300 hover:text-slate-100 hover:bg-slate-800/60"
+                                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-white/10"
                                         >
-                                            <SubIcon className="w-4 h-4 text-slate-500" />
+                                            <SubIcon className="w-4 h-4 text-gray-500" />
                                             <span className="text-sm font-medium">{sub.label}</span>
                                         </Link>
                                     );
@@ -153,7 +153,7 @@ function Header() {
                 {showMiniIndicator && (
                     <button
                         onClick={showPanel}
-                        className="flex items-center gap-2 px-3 py-1.5 mr-3 rounded-lg bg-blue-500/15 border border-blue-500/30 hover:bg-blue-500/25 transition-all text-blue-400 text-sm font-medium"
+                        className="flex items-center gap-2 px-3 py-1.5 mr-3 rounded-lg bg-blue-500/20 border border-blue-500/30 hover:bg-blue-500/30 transition-all text-blue-400 text-sm font-medium"
                         title="Tarama devam ediyor — tıkla görüntüle"
                     >
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -170,46 +170,46 @@ function Header() {
                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                             className={cn(
                                 'flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200',
-                                'hover:bg-slate-800/60',
-                                isDropdownOpen && 'bg-slate-800/60',
-                                isDropdownItemActive && 'ring-2 ring-sky-500/30'
+                                'hover:bg-white/10',
+                                isDropdownOpen && 'bg-white/10',
+                                isDropdownItemActive && 'ring-2 ring-sky-500/50'
                             )}
                         >
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 ring-2 ring-white/10">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 ring-2 ring-white/20">
                                 <span className="text-white text-sm font-bold">
                                     {user.username.charAt(0).toUpperCase()}
                                 </span>
                             </div>
                             <div className="text-left hidden sm:block">
-                                <p className="text-sm font-medium text-slate-200 leading-tight">
+                                <p className="text-sm font-medium text-white leading-tight">
                                     {user.username}
                                 </p>
-                                <p className="text-xs text-slate-500 leading-tight">
+                                <p className="text-xs text-gray-500 leading-tight">
                                     {user.is_admin ? 'Admin' : 'Kullanıcı'}
                                 </p>
                             </div>
                             <ChevronDown className={cn(
-                                'w-4 h-4 text-slate-400 transition-transform duration-200',
+                                'w-4 h-4 text-gray-400 transition-transform duration-200',
                                 isDropdownOpen && 'rotate-180'
                             )} />
                         </button>
 
                         {/* Açılır Menü */}
                         {isDropdownOpen && (
-                            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-slate-700/50 backdrop-blur-xl bg-slate-900/95 shadow-2xl shadow-black/30 overflow-hidden">
+                            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-white/10 backdrop-blur-xl bg-black/95 shadow-2xl shadow-black/50 overflow-hidden">
                                 {/* Kullanıcı Bilgileri */}
-                                <div className="px-4 py-4 bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-b border-slate-700/50">
+                                <div className="px-4 py-4 bg-gradient-to-r from-white/5 to-white/10 border-b border-white/10">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 ring-2 ring-white/10">
+                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 ring-2 ring-white/20">
                                             <span className="text-white text-lg font-bold">
                                                 {user.username.charAt(0).toUpperCase()}
                                             </span>
                                         </div>
                                         <div className="overflow-hidden flex-1">
-                                            <p className="text-base font-semibold text-slate-100 truncate">
+                                            <p className="text-base font-semibold text-white truncate">
                                                 {user.username}
                                             </p>
-                                            <p className="text-sm text-slate-400 truncate">
+                                            <p className="text-sm text-gray-400 truncate">
                                                 {user.email}
                                             </p>
                                         </div>
@@ -231,12 +231,12 @@ function Header() {
                                                     'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200',
                                                     isActive
                                                         ? 'bg-sky-500/15 text-sky-400'
-                                                        : 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/60'
+                                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
                                                 )}
                                             >
                                                 <Icon className={cn(
                                                     'w-5 h-5 flex-shrink-0',
-                                                    isActive ? 'text-sky-400' : 'text-slate-500'
+                                                    isActive ? 'text-sky-400' : 'text-gray-500'
                                                 )} />
                                                 <span className="text-sm font-medium">{item.label}</span>
                                             </Link>
@@ -245,7 +245,7 @@ function Header() {
                                 </div>
 
                                 {/* Ayırıcı */}
-                                <div className="border-t border-slate-700/50 mx-2" />
+                                <div className="border-t border-white/10 mx-2" />
 
                                 {/* Çıkış Butonu */}
                                 <div className="p-2">
@@ -254,7 +254,7 @@ function Header() {
                                             setIsDropdownOpen(false);
                                             logout();
                                         }}
-                                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-red-400 hover:text-red-300 hover:bg-red-500/15"
                                     >
                                         <LogOut className="w-5 h-5 flex-shrink-0" />
                                         <span className="text-sm font-medium">Çıkış Yap</span>
