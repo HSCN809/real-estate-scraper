@@ -37,41 +37,8 @@ export function ClientLayout({ children }: { children: ReactNode }) {
     // Normal sayfalar için tam layout
     return (
         <AuthGuard>
-            {/* Arka plan efektleri - Dashboard kendi arka planını kullanıyor */}
-            {!isDashboard && (
-                <>
-                    {/* Parçacık Arka Planı */}
-                    <div className="fixed inset-0" style={{ zIndex: 0 }}>
-                        <ParticleBackground />
-                    </div>
-
-                    {/* Aurora Arka Planı */}
-                    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
-                        <Aurora
-                            colorStops={['#38bdf8', '#818cf8', '#34d399']}
-                            amplitude={0.8}
-                            blend={0.6}
-                            speed={0.5}
-                        />
-                    </div>
-
-                    {/* Soyut Dekorasyonlar */}
-                    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
-                        <div className="abstract-circle" style={{
-                            background: 'radial-gradient(circle, #38bdf8, transparent)',
-                            top: '10%',
-                            right: '10%',
-                            opacity: 0.05
-                        }} />
-                        <div className="abstract-circle" style={{
-                            background: 'radial-gradient(circle, #34d399, transparent)',
-                            bottom: '20%',
-                            left: '15%',
-                            opacity: 0.05
-                        }} />
-                    </div>
-                </>
-            )}
+            {/* Arka planlar kaldırıldı - Sadece FloatingLines kullanılıyor */}
+            {/* ParticleBackground, Aurora ve soyut dekorasyonlar silindi */}
 
             {/* Sayfa Konteyneri */}
             <div className="relative isolate">

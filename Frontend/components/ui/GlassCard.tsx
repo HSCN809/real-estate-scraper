@@ -8,7 +8,7 @@ interface GlassCardProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     children: ReactNode;
     variant?: 'default' | 'strong' | 'dark';
     hoverable?: boolean;
-    neonBorder?: 'purple' | 'blue' | 'pink' | 'none';
+    neonBorder?: 'purple' | 'blue' | 'pink' | 'emerald' | 'cyan' | 'none';
     glow?: boolean;
 }
 
@@ -31,6 +31,8 @@ export function GlassCard({
         purple: 'neon-border-purple',
         blue: 'neon-border-blue',
         pink: 'neon-border-pink',
+        emerald: 'neon-border-emerald',
+        cyan: 'neon-border-cyan',
         none: '',
     };
 

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { ArtCard } from '@/components/ui/ArtCard';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -14,6 +13,9 @@ import Link from 'next/link';
 import { startScrape, getCategories, getSubtypes } from '@/lib/api';
 import type { Platform, ListingType, Category } from '@/types';
 import type { Subtype } from '@/lib/api';
+import dynamic from 'next/dynamic';
+
+const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
 
 export default function PlatformScraperPage() {
     const params = useParams();
@@ -47,9 +49,6 @@ export default function PlatformScraperPage() {
     const [subtypesLoading, setSubtypesLoading] = useState(false);
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
-    const platformIcon = platform === 'emlakjet' ? '🔵' : '🟢';
-    const platformGradient = platform === 'emlakjet' ? 'gradient-art-blue' : 'gradient-art-pink';
-    const platformColor = platform === 'emlakjet' ? 'blue' : 'pink';
 
     // Platform/ilan tipi değiştiğinde API'den kategorileri çek
     useEffect(() => {
@@ -152,33 +151,50 @@ export default function PlatformScraperPage() {
     };
 
     return (
-        <div className="space-y-8 max-w-4xl relative z-10">
-            {/* Başlık */}
-            <div>
-                <Link href="/scraper">
-                    <div className="text-gray-400 hover:text-white mb-4 inline-flex items-center gap-2 transition-colors">
-                        ← Geri Dön
-                    </div>
-                </Link>
-                <div className="flex items-center gap-4 mb-3">
-                    <span className="text-7xl">{platformIcon}</span>
-                    <h1 className={`art-title ${platformGradient}`}>
-                        {platformName}
-                    </h1>
-                </div>
-                <p className="text-xl text-gray-300">
-                    🎯 Tarama parametrelerini ayarlayın
-                </p>
+        <div className="relative min-h-screen bg-black">
+            {/* Floating Lines Background */}
+            <div className="fixed inset-0 z-0">
+                <FloatingLines
+                    linesGradient={['#38bdf8', '#0ea5e9', '#34d399', '#818cf8']}
+                    enabledWaves={['top', 'middle', 'bottom']}
+                    lineCount={5}
+                    lineDistance={5}
+                    bendRadius={5}
+                    bendStrength={-0.5}
+                    interactive
+                    parallax
+                />
             </div>
 
-            {/* Yapılandırma Formu */}
-            <ArtCard glowColor={platformColor}>
-                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                    <Sparkles className="w-6 h-6" />
-                    Konfigürasyon
-                </h2>
+            {/* Dark Gradient Overlay */}
+            <div className="fixed inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/50 to-black/85 pointer-events-none" />
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Content */}
+            <div className="relative z-10 px-6 lg:px-8 py-8">
+                <div className="max-w-4xl mx-auto space-y-8">
+                    {/* Yapılandırma Formu */}
+                    <div className="backdrop-blur-xl bg-black/40 rounded-2xl p-6 border border-white/10 hover:border-sky-500/30 hover:bg-black/50 transition-all relative">
+                        {/* Geri Dön Butonu - Sağ Üst Köşe */}
+                        <div className="absolute top-6 right-6">
+                            <Link href="/scraper">
+                                <div className="text-gray-400 hover:text-white inline-flex items-center gap-2 transition-colors">
+                                    ← Geri Dön
+                                </div>
+                            </Link>
+                        </div>
+
+                        {/* Başlık */}
+                        <div className="mb-6">
+                            <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-400 to-emerald-400 bg-clip-text text-transparent mb-3 flex items-center gap-3">
+                                <Sparkles className="w-8 h-8 text-sky-400" />
+                                {platformName}
+                            </h1>
+                            <p className="text-xl text-gray-400">
+                                🎯 Tarama parametrelerini ayarlayın
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-6">
                     {/* İlan Tipi ve Kategori */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Select
@@ -189,6 +205,7 @@ export default function PlatformScraperPage() {
                                 { value: 'satilik', label: '💰 Satılık' },
                                 { value: 'kiralik', label: '🔑 Kiralık' },
                             ]}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                         />
 
                         <Select
@@ -200,6 +217,7 @@ export default function PlatformScraperPage() {
                                 : categories.map((c) => ({ value: c.id, label: `🏠 ${c.name}` }))
                             }
                             disabled={categoriesLoading}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                         />
                     </div>
 
@@ -224,6 +242,7 @@ export default function PlatformScraperPage() {
                                 ...subtypes.map((s) => ({ value: s.id, label: `📋 ${s.name}` }))
                             ]}
                             disabled={subtypesLoading || subtypes.length === 0}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                         />
                         {subtypesLoading && (
                             <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
@@ -235,13 +254,13 @@ export default function PlatformScraperPage() {
 
                     {/* Şehirler */}
                     <div>
-                        <label className="text-sm font-medium text-slate-300 mb-2 block">
+                        <label className="text-sm font-medium text-gray-300 mb-2 block">
                             🌍 Şehirler
                         </label>
                         <button
                             type="button"
                             onClick={() => setIsMapModalOpen(true)}
-                            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/50 border border-slate-600 hover:bg-slate-700/50 hover:border-sky-500/50 transition-all text-slate-200 font-medium"
+                            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-sky-500/30 transition-all text-gray-200 font-medium"
                         >
                             <MapPin className="w-5 h-5 text-sky-400" />
                             {selectedCities.length > 0 ? `${selectedCities.length} Şehir Seçildi` : 'Haritadan Şehir Seç'}
@@ -394,7 +413,7 @@ export default function PlatformScraperPage() {
                     <button
                         type="submit"
                         disabled={isLoading || (activeTask?.isFinished === false)}
-                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading || (activeTask?.isFinished === false) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                        className={`w-full bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-600 hover:to-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-sky-500/25 hover:shadow-sky-500/40 transition-all ${isLoading || (activeTask?.isFinished === false) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
                             }`}
                     >
                         {isLoading ? (
@@ -416,13 +435,10 @@ export default function PlatformScraperPage() {
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
-                            <ArtCard
-                                glowColor={result.type === 'success' ? 'blue' : 'pink'}
-                                className={`border-2 ${result.type === 'success'
-                                    ? 'border-green-500/50 bg-green-500/10'
-                                    : 'border-red-500/50 bg-red-500/10'
-                                    }`}
-                            >
+                            <div className={`backdrop-blur-xl bg-black/40 rounded-2xl p-6 border-2 ${result.type === 'success'
+                                ? 'border-green-500/30 bg-green-500/10'
+                                : 'border-red-500/30 bg-red-500/10'
+                                }`}>
                                 <div className="flex items-start gap-4">
                                     {result.type === 'success' ? (
                                         <CheckCircle2 className="w-8 h-8 text-green-400 flex-shrink-0" />
@@ -436,11 +452,13 @@ export default function PlatformScraperPage() {
                                         <p className="text-gray-300 mt-1">{result.message}</p>
                                     </div>
                                 </div>
-                            </ArtCard>
+                            </div>
                         </motion.div>
                     )}
                 </form>
-            </ArtCard>
+            </div>
+        </div>
+            </div>
         </div>
     );
 }

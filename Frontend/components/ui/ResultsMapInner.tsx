@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { X, Building2, BarChart3, TrendingUp } from 'lucide-react';
+import { X, Building2, BarChart3, TrendingUp, MapPin, Database, Sparkles, TrendingUp as TrendIcon } from 'lucide-react';
 import { ScrapeResult } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
+import SpotlightCard from '@/components/ui/SpotlightCard';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { motion } from 'framer-motion';
 
 // GeoJSON adresi
 const GEOJSON_URL = 'https://raw.githubusercontent.com/alpers/Turkey-Maps-GeoJSON/master/tr-cities.json';
@@ -188,7 +191,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
 
     return (
         <div className="flex flex-col gap-6" onMouseMove={handleMouseMove}>
-            <div className="w-full flex justify-center items-center bg-slate-900/30 rounded-2xl border border-slate-700/50 p-4 md:p-8 min-h-[600px]">
+            <SpotlightCard className="p-4 md:p-8 min-h-[600px]">
                 <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
                     {geoData.map((feature, i) => {
                         const geoName = feature.properties.name;
@@ -198,13 +201,16 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                         const d = pathGenerator(feature.geometry as any) || '';
 
                         return (
-                            <path
+                            <motion.path
                                 key={i}
                                 d={d}
                                 fill={fillColor}
                                 stroke="#1e293b"
                                 strokeWidth="0.5"
-                                className="cursor-pointer transition-opacity hover:opacity-80"
+                                className="cursor-pointer transition-opacity"
+                                initial={{ opacity: 0.8 }}
+                                whileHover={{ opacity: 0.6, scale: 1.02 }}
+                                transition={{ duration: 0.2 }}
                                 onClick={() => handleCityClick(dataName)}
                                 onMouseEnter={() => {
                                     const count = result?.count || 0;
@@ -215,130 +221,237 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                         );
                     })}
                 </svg>
-            </div>
+            </SpotlightCard>
 
             {hoveredCity && (
-                <div
-                    className="fixed pointer-events-none z-50 px-3 py-1.5 bg-slate-800 text-white text-sm rounded-lg shadow-lg border border-slate-600"
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="fixed pointer-events-none z-50 px-4 py-2 bg-gradient-to-br from-slate-900 to-slate-800 text-white text-sm rounded-xl shadow-2xl border border-slate-600/50 backdrop-blur-sm"
                     style={{ left: mousePosition.x + 15, top: mousePosition.y + 15 }}
                 >
-                    {hoveredCity}
-                </div>
+                    <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-emerald-400" />
+                        {hoveredCity}
+                    </div>
+                </motion.div>
             )}
 
-            <div className="flex justify-center gap-6 text-sm text-gray-400">
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#334155' }}></div><span>Veri Yok</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#6ee7b7' }}></div><span>1-49 İlan</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }}></div><span>50-999 İlan</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#059669' }}></div><span>1000+ İlan</span></div>
-            </div>
-
-            {selectedCityName && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedCityName(null)}>
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-500/20 rounded-lg"><Building2 className="w-6 h-6 text-emerald-400" /></div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-white">{selectedCityName}</h3>
-                                    <p className="text-sm text-gray-400">
-                                        Şehir Bazlı Toplu İstatistikler
-                                    </p>
-                                </div>
-                            </div>
-                            <button onClick={() => setSelectedCityName(null)} className="p-2 hover:bg-slate-800 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-                        </div>
-
-                        {/* Basic Stats Grid */}
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="bg-slate-800/50 rounded-xl p-4">
-                                <p className="text-gray-400 text-sm mb-1">Toplam İlan</p>
-                                <p className="text-2xl font-bold text-emerald-400">
-                                    {cityStats?.total_listings ? cityStats.total_listings.toLocaleString() : '0'}
-                                </p>
-                            </div>
-                            <div className="bg-slate-800/50 rounded-xl p-4">
-                                <p className="text-gray-400 text-sm mb-1">Ortalama Fiyat</p>
-                                <p className="text-2xl font-bold text-blue-400">
-                                    {cityStats?.stats?.mean ? `${formatPrice(cityStats.stats.mean)} ₺` : 'Veri yok'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Descriptive Statistics */}
-                        {statsLoading ? (
-                            <div className="flex items-center justify-center py-8">
-                                <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-                                <span className="ml-3 text-gray-400">İstatistikler yükleniyor...</span>
-                            </div>
-                        ) : cityStats?.stats ? (
-                            <>
-                                {/* Describe Stats */}
-                                <div className="mb-6">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <TrendingUp className="w-5 h-5 text-purple-400" />
-                                        <h4 className="text-lg font-semibold text-white">Fiyat İstatistikleri</h4>
-                                    </div>
-                                    <div className="grid grid-cols-4 gap-2 text-sm">
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Min</p>
-                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.min)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Q1</p>
-                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.q25)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Medyan</p>
-                                            <p className="text-amber-400 font-semibold">{formatPrice(cityStats.stats.median)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Q3</p>
-                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.q75)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Max</p>
-                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.max)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                                            <p className="text-gray-500 text-xs">Ortalama</p>
-                                            <p className="text-blue-400 font-semibold">{formatPrice(cityStats.stats.mean)} ₺</p>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-lg p-3 text-center col-span-2">
-                                            <p className="text-gray-500 text-xs">Std. Sapma</p>
-                                            <p className="text-white font-semibold">{formatPrice(cityStats.stats.std)} ₺</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Price Range Distribution */}
-                                <div className="mb-6">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <BarChart3 className="w-5 h-5 text-cyan-400" />
-                                        <h4 className="text-lg font-semibold text-white">Fiyat Aralığı Dağılımı</h4>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {cityStats.price_ranges.map((range, idx) => (
-                                            <div key={idx} className="flex items-center gap-3">
-                                                <div className="w-32 text-xs text-gray-400 truncate" title={range.range}>{range.range}</div>
-                                                <div className="flex-1 h-6 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full transition-all duration-500"
-                                                        style={{ width: `${range.percentage}%` }}
-                                                    ></div>
-                                                </div>
-                                                <div className="w-20 text-right text-xs">
-                                                    <span className="text-white font-medium">{range.count}</span>
-                                                    <span className="text-gray-500 ml-1">(%{range.percentage})</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        ) : null}
+            <GlassCard variant="default" className="p-4">
+                <div className="flex justify-center gap-6 md:gap-8 text-sm text-gray-400 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: '#334155' }}></div>
+                        <span>Veri Yok</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: '#6ee7b7' }}></div>
+                        <span>1-49 İlan</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }}></div>
+                        <span>50-999 İlan</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: '#059669' }}></div>
+                        <span>1000+ İlan</span>
                     </div>
                 </div>
+            </GlassCard>
+
+            {selectedCityName && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => setSelectedCityName(null)}
+                >
+                    <motion.div
+                        initial={{ scale: 0.95, y: 20 }}
+                        animate={{ scale: 1, y: 0 }}
+                        exit={{ scale: 0.95, y: 20 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <SpotlightCard className="p-8">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-4">
+                                    <motion.div
+                                        whileHover={{ scale: 1.1, rotate: 5 }}
+                                        className="p-3 bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl border border-emerald-500/30"
+                                    >
+                                        <Building2 className="w-7 h-7 text-emerald-400" />
+                                    </motion.div>
+                                    <div>
+                                        <motion.h3
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.1 }}
+                                            className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400"
+                                        >
+                                            {selectedCityName}
+                                        </motion.h3>
+                                        <p className="text-sm text-gray-400 flex items-center gap-2">
+                                            <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                                            Şehir Bazlı Toplu İstatistikler
+                                        </p>
+                                    </div>
+                                </div>
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => setSelectedCityName(null)}
+                                    className="p-2 hover:bg-slate-700/50 rounded-xl transition-colors"
+                                >
+                                    <X className="w-6 h-6 text-gray-400 hover:text-white" />
+                                </motion.button>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <GlassCard variant="default" neonBorder="emerald" glow className="p-5">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-emerald-500/20 rounded-lg">
+                                            <Database className="w-5 h-5 text-emerald-400" />
+                                        </div>
+                                        <span className="text-gray-400 text-sm">Toplam İlan</span>
+                                    </div>
+                                    <motion.p
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.2 }}
+                                        className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-green-400"
+                                    >
+                                        {cityStats?.total_listings ? cityStats.total_listings.toLocaleString() : '0'}
+                                    </motion.p>
+                                </GlassCard>
+
+                                <GlassCard variant="default" neonBorder="blue" glow className="p-5">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-blue-500/20 rounded-lg">
+                                            <TrendIcon className="w-5 h-5 text-blue-400" />
+                                        </div>
+                                        <span className="text-gray-400 text-sm">Ortalama Fiyat</span>
+                                    </div>
+                                    <motion.p
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3 }}
+                                        className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400"
+                                    >
+                                        {cityStats?.stats?.mean ? `${formatPrice(cityStats.stats.mean)} ₺` : 'Veri yok'}
+                                    </motion.p>
+                                </GlassCard>
+                            </div>
+
+                            {/* Descriptive Statistics */}
+                            {statsLoading ? (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="flex flex-col items-center justify-center py-12"
+                                >
+                                    <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4" />
+                                    <span className="text-gray-400">İstatistikler yükleniyor...</span>
+                                </motion.div>
+                            ) : cityStats?.stats ? (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.4 }}
+                                >
+                                    {/* Price Statistics */}
+                                    <div className="mb-6">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <motion.div
+                                                whileHover={{ scale: 1.1 }}
+                                                className="p-2 bg-purple-500/20 rounded-lg"
+                                            >
+                                                <TrendingUp className="w-5 h-5 text-purple-400" />
+                                            </motion.div>
+                                            <h4 className="text-lg font-semibold text-white">Fiyat İstatistikleri</h4>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-3 text-sm">
+                                            {[
+                                                { label: 'Min', value: formatPrice(cityStats.stats.min), color: 'text-white' },
+                                                { label: 'Q1', value: formatPrice(cityStats.stats.q25), color: 'text-white' },
+                                                { label: 'Medyan', value: formatPrice(cityStats.stats.median), color: 'text-amber-400' },
+                                                { label: 'Q3', value: formatPrice(cityStats.stats.q75), color: 'text-white' },
+                                            ].map((stat, idx) => (
+                                                <GlassCard key={idx} variant="dark" className="p-3 text-center">
+                                                    <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
+                                                    <motion.p
+                                                        initial={{ opacity: 0, scale: 0.9 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        transition={{ delay: 0.5 + idx * 0.05 }}
+                                                        className={`${stat.color} font-semibold text-lg`}
+                                                    >
+                                                        {stat.value} ₺
+                                                    </motion.p>
+                                                </GlassCard>
+                                            ))}
+                                            <GlassCard variant="dark" className="p-3 text-center">
+                                                <p className="text-gray-500 text-xs mb-1">Max</p>
+                                                <p className="text-white font-semibold text-lg">{formatPrice(cityStats.stats.max)} ₺</p>
+                                            </GlassCard>
+                                            <GlassCard variant="dark" className="p-3 text-center">
+                                                <p className="text-gray-500 text-xs mb-1">Ortalama</p>
+                                                <p className="text-blue-400 font-semibold text-lg">{formatPrice(cityStats.stats.mean)} ₺</p>
+                                            </GlassCard>
+                                            <GlassCard variant="dark" className="p-3 text-center col-span-2">
+                                                <p className="text-gray-500 text-xs mb-1">Std. Sapma</p>
+                                                <p className="text-white font-semibold text-lg">{formatPrice(cityStats.stats.std)} ₺</p>
+                                            </GlassCard>
+                                        </div>
+                                    </div>
+
+                                    {/* Price Range Distribution */}
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <motion.div
+                                                whileHover={{ scale: 1.1 }}
+                                                className="p-2 bg-cyan-500/20 rounded-lg"
+                                            >
+                                                <BarChart3 className="w-5 h-5 text-cyan-400" />
+                                            </motion.div>
+                                            <h4 className="text-lg font-semibold text-white">Fiyat Aralığı Dağılımı</h4>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {cityStats.price_ranges.map((range, idx) => (
+                                                <motion.div
+                                                    key={idx}
+                                                    initial={{ opacity: 0, x: -20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: 0.6 + idx * 0.05 }}
+                                                    className="flex items-center gap-3"
+                                                >
+                                                    <div className="w-36 text-xs text-gray-400 truncate font-medium" title={range.range}>
+                                                        {range.range}
+                                                    </div>
+                                                    <div className="flex-1 h-7 bg-slate-800/80 rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${range.percentage}%` }}
+                                                            transition={{ duration: 0.8, delay: 0.7 + idx * 0.05 }}
+                                                            className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full"
+                                                        />
+                                                    </div>
+                                                    <div className="w-24 text-right">
+                                                        <span className="text-white font-bold text-sm">{range.count}</span>
+                                                        <span className="text-gray-500 text-xs ml-1">(%{range.percentage})</span>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ) : null}
+                        </SpotlightCard>
+                    </motion.div>
+                </motion.div>
             )}
         </div>
     );
