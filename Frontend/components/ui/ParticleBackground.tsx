@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-export function ParticleBackground() {
+export default function ParticleBackground() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {

@@ -393,8 +393,8 @@ export default function PlatformScraperPage() {
                     {/* Gönder Butonu */}
                     <button
                         type="submit"
-                        disabled={isLoading || (activeTask && !activeTask.isFinished)}
-                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading || (activeTask && !activeTask.isFinished) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                        disabled={isLoading || (activeTask?.isFinished === false)}
+                        className={`art-button w-full p-4 rounded-xl text-lg font-bold transition-all ${isLoading || (activeTask?.isFinished === false) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
                             }`}
                     >
                         {isLoading ? (

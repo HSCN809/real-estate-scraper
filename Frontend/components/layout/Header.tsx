@@ -6,7 +6,7 @@ import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2, M
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useScraping } from '@/contexts/ScrapingContext';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 
 // Ana navigasyon öğeleri
 const navItems = [
@@ -27,7 +27,7 @@ const dropdownMenuItems = [
     { href: '/settings', label: 'Ayarlar', icon: Settings },
 ];
 
-export function Header() {
+function Header() {
     const pathname = usePathname();
     const { user, logout } = useAuth();
     const { activeTask, isPanelVisible, showPanel } = useScraping();
@@ -268,3 +268,5 @@ export function Header() {
         </header>
     );
 }
+
+export default memo(Header);

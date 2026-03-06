@@ -1,12 +1,20 @@
 'use client';
 
-import { Header } from '@/components/layout/Header';
-import { ParticleBackground } from '@/components/ui/ParticleBackground';
-import Aurora from '@/components/ui/Aurora';
+import Header from '@/components/layout/Header';
+import dynamic from 'next/dynamic';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ProgressPanel } from '@/components/ui/ProgressModal';
 import { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
+
+// Lazy load background effects for better initial load performance
+const ParticleBackground = dynamic(() => import('@/components/ui/ParticleBackground'), {
+    ssr: false
+});
+
+const Aurora = dynamic(() => import('@/components/ui/Aurora'), {
+    ssr: false
+});
 
 // Public sayfalar - header olmadan tam ekran gösterilecek
 const publicRoutes = ['/login', '/register', '/homepage'];
