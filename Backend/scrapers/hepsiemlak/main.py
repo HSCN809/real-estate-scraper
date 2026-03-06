@@ -829,6 +829,8 @@ class HepsiemlakScraper(BaseScraper):
                             scrape_session_id=self.scrape_session_id
                         )
                         total_new_listings += new_c  # Yeni eklenenleri say
+                        self.total_new_listings += new_c
+                        logger.warning(f"📊 HepsiEmlak Kümülatif Toplam: {self.total_new_listings} ilan")
                         logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                 if page < pages_to_scrape:
@@ -1031,6 +1033,8 @@ class HepsiemlakScraper(BaseScraper):
                                 scrape_session_id=self.scrape_session_id
                             )
                             total_new_listings += new_c  # Yeni eklenenleri say
+                        self.total_new_listings += new_c
+                        logger.warning(f"📊 HepsiEmlak Kümülatif Toplam: {self.total_new_listings} ilan")
                             logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                     if page < pages_to_scrape:

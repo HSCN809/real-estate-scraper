@@ -620,6 +620,7 @@ class EmlakJetScraper(BaseScraper):
         )
         # Global kümülatif sayaça ekle
         self.total_new_listings += new_listings_count_ref[0]
+        logger.warning(f"📊 EmlakJet Kümülatif Toplam: {self.total_new_listings} ilan")
         return should_skip, new_listings_count_ref[0]
 
     def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None, stop_checker=None):
@@ -784,7 +785,7 @@ class EmlakJetScraper(BaseScraper):
                             print("⏭️  Bu lokasyon atlandı.")
                         else:
                             print(f"   📦 Toplam: {new_count} yeni ilan toplandı")
-                            scrape_stats.setdefault(province_name, {})[district['name']] = scraped_count
+                            scrape_stats.setdefault(province_name, {})[district['name']] = new_count
                         continue
 
                     # İlçe > 1500 ilan — mahallelere iniyoruz
