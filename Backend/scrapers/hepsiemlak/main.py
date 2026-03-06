@@ -1035,7 +1035,7 @@ class HepsiemlakScraper(BaseScraper):
                             total_new_listings += new_c  # Yeni eklenenleri say
                         self.total_new_listings += new_c
                         logger.warning(f"📊 HepsiEmlak Kümülatif Toplam: {self.total_new_listings} ilan")
-                            logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
+                        logger.info(f"💾 Sayfa {page}: {new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi")
 
                     if page < pages_to_scrape:
                         self.random_medium_wait()
