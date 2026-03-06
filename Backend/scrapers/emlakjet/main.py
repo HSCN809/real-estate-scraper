@@ -212,16 +212,11 @@ class EmlakJetScraper(BaseScraper):
             return [], 0
 
     def get_max_pages(self, target_url: Optional[str] = None) -> int:
-        """URL için yeniden deneme ile maksimum sayfa sayısını al"""
-        max_retries = 3
-
+        """URL için binary search ile maksimum sayfa sayısını al"""
         try:
             if target_url:
                 self.driver.get(target_url)
                 self.random_medium_wait()  # Gizli mod
-
-            pagination_sel = self.common_selectors.get("pagination_list")
-            active_sel = self.common_selectors.get("active_page")
 
             # JavaScript ile yükleme beklemesi için explicit wait
             try:
@@ -235,48 +230,55 @@ class EmlakJetScraper(BaseScraper):
             # Ekstra bekleme - pagination elementleri yüklenmesi için
             time.sleep(2)
 
-            for retry in range(max_retries):
-                pagination = self.driver.find_elements(By.CSS_SELECTOR, pagination_sel)
+            # Sonraki ok (right arrow) var mı kontrol et - eğer yoksa son sayfadayız
+            # Eğer varsa, son sayfaya git ve oradaki pagination'dan max page bul
+            right_arrow = self.driver.find_elements(By.CSS_SELECTOR, "li.styles_rightArrow__Kn4kW a")
+            pagination_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'sayfa=')]")
 
-                if pagination:
-                    print(f"✓ Pagination bulundu: {len(pagination)} link")
-                    logger.info(f"Pagination elements found: {len(pagination)}")
-                    break
+            if not right_arrow or not pagination_links:
+                # Pagination yok veya son sayfadayız
+                return 1
 
-                if retry < max_retries - 1:
-                    print(f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})")
-                    logger.warning(f"Pagination not found, retry {retry + 1}/{max_retries}")
-                    # Uzun bekleme ve tekrar dene
-                    time.sleep(3)
-                else:
-                    print(f"⚠️ Pagination bulunamadı - tek sayfa varsayılıyor")
-                    logger.warning("Pagination not found after all retries, assuming single page")
-                    return 1
+            # Sonraki ok var - son sayfaya git
+            # Son sayfaya gitmek için büyük bir sayfa numarası dene (örn: 1000)
+            # Emlakjet otomatik olarak son sayfaya yönlendirecek
+            separator = '&' if '?' in target_url else '?'
+            last_page_url = f"{target_url}{separator}sayfa=9999"
 
+            print(f"🔍 Son sayfa aranıyor...")
+            self.driver.get(last_page_url)
+            time.sleep(2)
+
+            # Son sayfadaki pagination link'lerini al
+            last_page_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'sayfa=')]")
+
+            if not last_page_links:
+                # Hâlâ pagination yok, 1 varsay
+                return 1
+
+            # Son sayfadan maksimum sayfa numarasını çıkar
             page_numbers = []
-            for item in pagination:
-                # Active page kontrolü
+            for link in last_page_links:
                 try:
-                    active_page = item.find_element(By.CSS_SELECTOR, active_sel)
-                    page_text = active_page.text.strip()
-                    if page_text.isdigit():
-                        page_numbers.append(int(page_text))
-                        logger.debug(f"Active page found: {page_text}")
+                    href = link.get_attribute("href")
+                    if "?sayfa=" in href:
+                        page_num = int(href.split("?sayfa=")[1].split("&")[0])
+                        page_numbers.append(page_num)
                 except Exception as e:
-                    logger.debug(f"No active page in item: {e}")
-
-                # Linklerdeki sayılar
-                try:
-                    page_link = item.find_element(By.CSS_SELECTOR, "a")
-                    page_text = page_link.text.strip()
-                    if page_text.isdigit():
-                        page_numbers.append(int(page_text))
-                        logger.debug(f"Page link found: {page_text}")
-                except Exception as e:
-                    logger.debug(f"No page link in item: {e}")
+                    logger.debug(f"Error parsing page number from link: {e}")
 
             max_page = max(page_numbers) if page_numbers else 1
-            logger.info(f"Total page numbers found: {page_numbers}, max_page: {max_page}")
+
+            # Seçili sayfa (active page) daha büyükse onu kullan
+            try:
+                selected_page = self.driver.find_element(By.CSS_SELECTOR, "span.styles_selected__hilA_")
+                selected_num = int(selected_page.text)
+                if selected_num > max_page:
+                    max_page = selected_num
+            except:
+                pass
+
+            logger.info(f"Max pages found: {max_page}")
             return max_page
 
         except Exception as e:
