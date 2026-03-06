@@ -105,9 +105,9 @@ export default function RegisterPage() {
                             background: 0x000000,
                             shoulderLines: 0x131318,
                             brokenLines: 0x131318,
-                            leftCars: [0x34d399, 0x10b981, 0x059669],  // Zümrüt yeşili
-                            rightCars: [0x38bdf8, 0x0ea5e9, 0x0284c7], // Gök mavisi
-                            sticks: 0x34d399, // Zümrüt
+                            leftCars: [0x034d99, 0x10b981, 0x059669], // Zümrüt yeşili
+                            rightCars: [0x038bdf8, 0x0ea5e9, 0x0284c7], // Gök mavisi
+                            sticks: 0x034d399, // Zümrüt
                         }
                     }}
                 />
@@ -119,20 +119,20 @@ export default function RegisterPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="w-full max-w-md"
+                    className="w-full max-w-2xl"
                 >
                     <div className="backdrop-blur-xl bg-black/40 rounded-2xl p-8 border border-white/10 shadow-2xl">
                         {/* Başlık */}
                         <div className="text-center mb-8">
                             <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, type: 'spring' }}
-                                className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 flex items-center justify-center"
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1.1, opacity: 1 }}
+                                transition={{ delay: 0.2, duration: 0.8, type: 'spring' }}
+                                className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 flex items-center justify-center"
                             >
-                                <UserPlus className="w-8 h-8 text-white" />
+                                <UserPlus className="w-10 h-10 text-white" />
                             </motion.div>
-                            <h1 className="text-3xl font-bold text-white mb-2">
+                            <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
                                 Hesap Oluştur
                             </h1>
                             <p className="text-gray-400">
@@ -142,68 +142,68 @@ export default function RegisterPage() {
 
                         {/* Form */}
                         <form onSubmit={handleSubmit} className="space-y-5">
-                            <div>
-                                <Input
-                                    label="Kullanıcı Adı"
-                                    type="text"
-                                    value={formData.username}
-                                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                    placeholder="kullanici_adi"
-                                    required
-                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                                />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Input
+                                        label="Kullanıcı Adı"
+                                        type="text"
+                                        value={formData.username}
+                                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                        placeholder="kullanici_adi"
+                                        required
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                                    />
+                                </div>
+                                <div>
+                                    <Input
+                                        label="E-posta"
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        placeholder="ornek@email.com"
+                                        required
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                                    />
+                                </div>
                             </div>
-
-                            <div>
-                                <Input
-                                    label="E-posta"
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    placeholder="ornek@email.com"
-                                    required
-                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                                />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <Input
+                                        label="Şifre"
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={formData.password}
+                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                        placeholder="********"
+                                        required
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-9 text-gray-400 hover:text-white transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <Input
+                                        label="Şifre Tekrar"
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        value={formData.confirmPassword}
+                                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                        placeholder="********"
+                                        required
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                        className="absolute right-3 top-9 text-gray-400 hover:text-white transition-colors"
+                                    >
+                                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
                             </div>
-
-                            <div className="relative">
-                                <Input
-                                    label="Şifre"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={formData.password}
-                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    placeholder="********"
-                                    required
-                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-12"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-9 text-gray-400 hover:text-white transition-colors"
-                                >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-
-                            <div className="relative">
-                                <Input
-                                    label="Şifre Tekrar"
-                                    type={showConfirmPassword ? 'text' : 'password'}
-                                    value={formData.confirmPassword}
-                                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                    placeholder="********"
-                                    required
-                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-12"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    className="absolute right-3 top-9 text-gray-400 hover:text-white transition-colors"
-                                >
-                                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-
                             <div className="text-xs text-gray-400 space-y-1">
                                 <p>Şifre gereksinimleri:</p>
                                 <ul className="list-disc list-inside space-y-0.5">
@@ -213,7 +213,6 @@ export default function RegisterPage() {
                                     <li>En az bir rakam</li>
                                 </ul>
                             </div>
-
                             <Button
                                 type="submit"
                                 disabled={isLoading}
