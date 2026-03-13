@@ -730,7 +730,7 @@ class HepsiemlakScraplingScraper:
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
             self.metrics["total_listings"] = len(all_listings)
-            self._export_results(all_listings)
+            logger.info("Skipping automatic CSV/Excel export; results remain available in the database.")
             return all_results, all_listings
         finally:
             self._close_session()
