@@ -109,11 +109,8 @@ async def get_subtypes(listing_type: str, category: str, platform: str = "hepsie
     return {"subtypes": subtypes, "cached": True}
 
 def run_emlakjet_task(request: ScrapeRequest):
-    from scrapers.emlakjet.main import EmlakJetScraper
-
-    manager = DriverManager()
+    manager = None
     try:
-        driver = manager.start()
         config = get_emlakjet_config()
 
         # Durumu sıfırla ve başlat
@@ -133,20 +130,45 @@ def run_emlakjet_task(request: ScrapeRequest):
             category_path = config.categories[request.listing_type].get(request.category, '')
             base_url = config.base_url + category_path
 
-        scraper = EmlakJetScraper(
-            driver=driver,
-            base_url=base_url,
-            category=request.category,
-            listing_type=request.listing_type,
-            subtype_path=request.subtype_path
-        )
+        if request.scraping_method == "selenium":
+            from scrapers.emlakjet.main import EmlakJetScraper
 
-        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, subtype_path={request.subtype_path}, cities={request.cities}")
+            manager = DriverManager()
+            driver = manager.start()
+            scraper = EmlakJetScraper(
+                driver=driver,
+                base_url=base_url,
+                category=request.category,
+                listing_type=request.listing_type,
+                subtype_path=request.subtype_path
+            )
+        else:
+            from scrapers.emlakjet.scrapling_scraper import EmlakJetScraplingScraper
+
+            scraper = EmlakJetScraplingScraper(
+                listing_type=request.listing_type,
+                category=request.category,
+                subtype_path=request.subtype_path,
+                selected_cities=request.cities,
+                selected_districts=request.districts,
+                scraping_method=request.scraping_method,
+                headless=True,
+            )
+
+        print(
+            "DEBUG API: "
+            f"listing_type={request.listing_type}, "
+            f"category={request.category}, "
+            f"subtype_path={request.subtype_path}, "
+            f"scraping_method={request.scraping_method}, "
+            f"cities={request.cities}"
+        )
 
         if hasattr(scraper, 'start_scraping_api'):
             scraper.start_scraping_api(
                 cities=request.cities,
                 districts=request.districts,
+                max_listings=request.max_listings or 0,
                 max_pages=request.max_pages,
                 progress_callback=progress_callback
             )
@@ -158,7 +180,8 @@ def run_emlakjet_task(request: ScrapeRequest):
     finally:
         task_status.set_running(False)
         task_status.update("İşlem tamamlandı", progress=100)
-        manager.stop()
+        if manager:
+            manager.stop()
 
 def run_hepsiemlak_task(request: ScrapeRequest):
     from core.failed_pages_tracker import failed_pages_tracker
@@ -288,6 +311,8 @@ async def scrape_emlakjet(request: ScrapeRequest):
             "cities": request.cities,
             "districts": request.districts,
             "max_listings": request.max_listings or 0,
+            "max_pages": request.max_pages or 50,
+            "scraping_method": request.scraping_method,
         },
         queue="scraping"
     )

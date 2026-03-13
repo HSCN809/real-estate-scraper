@@ -26,11 +26,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
 from utils.data_exporter import DataExporter
-from utils.logger import get_logger
+from utils.logger import TaskLogLayout, get_logger
 
 from .main import save_listings_to_db
 
 logger = get_logger(__name__)
+task_log = TaskLogLayout(logger)
 
 SUPPORTED_SCRAPLING_METHODS = (
     "scrapling_stealth_session",
@@ -200,8 +201,7 @@ class HepsiemlakScraplingScraper:
     def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
         if not self._is_stop_requested():
             return False
-        print(f"\n⚠️ {message}")
-        logger.warning(message)
+        task_log.line(f"⚠️ {message}", level="warning")
         if progress_callback:
             progress_callback(message, progress=0)
         return True
@@ -211,7 +211,7 @@ class HepsiemlakScraplingScraper:
             return None
 
         listing_results = self.common_selectors.get("listing_results")
-        logger.info(f"Creating Scrapling session via {self.scraping_method} (headless={self.headless})")
+        task_log.line(f"Creating Scrapling session via {self.scraping_method} (headless={self.headless})")
         if self.scraping_method == "scrapling_stealth_session":
             self.session_context = StealthySession(
                 headless=self.headless,
@@ -238,7 +238,7 @@ class HepsiemlakScraplingScraper:
             )
 
         self.session = self.session_context.__enter__() if hasattr(self.session_context, "__enter__") else self.session_context
-        logger.info(f"Scrapling session ready via {self.scraping_method}")
+        task_log.line(f"Scrapling session ready via {self.scraping_method}")
         return self.session
 
     def _close_session(self):
@@ -277,11 +277,11 @@ class HepsiemlakScraplingScraper:
                 return None
 
             self.metrics["successful_requests"] += 1
-            logger.info(f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}")
+            task_log.line(f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}")
             return response
         except Exception as exc:
             self.metrics["failed_requests"] += 1
-            logger.error(f"Error fetching {url}: {exc}")
+            task_log.line(f"Error fetching {url}: {exc}", level="error")
             return None
 
     def get_total_pages(self, selector: Selector) -> int:
@@ -300,7 +300,7 @@ class HepsiemlakScraplingScraper:
                     max_page = max(max_page, int(text))
             return max_page
         except Exception as exc:
-            logger.warning(f"Error detecting pagination: {exc}")
+            task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
 
     def _extract_text(self, element: Selector, css_selector: str, default: str = "Belirtilmemis") -> str:
@@ -383,7 +383,7 @@ class HepsiemlakScraplingScraper:
                 data["scraping_method"] = self.scraping_method
                 listings.append(data)
         except Exception as exc:
-            logger.error(f"Error extracting listings from page: {exc}")
+            task_log.line(f"Error extracting listings from page: {exc}", level="error")
         return listings
 
     def _persist_listings(self, listings: List[Dict[str, Any]]) -> Tuple[int, int, int]:
@@ -415,13 +415,19 @@ class HepsiemlakScraplingScraper:
         unchanged_count: int,
         location_name: str,
     ) -> None:
-        print(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
-        print(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
-        logger.info(
-            f"{location_name} / Sayfa {page_num}: "
-            f"{extracted_count} ilan çıkarıldı, {new_count} yeni, "
-            f"{updated_count} güncellendi, {unchanged_count} değişmedi"
+        task_log.line(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
+        task_log.line(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
+
+    def _log_location_start(self, location_name: str, location_url: str) -> None:
+        task_log.section(
+            f"📍 Taranıyor: {location_name}",
+            f"🌐 {location_url}",
+            f"🕸️ Yöntem: {self.scraping_method}",
         )
+
+    def _log_location_plan(self, location_name: str, pages_to_scrape: int) -> None:
+        task_log.line(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
+        task_log.line(f"📄 {pages_to_scrape} sayfa taranacak")
 
     def _make_city_progress_callback(self, progress_callback, current_city_idx: int, num_cities: int, city_name: str):
         def city_progress_callback(msg, current=None, total=None, progress=None):
@@ -459,31 +465,24 @@ class HepsiemlakScraplingScraper:
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
         listings: List[Dict[str, Any]] = []
-        print(f"\n{'=' * 70}")
-        print(f"📍 Taranıyor: {location_name}")
-        print(f"🌐 {location_url}")
-        print(f"🕸️ Yöntem: {self.scraping_method}")
-        print("=" * 70)
+        self._log_location_start(location_name, location_url)
         first_page = self.fetch_page(location_url)
         if not first_page:
-            print(f"⚠️ İlk sayfa alınamadı: {location_name}")
-            logger.warning(f"Could not fetch first page for {location_name}: {location_url}")
+            task_log.line(f"⚠️ İlk sayfa alınamadı: {location_name}", level="warning")
             return listings
 
         pages_to_scrape = min(max_pages, self.get_total_pages(first_page))
-        logger.info(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
-        print(f"📄 {pages_to_scrape} sayfa taranacak")
+        self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
             if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
                 break
 
             current_url = self._build_page_url(location_url, page_num)
-            print(f"\n🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor...")
+            task_log.line(f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor...")
             selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
-                print(f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor")
-                logger.warning(f"{location_name} / page {page_num}: fetch failed, skipping")
+                task_log.line(f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor", level="warning")
                 continue
 
             if progress_callback:
@@ -515,8 +514,7 @@ class HepsiemlakScraplingScraper:
             if page_num < pages_to_scrape:
                 time.sleep(random.uniform(1, 3))
 
-        print(f"\n✅ {location_name} tamamlandı - {len(listings)} ilan işlendi")
-        logger.info(f"{location_name}: completed with {len(listings)} listings via {self.scraping_method}")
+        task_log.line(f"✅ {location_name} tamamlandı - {len(listings)} ilan işlendi")
         return listings
 
     def _scrape_location_with_spider(
@@ -534,6 +532,9 @@ class HepsiemlakScraplingScraper:
         spider_errors: List[Dict[str, str]] = []
         visited_pages: set[int] = set()
         outer = self
+
+        self._log_location_start(location_name, location_url)
+        self._log_location_plan(location_name, max_pages)
 
         logging.getLogger("scrapling").setLevel(logging.WARNING)
         logging.getLogger("scrapling.spiders").setLevel(logging.WARNING)
@@ -595,7 +596,7 @@ class HepsiemlakScraplingScraper:
                         "error": f"{type(error).__name__}: {error}",
                     }
                 )
-                logger.warning(f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}")
+                task_log.line(f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}", level="warning")
 
             async def parse(self, response: Response):
                 current_page = outer._get_page_number(response.url)
@@ -604,7 +605,7 @@ class HepsiemlakScraplingScraper:
                 if outer._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
                     return
 
-                print(f"\n🔍 [{current_page}/{max_pages}] {location_name} - Sayfa {current_page} taranıyor...")
+                task_log.line(f"🔍 [{current_page}/{max_pages}] {location_name} - Sayfa {current_page} taranıyor...")
                 if progress_callback:
                     progress_callback(
                         f"{location_name} - Sayfa {current_page}/{max_pages}",
@@ -654,10 +655,9 @@ class HepsiemlakScraplingScraper:
             )
 
         if not method_items:
-            print(f"\n⚠️ {location_name} için ilan bulunamadı")
+            task_log.line(f"⚠️ {location_name} için ilan bulunamadı", level="warning")
         else:
-            print(f"\n✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi")
-        logger.info(f"{location_name}: completed with {len(method_items)} listings via {self.scraping_method}")
+            task_log.line(f"✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi")
         return method_items
 
     def _scrape_location(
@@ -710,13 +710,13 @@ class HepsiemlakScraplingScraper:
             csv_path = os.path.join(self.exporter.output_dir, f"{prefix}.csv")
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             pd.DataFrame(all_listings).to_csv(csv_path, index=False, encoding="utf-8-sig")
-            logger.info(f"Saved {len(all_listings)} listings to {csv_path}")
+            task_log.line(f"Saved {len(all_listings)} listings to {csv_path}")
         except Exception as exc:
-            logger.warning(f"Could not export CSV for {self.scraping_method}: {exc}")
+            task_log.line(f"Could not export CSV for {self.scraping_method}: {exc}", level="warning")
 
     def _run_scraping(self, max_pages: int, progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         self._stop_checker = stop_checker
-        logger.info(
+        task_log.line(
             f"Starting _run_scraping with method={self.scraping_method}, "
             f"cities={self.selected_cities}, max_pages={max_pages}"
         )
@@ -741,7 +741,7 @@ class HepsiemlakScraplingScraper:
         total_cities = len(self.selected_cities)
 
         if self.scraping_method in SESSION_METHODS:
-            logger.info(f"Initializing session-backed scraping flow for {self.scraping_method}")
+            task_log.line(f"Initializing session-backed scraping flow for {self.scraping_method}")
             self._create_session()
 
         try:
@@ -789,13 +789,13 @@ class HepsiemlakScraplingScraper:
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
             self.metrics["total_listings"] = len(all_listings)
-            logger.info("Skipping automatic CSV/Excel export; results remain available in the database.")
+            task_log.line("Skipping automatic CSV/Excel export; results remain available in the database.")
             return all_results, all_listings
         finally:
             self._close_session()
 
     def start_scraping(self, max_pages_per_city: int = 3, max_pages_per_district: int = 2) -> Dict[str, Any]:
-        logger.info(f"Starting Scrapling-based scraping with method={self.scraping_method}")
+        task_log.line(f"Starting Scrapling-based scraping with method={self.scraping_method}")
         results, listings = self._run_scraping(
             max_pages=max(max_pages_per_city, max_pages_per_district),
             progress_callback=None,
@@ -804,13 +804,15 @@ class HepsiemlakScraplingScraper:
         return {"results": results, "listings": listings, "metrics": self.metrics, "summary": self.get_summary()}
 
     def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
-        print(f"\nAPI: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})")
-        logger.info(
+        task_log.line(
+            f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})",
+        )
+        task_log.line(
             f"start_scraping_api called with method={self.scraping_method}, "
             f"cities={self.selected_cities}, max_pages={max_pages}"
         )
         if not self.selected_cities:
-            logger.error("No cities provided for API scrape")
+            task_log.line("No cities provided for API scrape", level="error")
             return {}
         results, listings = self._run_scraping(
             max_pages=max_pages or 1,
@@ -818,16 +820,14 @@ class HepsiemlakScraplingScraper:
             stop_checker=stop_checker,
         )
         if results:
-            print(f"\n{'=' * 70}")
-            print("SCRAPLING TARAMA TAMAMLANDI")
-            print(f"Yontem: {self.scraping_method}")
-            print(f"Taranan Sehir Sayisi: {len(results)}")
-            print(f"Toplam Ilan Sayisi: {len(listings)}")
-            print("=" * 70)
+            task_log.section(
+                "SCRAPLING TARAMA TAMAMLANDI",
+                f"Yontem: {self.scraping_method}",
+                f"Taranan Sehir Sayisi: {len(results)}",
+                f"Toplam Ilan Sayisi: {len(listings)}",
+            )
         else:
-            print(f"\n{'=' * 70}")
-            print("HIC ILAN BULUNAMADI")
-            print("=" * 70)
+            task_log.section("HIC ILAN BULUNAMADI", level="warning")
         return results
 
     def get_summary(self) -> Dict[str, Any]:
@@ -846,23 +846,22 @@ class HepsiemlakScraplingScraper:
 
     def print_summary(self):
         summary = self.get_summary()
-        print("\n" + "=" * 70)
-        print("SCRAPLING SCRAPER - OZET RAPOR")
-        print("=" * 70)
-        print(f"Yontem: {summary['scraping_method']}")
-        print(f"Toplam Sure: {summary['total_duration_seconds']} saniye")
-        print(f"Toplam Ilan: {summary['total_listings']}")
-        print(f"Toplam Sayfa: {summary['total_pages']}")
-        print(f"Basarili Istek: {summary['successful_requests']}")
-        print(f"Basarisiz Istek: {summary['failed_requests']}")
-        print(f"Basari Orani: {summary['success_rate']}%")
-        print(f"Saniyede Ilan: {summary['listings_per_second']}")
-        print(f"Saniyede Sayfa: {summary['pages_per_second']}")
-        print("=" * 70)
+        task_log.section(
+            "SCRAPLING SCRAPER - OZET RAPOR",
+            f"Yontem: {summary['scraping_method']}",
+            f"Toplam Sure: {summary['total_duration_seconds']} saniye",
+            f"Toplam Ilan: {summary['total_listings']}",
+            f"Toplam Sayfa: {summary['total_pages']}",
+            f"Basarili Istek: {summary['successful_requests']}",
+            f"Basarisiz Istek: {summary['failed_requests']}",
+            f"Basari Orani: {summary['success_rate']}%",
+            f"Saniyede Ilan: {summary['listings_per_second']}",
+            f"Saniyede Sayfa: {summary['pages_per_second']}",
+        )
 
 
 def test_scrapling_scraper():
-    print("Scrapling Scraper Testi Basliyor...")
+    task_log.line("Scrapling Scraper Testi Basliyor...")
     scraper = HepsiemlakScraplingScraper(
         listing_type="kiralik",
         category="konut",
@@ -874,10 +873,10 @@ def test_scrapling_scraper():
     try:
         result = scraper.start_scraping(max_pages_per_city=2, max_pages_per_district=1)
         scraper.print_summary()
-        print(f"\nToplam {len(result['listings'])} ilan bulundu.")
+        task_log.line(f"Toplam {len(result['listings'])} ilan bulundu.")
         return result
     except Exception as exc:
-        print(f"Test hatasi: {exc}")
+        task_log.line(f"Test hatasi: {exc}", level="error")
         return None
 
 

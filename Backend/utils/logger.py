@@ -136,6 +136,7 @@ def setup_logger(
     # Logger oluştur
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    logger.propagate = False
 
     # Mevcut handler'ları temizle
     logger.handlers.clear()
@@ -144,7 +145,8 @@ def setup_logger(
     logger.addFilter(TaskContextFilter(task_id))
 
     # Renkli biçimli konsol handler'ı
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_stream = getattr(sys, "__stdout__", sys.stdout)
+    console_handler = logging.StreamHandler(console_stream)
     console_handler.setLevel(logging.DEBUG)
     console_format = ColoredFormatter(
         '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
@@ -202,6 +204,8 @@ def get_logger(name: str = "scraper", task_id: Optional[str] = None) -> logging.
     # Logger'da handler yoksa yapılandır
     if not logger.handlers:
         return setup_logger(name, task_id=task_id)
+
+    logger.propagate = False
 
     # Görev bağlamı filtresi yoksa ekle
     has_task_filter = any(isinstance(f, TaskContextFilter) for f in logger.filters)
@@ -287,6 +291,33 @@ class ScraperLogger:
             f"[%{progress}] {message}",
             extra={"progress": progress, **(extra or {})}
         )
+
+
+class TaskLogLayout:
+    """Scraping taskleri icin ortak satir tabanli log tasarimi."""
+
+    def __init__(self, logger: logging.Logger, width: int = 70, level: str = "info"):
+        self.logger = logger
+        self.width = width
+        self.level = level
+
+    def _write(self, message: str, level: Optional[str] = None):
+        getattr(self.logger, level or self.level)(message)
+
+    def line(self, message: str, level: Optional[str] = None):
+        self._write(message, level=level)
+
+    def lines(self, *messages: str, level: Optional[str] = None):
+        for message in messages:
+            self._write(message, level=level)
+
+    def divider(self, char: str = "=", level: Optional[str] = None):
+        self._write(char * self.width, level=level)
+
+    def section(self, *messages: str, char: str = "=", level: Optional[str] = None):
+        self.divider(char=char, level=level)
+        self.lines(*messages, level=level)
+        self.divider(char=char, level=level)
 
 
 # Varsayılan logger örneğini oluştur

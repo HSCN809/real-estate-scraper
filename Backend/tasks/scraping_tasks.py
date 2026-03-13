@@ -322,31 +322,30 @@ def scrape_emlakjet_task(
     districts: Optional[Dict[str, List[str]]],
     max_listings: int = 0,
     max_pages: int = 50,  # kullanım dışı, geriye uyumluluk için tutuldu
+    scraping_method: str = "selenium",
 ):
     """Celery worker'da çalışan EmlakJet kazıma görevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
-    logger.info(f"[Task {task_id}] Starting EmlakJet scrape: {listing_type}/{category}")
+    logger.info(f"[Task {task_id}] Starting EmlakJet scrape: {listing_type}/{category}, method={scraping_method}")
     progress_manager.update(
         message="EmlakJet taraması başlatılıyor...",
         progress=0,
         status="running"
     )
 
-    from scrapers.emlakjet.main import EmlakJetScraper
     from core.driver_manager import DriverManager
     from core.config import get_emlakjet_config
     from database.connection import get_db_session
     from database import crud
 
-    manager = DriverManager()
+    manager = None
     db = None
     scrape_session = None
     scraper = None
 
     try:
-        driver = manager.start()
         db = get_db_session()
         config = get_emlakjet_config()
 
@@ -392,13 +391,30 @@ def scrape_emlakjet_task(
         def stop_checker():
             return progress_manager.is_stop_requested()
 
-        scraper = EmlakJetScraper(
-            driver=driver,
-            base_url=base_url,
-            category=category,
-            listing_type=listing_type,
-            subtype_path=subtype_path
-        )
+        if scraping_method == "selenium":
+            from scrapers.emlakjet.main import EmlakJetScraper
+
+            manager = DriverManager()
+            driver = manager.start()
+            scraper = EmlakJetScraper(
+                driver=driver,
+                base_url=base_url,
+                category=category,
+                listing_type=listing_type,
+                subtype_path=subtype_path
+            )
+        else:
+            from scrapers.emlakjet.scrapling_scraper import EmlakJetScraplingScraper
+
+            scraper = EmlakJetScraplingScraper(
+                listing_type=listing_type,
+                category=category,
+                subtype_path=subtype_path,
+                selected_cities=cities,
+                selected_districts=districts,
+                scraping_method=scraping_method,
+                headless=True,
+            )
 
         # Veritabanı oturumunu kazıyıcıya ayarla
         scraper.db = db
@@ -408,6 +424,7 @@ def scrape_emlakjet_task(
             cities=cities,
             districts=districts,
             max_listings=max_listings,
+            max_pages=max_pages,
             progress_callback=progress_callback,
             stop_checker=stop_checker,
         )
@@ -475,7 +492,8 @@ def scrape_emlakjet_task(
         finally:
             if db:
                 db.close()
-            manager.stop()
+            if manager:
+                manager.stop()
 
 
 class StopRequested(Exception):
