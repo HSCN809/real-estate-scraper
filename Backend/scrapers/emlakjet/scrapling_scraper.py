@@ -330,6 +330,7 @@ class EmlakJetScraplingScraper:
             ilan_tipi=self.listing_type,
             alt_kategori=self.subtype_name,
             scrape_session_id=self.scrape_session_id,
+            log_db_save=False,
         )
         self.new_listings_count += new_count
         self.duplicate_count += unchanged_count
@@ -435,11 +436,17 @@ class EmlakJetScraplingScraper:
             return []
         return page_listings[:remaining]
 
+    def _resolve_page_limit(self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]) -> int:
+        total_pages = max(1, detected_total_pages or 1)
+        if requested_max_pages is None or requested_max_pages <= 0:
+            return total_pages
+        return min(requested_max_pages, total_pages)
+
     def _scrape_location(
         self,
         location_name: str,
         location_url: str,
-        max_pages: int,
+        max_pages: Optional[int],
         city: Optional[str] = None,
         district: Optional[str] = None,
         neighborhood: Optional[str] = None,
@@ -453,7 +460,7 @@ class EmlakJetScraplingScraper:
             task_log.line(f"⚠️ Ilk sayfa alinamadi: {location_name}", level="warning")
             return listings
 
-        pages_to_scrape = min(max_pages, self.get_total_pages(first_page))
+        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
@@ -508,7 +515,7 @@ class EmlakJetScraplingScraper:
     def _scrape_target(
         self,
         target: Dict[str, str],
-        max_pages: int,
+        max_pages: Optional[int],
         city: Optional[str] = None,
         district: Optional[str] = None,
         neighborhood: Optional[str] = None,
@@ -538,7 +545,7 @@ class EmlakJetScraplingScraper:
         cities: Optional[List[str]] = None,
         districts: Optional[Dict[str, List[str]]] = None,
         max_listings: int = 0,
-        max_pages: int = 50,
+        max_pages: Optional[int] = None,
         progress_callback=None,
         stop_checker=None,
     ):
@@ -572,7 +579,7 @@ class EmlakJetScraplingScraper:
 
         self._create_session()
         scrape_stats: Dict[str, Dict[str, int]] = {}
-        page_limit = max_pages or 50
+        page_limit = max_pages
         stopped = False
 
         try:

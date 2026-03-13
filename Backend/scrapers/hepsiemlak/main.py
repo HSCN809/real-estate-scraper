@@ -28,7 +28,16 @@ logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
 
 
-def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, ilan_tipi: str, alt_kategori: str = None, scrape_session_id: int = None):
+def save_listings_to_db(
+    db,
+    listings: List[Dict],
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: str = None,
+    scrape_session_id: int = None,
+    log_db_save: bool = True,
+):
     """İlan listesini veritabanına kaydet (upsert mantığı ile)"""
     if not db:
         return 0, 0, 0
@@ -57,7 +66,8 @@ def save_listings_to_db(db, listings: List[Dict], platform: str, kategori: str, 
                 unchanged_count += 1
 
         db.commit()
-        logger.info(f"DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged")
+        if log_db_save:
+            logger.info(f"DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged")
         return new_count, updated_count, unchanged_count
     except Exception as e:
         logger.error(f"DB save error: {e}")

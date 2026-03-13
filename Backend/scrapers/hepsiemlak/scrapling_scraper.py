@@ -400,6 +400,7 @@ class HepsiemlakScraplingScraper:
             ilan_tipi=self.listing_type,
             alt_kategori=self.subtype_name,
             scrape_session_id=self.scrape_session_id,
+            log_db_save=False,
         )
         self.new_listings_count += new_count
         self.duplicate_count += unchanged_count
@@ -455,11 +456,70 @@ class HepsiemlakScraplingScraper:
 
         return city_progress_callback
 
+    def _resolve_page_limit(self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]) -> int:
+        total_pages = max(1, detected_total_pages or 1)
+        if requested_max_pages is None or requested_max_pages <= 0:
+            return total_pages
+        return min(requested_max_pages, total_pages)
+
+    def _fetch_spider_seed_page(self, url: str, session_mode: str) -> Optional[Selector]:
+        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        listing_results = self.common_selectors.get("listing_results")
+
+        try:
+            if session_mode == "fetcher":
+                with FetcherSession(
+                    stealthy_headers=True,
+                    follow_redirects=True,
+                    timeout=mode_settings["timeout_ms"] // 1000,
+                    retries=mode_settings["retries"],
+                    retry_delay=mode_settings["retry_delay"],
+                ) as session:
+                    response = session.get(url)
+            elif session_mode == "dynamic":
+                with DynamicSession(
+                    headless=self.headless,
+                    disable_resources=True,
+                    timeout=mode_settings["timeout_ms"],
+                    retries=mode_settings["retries"],
+                    retry_delay=mode_settings["retry_delay"],
+                    network_idle=False,
+                ) as session:
+                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    if listing_results:
+                        fetch_kwargs["wait_selector"] = listing_results
+                    response = session.fetch(url, **fetch_kwargs)
+            else:
+                with StealthySession(
+                    headless=self.headless,
+                    solve_cloudflare=False,
+                    google_search=False,
+                    timeout=mode_settings["timeout_ms"],
+                    network_idle=True,
+                    disable_resources=True,
+                ) as session:
+                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    if listing_results:
+                        fetch_kwargs["wait_selector"] = listing_results
+                    response = session.fetch(url, **fetch_kwargs)
+
+            if not response:
+                return None
+
+            status = getattr(response, "status", 200)
+            body = getattr(response, "body", b"")
+            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+                return None
+            return response
+        except Exception as exc:
+            task_log.line(f"Could not detect pagination seed for {url}: {exc}", level="warning")
+            return None
+
     def _scrape_location_with_session(
         self,
         location_name: str,
         location_url: str,
-        max_pages: int,
+        max_pages: Optional[int],
         city: Optional[str] = None,
         district: Optional[str] = None,
         progress_callback=None,
@@ -471,7 +531,7 @@ class HepsiemlakScraplingScraper:
             task_log.line(f"⚠️ İlk sayfa alınamadı: {location_name}", level="warning")
             return listings
 
-        pages_to_scrape = min(max_pages, self.get_total_pages(first_page))
+        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
@@ -521,7 +581,7 @@ class HepsiemlakScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: int,
+        max_pages: Optional[int],
         city: Optional[str] = None,
         district: Optional[str] = None,
         progress_callback=None,
@@ -531,13 +591,20 @@ class HepsiemlakScraplingScraper:
         listing_results = self.common_selectors.get("listing_results")
         spider_errors: List[Dict[str, str]] = []
         visited_pages: set[int] = set()
+        processed_pages: set[int] = set()
+        collected_items: List[Dict[str, Any]] = []
         outer = self
 
         self._log_location_start(location_name, location_url)
-        self._log_location_plan(location_name, max_pages)
+        seed_page = self._fetch_spider_seed_page(location_url, session_mode)
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(seed_page) if seed_page else None,
+            max_pages,
+        )
+        self._log_location_plan(location_name, pages_to_scrape)
 
-        logging.getLogger("scrapling").setLevel(logging.WARNING)
-        logging.getLogger("scrapling.spiders").setLevel(logging.WARNING)
+        logging.getLogger("scrapling").setLevel(logging.ERROR)
+        logging.getLogger("scrapling.spiders").setLevel(logging.ERROR)
 
         class HepsiemlakSpider(Spider):
             name = f"hepsiemlak_{session_mode}_{outer._normalize_text(location_name)}"
@@ -604,14 +671,16 @@ class HepsiemlakScraplingScraper:
 
                 if outer._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
                     return
+                if current_page in processed_pages:
+                    return
 
-                task_log.line(f"🔍 [{current_page}/{max_pages}] {location_name} - Sayfa {current_page} taranıyor...")
+                task_log.line(f"🔍 [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor...")
                 if progress_callback:
                     progress_callback(
-                        f"{location_name} - Sayfa {current_page}/{max_pages}",
+                        f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
                         current=current_page,
-                        total=max_pages,
-                        progress=int((current_page / max(1, max_pages)) * 100),
+                        total=pages_to_scrape,
+                        progress=int((current_page / max(1, pages_to_scrape)) * 100),
                     )
 
                 page_listings = outer.extract_listings_from_page(
@@ -623,36 +692,32 @@ class HepsiemlakScraplingScraper:
                 for listing in page_listings:
                     listing["page"] = current_page
                     listing["scraping_method"] = outer.scraping_method
-                    yield listing
 
-                if current_page < max_pages and not outer._is_stop_requested():
+                new_count, updated_count, unchanged_count = outer._persist_listings(page_listings)
+                outer._report_page_persist_result(
+                    page_num=current_page,
+                    extracted_count=len(page_listings),
+                    new_count=new_count,
+                    updated_count=updated_count,
+                    unchanged_count=unchanged_count,
+                    location_name=location_name,
+                )
+                processed_pages.add(current_page)
+                collected_items.extend(page_listings)
+
+                if current_page < pages_to_scrape and not outer._is_stop_requested():
                     next_url = outer._build_page_url(location_url, current_page + 1)
                     follow_kwargs = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_results:
                         follow_kwargs["wait_selector"] = listing_results
                     yield response.follow(next_url, **follow_kwargs)
 
-        crawl_result = HepsiemlakSpider().start()
-        method_items = [item for item in crawl_result.items if isinstance(item, dict)]
+        HepsiemlakSpider().start()
+        method_items = list(collected_items)
         method_items.sort(key=lambda item: (item.get("page", 1), item.get("ilan_linki", "")))
         self.metrics["total_pages"] += len(visited_pages)
         self.metrics["successful_requests"] += len(visited_pages)
         self.metrics["failed_requests"] += len(spider_errors)
-        items_by_page: Dict[int, List[Dict[str, Any]]] = {}
-        for item in method_items:
-            items_by_page.setdefault(int(item.get("page", 1)), []).append(item)
-
-        for page_num in sorted(items_by_page):
-            page_items = items_by_page[page_num]
-            new_count, updated_count, unchanged_count = self._persist_listings(page_items)
-            self._report_page_persist_result(
-                page_num=page_num,
-                extracted_count=len(page_items),
-                new_count=new_count,
-                updated_count=updated_count,
-                unchanged_count=unchanged_count,
-                location_name=location_name,
-            )
 
         if not method_items:
             task_log.line(f"⚠️ {location_name} için ilan bulunamadı", level="warning")
@@ -664,7 +729,7 @@ class HepsiemlakScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: int,
+        max_pages: Optional[int],
         city: Optional[str] = None,
         district: Optional[str] = None,
         progress_callback=None,
@@ -714,7 +779,7 @@ class HepsiemlakScraplingScraper:
         except Exception as exc:
             task_log.line(f"Could not export CSV for {self.scraping_method}: {exc}", level="warning")
 
-    def _run_scraping(self, max_pages: int, progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    def _run_scraping(self, max_pages: Optional[int], progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         self._stop_checker = stop_checker
         task_log.line(
             f"Starting _run_scraping with method={self.scraping_method}, "
@@ -803,7 +868,7 @@ class HepsiemlakScraplingScraper:
         )
         return {"results": results, "listings": listings, "metrics": self.metrics, "summary": self.get_summary()}
 
-    def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
+    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None, stop_checker=None):
         task_log.line(
             f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})",
         )
@@ -815,7 +880,7 @@ class HepsiemlakScraplingScraper:
             task_log.line("No cities provided for API scrape", level="error")
             return {}
         results, listings = self._run_scraping(
-            max_pages=max_pages or 1,
+            max_pages=max_pages,
             progress_callback=progress_callback,
             stop_checker=stop_checker,
         )
