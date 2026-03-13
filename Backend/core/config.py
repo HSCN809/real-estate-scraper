@@ -65,6 +65,7 @@ class ScraperConfig:
     # Tarayıcı ayarları - gizli mod
     # Docker'da CHROME_HEADLESS=false olmalı
     headless: bool = field(default_factory=lambda: get_bool_env('CHROME_HEADLESS', False))
+    use_undetected_chromedriver: bool = field(default_factory=lambda: get_bool_env('CHROME_USE_UNDETECTED', False))
     disable_images: bool = True
 
     # Kullanıcı ajanı

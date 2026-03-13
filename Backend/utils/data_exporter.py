@@ -44,7 +44,6 @@ class DataExporter:
             path_parts.append(subtype)
 
         self.output_dir = os.path.join(*path_parts)
-        self._ensure_output_dir()
     
     def _ensure_output_dir(self):
         """Çıktı dizini yoksa oluşturur"""
@@ -60,6 +59,7 @@ class DataExporter:
         subfolder: Optional[str] = None
     ) -> str:
         """İsteğe bağlı zaman damgası ile dosya adı üretir ve tam yolunu döndürür."""
+        self._ensure_output_dir()
         if timestamp:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{prefix}_{ts}.{extension}"

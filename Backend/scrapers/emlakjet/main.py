@@ -20,12 +20,13 @@ from core.driver_manager import DriverManager
 from core.selectors import get_selectors, get_common_selectors
 from core.config import get_emlakjet_config
 from core.failed_pages_tracker import FailedPagesTracker, FailedPageInfo, failed_pages_tracker
-from utils.logger import get_logger
+from utils.logger import get_logger, TaskLogLayout
 from utils.data_exporter import DataExporter
 
 from .parsers import KonutParser, ArsaParser, IsyeriParser, TuristikTesisParser
 
 logger = get_logger(__name__)
+task_log = TaskLogLayout(logger)
 
 
 class EmlakJetScraper(BaseScraper):
@@ -101,15 +102,50 @@ class EmlakJetScraper(BaseScraper):
             return f"emlakjet_{self.listing_type}_{self.category}_{self.subtype_name}"
         return f"emlakjet_{self.listing_type}_{self.category}"
 
+    def _log_location_start(self, location_name: str, location_url: str) -> None:
+        task_log.section(
+            f"📍 Taranıyor: {location_name}",
+            f"🌐 {location_url}",
+            "🧭 Yöntem: selenium",
+        )
+
+    def _log_location_plan(self, location_name: str, pages_to_scrape: int) -> None:
+        task_log.line(f"{location_name}: scraping {pages_to_scrape} pages via selenium")
+        task_log.line(f"📄 {pages_to_scrape} sayfa taranacak")
+
+    def _log_page_start(self, location_name: str, page_num: int, total_pages: int) -> None:
+        task_log.line(f"🔍 [{page_num}/{total_pages}] {location_name} - Sayfa {page_num} taranıyor...")
+
+    def _log_page_result(self, page_num: int, extracted_count: int, new_count: int, updated_count: int, unchanged_count: int) -> None:
+        task_log.line(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
+        task_log.line(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
+
+    def _log_location_complete(self, location_name: str, listing_count: int) -> None:
+        task_log.line(f"✅ {location_name} tamamlandı - {listing_count} ilan işlendi")
+
+    def _log_retry_round(self, retry_round: int, max_retries: int, failed_count: int) -> None:
+        task_log.section(
+            f"🔄 YENİDEN DENEME #{retry_round}/{max_retries}",
+            f"📊 {failed_count} başarısız sayfa tekrar taranacak",
+        )
+
+    def _log_retry_summary(self, successful_retries: int, failed_count: int) -> None:
+        task_log.section(
+            "📊 RETRY ÖZETİ",
+            f"   ✅ Başarılı retry: {successful_retries}",
+            f"   ❌ Kalan başarısız: {failed_count}",
+        )
+
     def scrape_current_page(self) -> List[Dict[str, Any]]:
         """Mevcut sayfadaki tüm ilanları tara"""
         from datetime import datetime
+        print = logger.debug
 
         listings = []
         try:
             container_selector = self.common_selectors.get("listing_container")
             if not container_selector:
-                logger.error("No listing_container selector defined")
+                task_log.line("No listing_container selector defined", level="error")
                 return []
 
             containers = self.find_elements_safe(container_selector)
@@ -127,10 +163,8 @@ class EmlakJetScraper(BaseScraper):
                     except Exception:
                         filtered.append(c)
                 if len(filtered) < len(containers):
-                    logger.info(f"Filtered out {len(containers) - len(filtered)} 'Benzer İlanlar' listings")
+                    logger.debug(f"Filtered out {len(containers) - len(filtered)} 'Benzer İlanlar' listings")
                 containers = filtered
-
-            print(f"   🔍 {len(containers)} ilan elementi bulundu")
 
             for container in containers:
                 try:
@@ -139,13 +173,11 @@ class EmlakJetScraper(BaseScraper):
                         data['tarih'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         listings.append(data)
                 except Exception as e:
-                    logger.warning(f"İlan çıkarma hatası: {e}")
+                    logger.debug(f"İlan çıkarma hatası: {e}")
                     continue
 
-            print(f"   ✓ {len(listings)} ilan başarıyla parse edildi")
-
         except Exception as e:
-            logger.error(f"Sayfa tarama hatası: {e}")
+            task_log.line(f"Sayfa tarama hatası: {e}", level="error")
 
         return listings
 
@@ -504,32 +536,33 @@ class EmlakJetScraper(BaseScraper):
                         elif status == 'unchanged':
                             unchanged_count += 1
                     except Exception as e:
-                        logger.warning(f"Sayfa bazlı DB kayıt hatası: {e}")
+                        task_log.line(f"Sayfa bazlı DB kayıt hatası: {e}", level="warning")
                 try:
                     self.db.commit()
                     page_num_ref[0] += 1
                     new_listings_count_ref[0] += new_count  # Yeni eklenenleri say
-                    logger.info(f"💾 Sayfa {page_num_ref[0]}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
+                    self._log_page_result(page_num_ref[0], len(page_listings), new_count, updated_count, unchanged_count)
                 except Exception as e:
-                    logger.error(f"Sayfa bazlı DB commit hatası: {e}")
+                    task_log.line(f"Sayfa bazlı DB commit hatası: {e}", level="error")
                     self.db.rollback()
         return _on_page_scraped
 
     def scrape_pages(self, target_url: str, max_pages: int, on_page_scraped=None,
                      location_label: str = "", province: str = "", district: str = "", new_listings_count_ref: List[int] = None) -> bool:
         """Başarısız sayfa takibi ile sayfa tarama"""
+        print = task_log.line
         first_page_count = 0
 
         for current_page in range(1, max_pages + 1):
             if hasattr(self, '_stop_checker') and self._stop_checker and self._stop_checker():
-                logger.info("Durdurma isteği alındı, sayfa tarama sonlandırılıyor")
+                task_log.line("Durdurma isteği alındı, sayfa tarama sonlandırılıyor", level="warning")
                 break
 
             if hasattr(self, '_max_listings') and self._max_listings > 0 and len(self.all_listings) >= self._max_listings:
-                logger.info(f"İlan limitine ulaşıldı ({self._max_listings}), sayfa tarama sonlandırılıyor")
+                task_log.line(f"İlan limitine ulaşıldı ({self._max_listings}), sayfa tarama sonlandırılıyor", level="warning")
                 break
 
-            print(f"\n🔍 Sayfa {current_page} taranıyor...")
+            self._log_page_start(location_label or province or district or "Lokasyon", current_page, max_pages)
 
             try:
                 if current_page > 1:
@@ -549,7 +582,7 @@ class EmlakJetScraper(BaseScraper):
                         )
                         for element in no_results:
                             if "ilan bulunamadı" in element.text.lower():
-                                print("⚠️  Bu lokasyonda ilan bulunamadı, atlanıyor...")
+                                task_log.line("⚠️ Bu lokasyonda ilan bulunamadı, atlanıyor...", level="warning")
                                 return True
                     except:
                         pass
@@ -558,7 +591,7 @@ class EmlakJetScraper(BaseScraper):
 
                 # 0 ilan bulunduysa ve ilk sayfa değilse → failed page olarak kaydet
                 if len(listings) == 0 and current_page > 1:
-                    print(f"   ⚠️ Sayfa {current_page}'de 0 ilan - retry listesine eklendi")
+                    task_log.line(f"   ⚠️ Sayfa {current_page}'de 0 ilan - retry listesine eklendi", level="warning")
                     failed_pages_tracker.add_failed_page(FailedPageInfo(
                         url=page_url,
                         page_number=current_page,
@@ -576,15 +609,15 @@ class EmlakJetScraper(BaseScraper):
                     # Sadece yeni eklenenleri saymak için
                     if on_page_scraped and listings:
                         on_page_scraped(listings)
+                    elif listings:
+                        self._log_page_result(current_page, len(listings), 0, 0, 0)
 
                 if current_page == 1:
                     first_page_count = len(listings)
 
-                print(f"   ✅ Sayfa {current_page}: {len(listings)} ilan bulundu")
-
             except Exception as e:
-                logger.error(f"Error scraping page {current_page}: {e}")
-                print(f"   ⚠️ Sayfa {current_page} yüklenemedi - retry listesine eklendi")
+                task_log.line(f"Error scraping page {current_page}: {e}", level="error")
+                task_log.line(f"   ⚠️ Sayfa {current_page} yüklenemedi - retry listesine eklendi", level="warning")
                 # Sayfa yükleme hatası → başarısız sayfa
                 page_url = target_url if current_page == 1 else f"{target_url}{'&' if '?' in target_url else '?'}sayfa={current_page}"
                 failed_pages_tracker.add_failed_page(FailedPageInfo(
@@ -604,7 +637,10 @@ class EmlakJetScraper(BaseScraper):
 
     def _scrape_target(self, target: Dict, province_name: str, district_name: str) -> bool:
         """Tek bir hedefi (il/ilçe/mahalle) tara"""
+        print = task_log.line
         url_max_pages = self.get_max_pages(target['url'])
+        self._log_location_start(target['label'], target['url'])
+        self._log_location_plan(target['label'], url_max_pages)
         print(f"📊 {url_max_pages} sayfa mevcut, tamamı taranacak.")
 
         page_num_ref = [0]  # Callback içinde sayfa sayacı için değiştirilebilir referans
@@ -621,10 +657,13 @@ class EmlakJetScraper(BaseScraper):
         # Global kümülatif sayaça ekle
         self.total_new_listings += new_listings_count_ref[0]
         logger.warning(f"📊 EmlakJet Kümülatif Toplam: {self.total_new_listings} ilan")
+        if not should_skip:
+            self._log_location_complete(target['label'], new_listings_count_ref[0])
         return should_skip, new_listings_count_ref[0]
 
     def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None, stop_checker=None):
         """İki katmanlı optimizasyonla API tarama giriş noktası"""
+        print = task_log.line
         self._stop_checker = stop_checker
         self._max_listings = max_listings
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Chrome WebDriver yöneticisi - gizli mod"""
+"""Chrome WebDriver yoneticisi."""
 
 import os
 import time
@@ -11,8 +11,12 @@ from contextlib import contextmanager
 
 # Undetected Chromedriver - bot tespiti için tek seçenek
 import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.remote.webdriver import WebDriver
 
 from .config import get_config
 
@@ -48,15 +52,17 @@ class DriverManager:
         self.wait: Optional[WebDriverWait] = None
         self.user_agent = random.choice(USER_AGENTS)
 
-    def _create_options(self) -> uc.ChromeOptions:
+    def _create_options(self) -> Options:
         """Chrome seçeneklerini oluştur"""
-        options = uc.ChromeOptions()
+        options = Options()
 
         # Temel tarayıcı ayarları
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument(f"user-agent={self.user_agent}")
         options.add_argument("--window-size=1920,1080")
+        if self.headless:
+            options.add_argument("--headless=new")
 
         # Docker/container ortamı için kritik ayarlar
         options.add_argument("--disable-gpu")
@@ -96,8 +102,51 @@ class DriverManager:
             except Exception as e:
                 logger.debug(f"Stealth script warning: {e}")
 
-    def start(self) -> uc.Chrome:
-        """Gizli modda Chrome başlat"""
+    def _resolve_binary_paths(self) -> tuple[Optional[str], Optional[str]]:
+        chrome_path = "/usr/bin/google-chrome"
+        chromedriver_path = "/usr/bin/chromedriver"
+
+        if not os.path.exists(chrome_path):
+            chrome_path = None
+        if not os.path.exists(chromedriver_path):
+            chromedriver_path = None
+
+        return chrome_path, chromedriver_path
+
+    def _start_standard_driver(self, options: Options, chrome_path: Optional[str], chromedriver_path: Optional[str]) -> WebDriver:
+        if chrome_path:
+            options.binary_location = chrome_path
+            logger.info(f"Using Chrome at: {chrome_path}")
+
+        service = None
+        if chromedriver_path:
+            service = Service(executable_path=chromedriver_path)
+            logger.info(f"Using ChromeDriver at: {chromedriver_path}")
+
+        if service is not None:
+            return webdriver.Chrome(service=service, options=options)
+        return webdriver.Chrome(options=options)
+
+    def _start_undetected_driver(self, options: Options, chrome_path: Optional[str], chromedriver_path: Optional[str]) -> WebDriver:
+        driver_kwargs = {
+            "options": options,
+            "headless": self.headless,
+            "use_subprocess": True,
+            "version_main": 145,
+        }
+
+        if chrome_path:
+            driver_kwargs["browser_executable_path"] = chrome_path
+            logger.info(f"Using Chrome at: {chrome_path}")
+
+        if chromedriver_path:
+            driver_kwargs["driver_executable_path"] = chromedriver_path
+            logger.info(f"Using ChromeDriver at: {chromedriver_path}")
+
+        return uc.Chrome(**driver_kwargs)
+
+    def start(self) -> WebDriver:
+        """Chrome driver başlat."""
         last_error = None
 
         # Önceki zombie process'leri temizle
@@ -105,40 +154,20 @@ class DriverManager:
 
         for attempt in range(self.config.max_retries):
             try:
-                logger.info(f"🚀 Starting UNDETECTED Chrome driver (Attempt {attempt + 1}/{self.config.max_retries})")
+                mode_label = "UNDETECTED" if self.config.use_undetected_chromedriver else "STANDARD"
+                logger.info(f"🚀 Starting {mode_label} Chrome driver (Attempt {attempt + 1}/{self.config.max_retries})")
 
                 options = self._create_options()
-
-                # Docker ortamında kurulu Chrome ve ChromeDriver yolları
-                chrome_path = "/usr/bin/google-chrome"
-                chromedriver_path = "/usr/bin/chromedriver"
-
-                # Windows/yerel ortam için path kontrolü
-                if not os.path.exists(chrome_path):
-                    chrome_path = None  # undetected_chromedriver kendi bulacak
-                    chromedriver_path = None
-
-                driver_kwargs = {
-                    "options": options,
-                    "headless": self.headless,
-                    "use_subprocess": True,
-                    "version_main": 145,  # Chrome for Testing sürümü
-                }
-
-                if chrome_path and os.path.exists(chrome_path):
-                    driver_kwargs["browser_executable_path"] = chrome_path
-                    logger.info(f"Using Chrome at: {chrome_path}")
-
-                if chromedriver_path and os.path.exists(chromedriver_path):
-                    driver_kwargs["driver_executable_path"] = chromedriver_path
-                    logger.info(f"Using ChromeDriver at: {chromedriver_path}")
-
-                self.driver = uc.Chrome(**driver_kwargs)
+                chrome_path, chromedriver_path = self._resolve_binary_paths()
+                if self.config.use_undetected_chromedriver:
+                    self.driver = self._start_undetected_driver(options, chrome_path, chromedriver_path)
+                else:
+                    self.driver = self._start_standard_driver(options, chrome_path, chromedriver_path)
 
                 self._apply_stealth_scripts()
                 self.wait = WebDriverWait(self.driver, self.config.element_wait_timeout)
 
-                logger.info("✅ UNDETECTED mode activated successfully")
+                logger.info(f"✅ {mode_label} Chrome driver activated successfully")
                 return self.driver
 
             except Exception as e:
@@ -148,7 +177,7 @@ class DriverManager:
                 if attempt < self.config.max_retries - 1:
                     time.sleep(self.config.retry_delay)
 
-        raise WebDriverException(f"Pure stealth mode failed: {last_error}")
+        raise WebDriverException(f"Chrome driver start failed: {last_error}")
 
     def stop(self):
         """Driver'ı temizle"""
@@ -164,7 +193,7 @@ class DriverManager:
                 self.driver = None
                 self.wait = None
 
-    def restart(self) -> uc.Chrome:
+    def restart(self) -> WebDriver:
         self.stop()
         return self.start()
 
@@ -181,14 +210,14 @@ class DriverManager:
             self.wait = None
             return False
 
-    def ensure_driver(self) -> uc.Chrome:
+    def ensure_driver(self) -> WebDriver:
         """Driver'ın çalıştığından emin ol, çökmüşse yeniden başlat"""
         if not self.is_alive():
             logger.info("🔄 Driver yeniden başlatılıyor...")
             return self.start()
         return self.driver
 
-    def get_driver(self) -> uc.Chrome:
+    def get_driver(self) -> WebDriver:
         return self.ensure_driver()
 
     def get_wait(self) -> WebDriverWait:
@@ -222,6 +251,6 @@ class DriverManager:
         return False
 
 
-def create_driver(headless: bool = False) -> uc.Chrome:
+def create_driver(headless: bool = False) -> WebDriver:
     manager = DriverManager(headless=headless)
     return manager.start()
