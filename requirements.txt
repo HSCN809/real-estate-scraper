@@ -34,3 +34,29 @@ cryptography==41.0.7
 certifi==2023.11.17
 packaging==23.2
 setuptools==68.2.2
+
+# Scraping Frameworks
+# Scrapling - Modern web scraping library
+scrapling>=0.4.1
+
+# Scrapling core dependencies (already included in scrapling but listed for clarity)
+lxml>=6.0.2
+cssselect>=1.4.0
+orjson>=3.11.7
+tld>=0.13.1
+w3lib>=2.4.0
+typing_extensions>=4.0.0
+
+# Scrapling fetchers (optional but needed for HTTP requests)
+click>=8.3.0
+curl_cffi>=0.14.0
+playwright==1.56.0
+patchright==1.56.0
+browserforge>=1.2.4
+msgspec>=0.20.0
+anyio>=4.12.1
+
+# Additional dependencies for Scrapling compatibility
+certifi>=2024.2.2
+cffi>=1.12.0
+pycparser>=2.21

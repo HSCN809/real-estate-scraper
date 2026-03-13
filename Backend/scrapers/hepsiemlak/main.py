@@ -1398,6 +1398,8 @@ class HepsiemlakScraper(BaseScraper):
                     for fp in summary["failed_pages"]:
                         logger.warning(f"   - {fp['city']}/{fp['district'] or 'tüm'} Sayfa {fp['page_number']}: {fp['error']}")
 
+            return all_results
+
         except Exception as e:
             logger.error(f"❌ API tarama hatası: {e}")
             raise e
