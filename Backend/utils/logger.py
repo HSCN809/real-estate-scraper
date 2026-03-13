@@ -16,6 +16,30 @@ _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
 from core.config import get_config
 
 
+def resolve_writable_log_file(log_file: str) -> Optional[str]:
+    """Yazilabilir bir log dosyasi yolu dondurur, gerekirse fallback kullanir."""
+    fallback_dir = os.getenv('LOG_FALLBACK_DIR', '/tmp/scraper-logs')
+    candidates = [log_file]
+
+    log_basename = os.path.basename(log_file) if log_file else 'scraper.log'
+    fallback_path = os.path.join(fallback_dir, log_basename)
+    if fallback_path not in candidates:
+        candidates.append(fallback_path)
+
+    for candidate in candidates:
+        try:
+            log_dir = os.path.dirname(candidate)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+            with open(candidate, 'a', encoding='utf-8'):
+                pass
+            return candidate
+        except OSError:
+            continue
+
+    return None
+
+
 class StructuredFormatter(logging.Formatter):
     """Yapılandırılmış loglama için JSON biçimlendirici"""
 
@@ -104,6 +128,10 @@ def setup_logger(
     level = level or config.log_level
     log_to_file = log_to_file if log_to_file is not None else config.log_to_file
     log_file = log_file or config.log_file
+    resolved_log_file = resolve_writable_log_file(log_file) if log_to_file else None
+    if log_to_file and not resolved_log_file:
+        print("Logger file output disabled: no writable log path found.", file=sys.stderr)
+        log_to_file = False
 
     # Logger oluştur
     logger = logging.getLogger(name)
@@ -128,13 +156,13 @@ def setup_logger(
     # Dosya handler'ı (isteğe bağlı)
     if log_to_file:
         # Gerekirse log dizinini oluştur
-        log_dir = os.path.dirname(log_file)
+        log_dir = os.path.dirname(resolved_log_file)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
         # Dönen dosya handler'ı kullan (maks 10MB, 5 yedek)
         file_handler = RotatingFileHandler(
-            log_file,
+            resolved_log_file,
             maxBytes=10*1024*1024,  # 10MB
             backupCount=5,
             encoding='utf-8'
@@ -153,7 +181,7 @@ def setup_logger(
 
     # Yapılandırılmış JSON log dosyası (normal loglardan ayrı)
     if log_to_file:
-        json_log_path = log_file.replace('.log', '_structured.jsonl')
+        json_log_path = resolved_log_file.replace('.log', '_structured.jsonl')
         json_handler = RotatingFileHandler(
             json_log_path,
             maxBytes=10*1024*1024,

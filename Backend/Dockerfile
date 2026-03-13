@@ -59,7 +59,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
 # Uygulama kodları
-COPY . .
+COPY Backend/ .
 
 # Dizin izinleri
 RUN mkdir -p /app/database /app/logs /app/outputs \

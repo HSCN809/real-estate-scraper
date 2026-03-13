@@ -161,7 +161,6 @@ def run_emlakjet_task(request: ScrapeRequest):
         manager.stop()
 
 def run_hepsiemlak_task(request: ScrapeRequest):
-    from scrapers.hepsiemlak.main import HepsiemlakScraper
     from core.failed_pages_tracker import failed_pages_tracker
     from database.connection import get_db_session
     from database import crud
@@ -169,6 +168,7 @@ def run_hepsiemlak_task(request: ScrapeRequest):
     manager = DriverManager()
     db = None
     scrape_session = None
+    scraper = None
 
     try:
         driver = manager.start()
@@ -204,20 +204,42 @@ def run_hepsiemlak_task(request: ScrapeRequest):
         def progress_callback(message, current=0, total=0, progress=0):
             task_status.update(message=message, current=current, total=total, progress=progress)
 
-        scraper = HepsiemlakScraper(
-            driver=driver,
-            listing_type=request.listing_type,
-            category=request.category,
-            subtype_path=request.subtype_path,
-            selected_cities=request.cities,
-            selected_districts=request.districts
-        )
+        if request.scraping_method == "selenium":
+            from scrapers.hepsiemlak.main import HepsiemlakScraper
+
+            scraper = HepsiemlakScraper(
+                driver=driver,
+                listing_type=request.listing_type,
+                category=request.category,
+                subtype_path=request.subtype_path,
+                selected_cities=request.cities,
+                selected_districts=request.districts
+            )
+        else:
+            from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
+
+            scraper = HepsiemlakScraplingScraper(
+                listing_type=request.listing_type,
+                category=request.category,
+                subtype_path=request.subtype_path,
+                selected_cities=request.cities,
+                selected_districts=request.districts,
+                scraping_method=request.scraping_method,
+                headless=True,
+            )
 
         # Scraper'a DB session'ı ve session_id'yi ekle
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
-        print(f"DEBUG API: listing_type={request.listing_type}, category={request.category}, subtype_path={request.subtype_path}, cities={request.cities}")
+        print(
+            "DEBUG API: "
+            f"listing_type={request.listing_type}, "
+            f"category={request.category}, "
+            f"subtype_path={request.subtype_path}, "
+            f"scraping_method={request.scraping_method}, "
+            f"cities={request.cities}"
+        )
 
         if hasattr(scraper, 'start_scraping_api'):
             scraper.start_scraping_api(max_pages=request.max_pages, progress_callback=progress_callback)
@@ -324,7 +346,8 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
             "subtype_path": request.subtype_path,
             "cities": request.cities,
             "districts": request.districts,
-            "max_pages": request.max_pages
+            "max_pages": request.max_pages,
+            "scraping_method": request.scraping_method,
         },
         queue="scraping"
     )

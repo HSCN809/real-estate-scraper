@@ -130,13 +130,17 @@ def scrape_hepsiemlak_task(
     subtype_path: Optional[str],
     cities: List[str],
     districts: Optional[Dict[str, List[str]]],
-    max_pages: int = 50
+    max_pages: int = 50,
+    scraping_method: str = "selenium"
 ):
     """Celery worker'da çalışan HepsiEmlak kazıma görevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
-    logger.info(f"[Task {task_id}] Starting HepsiEmlak scrape: {listing_type}/{category}, cities={cities}")
+    logger.info(
+        f"[Task {task_id}] Starting HepsiEmlak scrape: {listing_type}/{category}, "
+        f"method={scraping_method}, cities={cities}"
+    )
     progress_manager.update(
         message="HepsiEmlak taraması başlatılıyor...",
         progress=0,
@@ -144,18 +148,18 @@ def scrape_hepsiemlak_task(
     )
 
     # Döngüsel import'ları önlemek ve doğru başlatmayı sağlamak için burada import et
-    from scrapers.hepsiemlak.main import HepsiemlakScraper
     from core.driver_manager import DriverManager
     from core.failed_pages_tracker import failed_pages_tracker
     from database.connection import get_db_session
     from database import crud
 
-    manager = DriverManager()
+    manager = None
+    driver = None
     db = None
     scrape_session = None
+    scraper = None
 
     try:
-        driver = manager.start()
         db = get_db_session()
 
         # Başarısız sayfa takipçisini sıfırla
@@ -199,20 +203,37 @@ def scrape_hepsiemlak_task(
             return progress_manager.is_stop_requested()
 
         # Kazıyıcıyı oluştur
-        scraper = HepsiemlakScraper(
-            driver=driver,
-            listing_type=listing_type,
-            category=category,
-            subtype_path=subtype_path,
-            selected_cities=cities,
-            selected_districts=districts
-        )
+        if scraping_method == "selenium":
+            from scrapers.hepsiemlak.main import HepsiemlakScraper
+            manager = DriverManager()
+            driver = manager.start()
+
+            scraper = HepsiemlakScraper(
+                driver=driver,
+                listing_type=listing_type,
+                category=category,
+                subtype_path=subtype_path,
+                selected_cities=cities,
+                selected_districts=districts
+            )
+        else:
+            from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
+
+            scraper = HepsiemlakScraplingScraper(
+                listing_type=listing_type,
+                category=category,
+                subtype_path=subtype_path,
+                selected_cities=cities,
+                selected_districts=districts,
+                scraping_method=scraping_method,
+                headless=True,
+            )
 
         # Veritabanı oturumunu ayarla
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
-        logger.info(f"[Task {task_id}] Starting scraping API call")
+        logger.info(f"[Task {task_id}] Starting scraping API call with method={scraping_method}")
 
         # Kazıyıcıyı durdurma kontrolüyle çalıştır
         scraper.start_scraping_api(
@@ -287,7 +308,8 @@ def scrape_hepsiemlak_task(
         finally:
             if db:
                 db.close()
-            manager.stop()
+            if manager:
+                manager.stop()
 
 
 @celery_app.task(bind=True, name="scrape_emlakjet")

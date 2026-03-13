@@ -1,19 +1,33 @@
+from typing import Dict, List, Literal, Optional
+
 from pydantic import BaseModel
-from typing import List, Optional, Any, Dict
+
+HepsiemlakScrapingMethod = Literal[
+    "selenium",
+    "scrapling_stealth_session",
+    "scrapling_fetcher_session",
+    "scrapling_dynamic_session",
+    "scrapling_spider_fetcher_session",
+    "scrapling_spider_dynamic_session",
+    "scrapling_spider_stealth_session",
+]
+
 
 class ScrapeRequest(BaseModel):
-    category: str = "konut"  # konut, arsa, isyeri
-    listing_type: str = "satilik"  # satilik, kiralik
-    subtype: Optional[str] = None  # Alt tip ID'si (örn: "tarla")
-    subtype_path: Optional[str] = None  # Alt tip URL path'i (örn: "/kiralik/tarla")
+    category: str = "konut"
+    listing_type: str = "satilik"
+    subtype: Optional[str] = None
+    subtype_path: Optional[str] = None
     cities: Optional[List[str]] = None
-    districts: Optional[Dict[str, List[str]]] = None  # İl -> [İlçeler] mapping
-    max_pages: Optional[int] = None       # None = limit yok (tüm sayfalar)
-    max_listings: Optional[int] = None    # None = limit yok (tüm ilanlar)
+    districts: Optional[Dict[str, List[str]]] = None
+    max_pages: Optional[int] = None
+    max_listings: Optional[int] = None
+    scraping_method: HepsiemlakScrapingMethod = "selenium"
+
 
 class ScrapeResponse(BaseModel):
     status: str
     message: str
     data_count: int
     output_files: List[str]
-    task_id: Optional[str] = None  # Celery görev takip ID'si
+    task_id: Optional[str] = None

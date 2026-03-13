@@ -1,6 +1,7 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """HepsiEmlak Scrapling tabanli scraper."""
 
+import logging
 import os
 import random
 import re
@@ -8,10 +9,17 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
-from scrapling.fetchers import FetcherSession, StealthySession
+from scrapling.fetchers import (
+    AsyncDynamicSession,
+    AsyncStealthySession,
+    DynamicSession,
+    FetcherSession,
+    StealthySession,
+)
 from scrapling.parser import Selector
+from scrapling.spiders import Response, Spider
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -20,7 +28,36 @@ from core.selectors import get_common_selectors, get_selectors
 from utils.data_exporter import DataExporter
 from utils.logger import get_logger
 
+from .main import save_listings_to_db
+
 logger = get_logger(__name__)
+
+SUPPORTED_SCRAPLING_METHODS = (
+    "scrapling_stealth_session",
+    "scrapling_fetcher_session",
+    "scrapling_dynamic_session",
+    "scrapling_spider_fetcher_session",
+    "scrapling_spider_dynamic_session",
+    "scrapling_spider_stealth_session",
+)
+
+SESSION_METHODS = {
+    "scrapling_stealth_session",
+    "scrapling_fetcher_session",
+    "scrapling_dynamic_session",
+}
+
+SPIDER_METHOD_TO_SESSION = {
+    "scrapling_spider_fetcher_session": "fetcher",
+    "scrapling_spider_dynamic_session": "dynamic",
+    "scrapling_spider_stealth_session": "stealth",
+}
+
+SPIDER_SESSION_CONFIG = {
+    "fetcher": {"concurrent_requests": 3, "download_delay": 0.0, "timeout_ms": 30000, "retries": 3, "retry_delay": 1, "max_blocked_retries": 3},
+    "dynamic": {"concurrent_requests": 2, "download_delay": 0.0, "timeout_ms": 45000, "retries": 4, "retry_delay": 2, "max_blocked_retries": 4},
+    "stealth": {"concurrent_requests": 1, "download_delay": 0.4, "timeout_ms": 60000, "retries": 5, "retry_delay": 2, "max_blocked_retries": 5},
+}
 
 
 class HepsiemlakScraplingScraper:
@@ -35,14 +72,10 @@ class HepsiemlakScraplingScraper:
         selected_districts: Optional[Dict[str, List[str]]] = None,
         use_stealth: bool = True,
         headless: bool = True,
+        scraping_method: Optional[str] = None,
     ):
         base_config = get_hepsiemlak_config()
-
-        if subtype_path:
-            category_path = subtype_path
-            logger.info(f"Using subtype path: {subtype_path}")
-        else:
-            category_path = base_config.categories.get(listing_type, {}).get(category, "")
+        category_path = subtype_path or base_config.categories.get(listing_type, {}).get(category, "")
 
         self.base_config = base_config
         self.base_url = base_config.base_url + category_path
@@ -51,21 +84,23 @@ class HepsiemlakScraplingScraper:
         self.subtype_path = subtype_path
         self.selected_cities = selected_cities or []
         self.selected_districts = selected_districts or {}
-        self.use_stealth = use_stealth
         self.headless = headless
         self.request_timeout_ms = 45000
-
-        self.subtype_name = None
-        if subtype_path:
-            parts = subtype_path.strip("/").split("/")
-            if len(parts) >= 2:
-                self.subtype_name = parts[-1].replace("-", "_")
+        self.scraping_method = self._resolve_scraping_method(scraping_method, use_stealth)
 
         self.selectors = get_selectors("hepsiemlak", category)
         self.common_selectors = get_common_selectors("hepsiemlak")
 
         self.session_context = None
         self.session = None
+        self._stop_checker = None
+
+        self.db = None
+        self.scrape_session_id = None
+        self.total_scraped_count = 0
+        self.new_listings_count = 0
+        self.duplicate_count = 0
+        self.total_new_listings = 0
         self.metrics = {
             "start_time": None,
             "end_time": None,
@@ -83,77 +118,116 @@ class HepsiemlakScraplingScraper:
             subtype=self.subtype_name,
         )
 
+    @staticmethod
+    def _resolve_scraping_method(scraping_method: Optional[str], use_stealth: bool) -> str:
+        if scraping_method is None:
+            return "scrapling_stealth_session" if use_stealth else "scrapling_fetcher_session"
+        if scraping_method not in SUPPORTED_SCRAPLING_METHODS:
+            raise ValueError(f"Unsupported scraping_method: {scraping_method}")
+        return scraping_method
+
+    @property
+    def subtype_name(self) -> Optional[str]:
+        if self.subtype_path:
+            parts = self.subtype_path.strip("/").split("/")
+            if len(parts) >= 2:
+                return parts[-1].replace("-", "_")
+        return None
+
+    def get_file_prefix(self) -> str:
+        parts = ["hepsiemlak", self.listing_type, self.category]
+        if self.subtype_name:
+            parts.append(self.subtype_name)
+        parts.append(self.scraping_method)
+        return "_".join(parts)
+
     def _normalize_text(self, text: str) -> str:
-        """URL icin Turkce karakterleri donustur ve slug olustur."""
         import unicodedata
 
         text = unicodedata.normalize("NFC", text)
-        replacements = {
-            "İ": "i",
-            "I": "i",
-            "Ğ": "g",
-            "Ü": "u",
-            "Ş": "s",
-            "Ö": "o",
-            "Ç": "c",
-            "ı": "i",
-            "ğ": "g",
-            "ü": "u",
-            "ş": "s",
-            "ö": "o",
-            "ç": "c",
-        }
-        for tr, en in replacements.items():
-            text = text.replace(tr, en)
+        for tr_char, en_char in {"I": "i", "İ": "i", "Ğ": "g", "Ü": "u", "Ş": "s", "Ö": "o", "Ç": "c", "ı": "i", "ğ": "g", "ü": "u", "ş": "s", "ö": "o", "ç": "c"}.items():
+            text = text.replace(tr_char, en_char)
         return text.lower().replace(" ", "-")
 
     def _get_category_or_subtype_slug(self) -> str:
-        """URL'de listing_type sonrasina eklenecek kategori/subtype slug'ini bul."""
         if self.subtype_path:
-            path_parts = self.subtype_path.strip("/").split("/")
-            if len(path_parts) >= 2:
-                return path_parts[-1]
-            return ""
-
+            parts = self.subtype_path.strip("/").split("/")
+            return parts[-1] if len(parts) >= 2 else ""
         category_path = self.base_config.categories.get(self.listing_type, {}).get(self.category, "")
-        if not category_path:
-            return ""
-
-        parts = category_path.strip("/").split("/")
-        if len(parts) >= 2:
-            return parts[-1]
-        return ""
+        parts = category_path.strip("/").split("/") if category_path else []
+        return parts[-1] if len(parts) >= 2 else ""
 
     def _build_location_url(self, location_slug: str) -> str:
-        """Sehir veya ilce icin Hepsiemlak URL'i olustur."""
-        category_or_subtype = self._get_category_or_subtype_slug()
+        suffix = self._get_category_or_subtype_slug()
         base_location_url = f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
-        if category_or_subtype:
-            return f"{base_location_url}/{category_or_subtype}"
-        return base_location_url
+        return f"{base_location_url}/{suffix}" if suffix else base_location_url
 
     def _get_city_url(self, city: str) -> str:
-        """Sehir icin URL olustur."""
         return self._build_location_url(self._normalize_text(city))
 
     def _get_district_url(self, district: str) -> str:
-        """Ilce icin URL olustur."""
         return self._build_location_url(self._normalize_text(district))
 
+    @staticmethod
+    def _build_page_url(base_url: str, page_num: int) -> str:
+        if page_num <= 1:
+            return base_url
+        parsed = urlparse(base_url)
+        query = parse_qs(parsed.query)
+        query["page"] = [str(page_num)]
+        return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+    @staticmethod
+    def _get_page_number(url: str) -> int:
+        try:
+            page_values = parse_qs(urlparse(url).query).get("page")
+            if page_values and page_values[0].isdigit():
+                return int(page_values[0])
+        except Exception:
+            pass
+        return 1
+
+    def _is_stop_requested(self) -> bool:
+        if self._stop_checker and self._stop_checker():
+            return True
+        try:
+            from api.status import task_status
+
+            return task_status.is_stop_requested()
+        except Exception:
+            return False
+
+    def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
+        if not self._is_stop_requested():
+            return False
+        logger.warning(message)
+        if progress_callback:
+            progress_callback(message, progress=0)
+        return True
+
     def _create_session(self):
-        """Scrapling session olustur."""
-        if self.use_stealth:
-            logger.info("Creating StealthySession...")
+        if self.scraping_method not in SESSION_METHODS:
+            return None
+
+        listing_results = self.common_selectors.get("listing_results")
+        logger.info(f"Creating Scrapling session via {self.scraping_method} (headless={self.headless})")
+        if self.scraping_method == "scrapling_stealth_session":
             self.session_context = StealthySession(
                 headless=self.headless,
                 solve_cloudflare=False,
                 google_search=False,
                 timeout=self.request_timeout_ms,
                 network_idle=True,
-                wait_selector=self.common_selectors.get("listing_results"),
+                wait_selector=listing_results,
+            )
+        elif self.scraping_method == "scrapling_dynamic_session":
+            self.session_context = DynamicSession(
+                headless=self.headless,
+                disable_resources=True,
+                timeout=self.request_timeout_ms,
+                network_idle=False,
             )
         else:
-            logger.info("Creating FetcherSession...")
             self.session_context = FetcherSession(
                 stealthy_headers=True,
                 follow_redirects=True,
@@ -162,537 +236,561 @@ class HepsiemlakScraplingScraper:
                 retry_delay=1,
             )
 
-        if hasattr(self.session_context, "__enter__"):
-            self.session = self.session_context.__enter__()
-        else:
-            self.session = self.session_context
-
+        self.session = self.session_context.__enter__() if hasattr(self.session_context, "__enter__") else self.session_context
+        logger.info(f"Scrapling session ready via {self.scraping_method}")
         return self.session
 
     def _close_session(self):
-        """Session'i kapat."""
-        if not self.session and not self.session_context:
-            return
-
-        # Always close via context manager instance when available.
         if self.session_context and hasattr(self.session_context, "__exit__"):
             self.session_context.__exit__(None, None, None)
         elif self.session and hasattr(self.session, "__exit__"):
             self.session.__exit__(None, None, None)
-
         self.session_context = None
         self.session = None
 
     def fetch_page(self, url: str) -> Optional[Selector]:
-        """Sayfayi fetch et ve Scrapling Response/Selector don."""
         try:
             if self.session is None:
-                raise RuntimeError("Session is not initialized. Call _create_session first.")
+                raise RuntimeError("Session is not initialized")
 
             start_time = time.time()
-
-            if self.use_stealth:
-                fetch_kwargs: Dict[str, Any] = {
-                    "network_idle": True,
-                    "timeout": self.request_timeout_ms,
-                }
+            if self.scraping_method == "scrapling_fetcher_session":
+                response = self.session.get(url)
+            else:
+                fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+                if self.scraping_method == "scrapling_stealth_session":
+                    fetch_kwargs["network_idle"] = True
                 wait_selector = self.common_selectors.get("listing_results")
                 if wait_selector:
                     fetch_kwargs["wait_selector"] = wait_selector
                 response = self.session.fetch(url, **fetch_kwargs)
-            else:
-                response = self.session.get(url)
-
-            fetch_time = time.time() - start_time
 
             if not response:
                 self.metrics["failed_requests"] += 1
-                logger.warning(f"Failed to fetch {url} - no response")
                 return None
 
             status = getattr(response, "status", 200)
-            if isinstance(status, int) and status >= 400:
-                self.metrics["failed_requests"] += 1
-                logger.warning(f"Failed to fetch {url} - status {status}")
-                return None
-
             body = getattr(response, "body", b"")
-            if not body or len(body) <= 100:
+            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
                 self.metrics["failed_requests"] += 1
-                logger.warning(f"Failed to fetch {url} - empty/short content")
                 return None
 
             self.metrics["successful_requests"] += 1
-            logger.info(f"Fetched {url} in {fetch_time:.2f}s")
+            logger.info(f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}")
             return response
-
-        except Exception as e:
+        except Exception as exc:
             self.metrics["failed_requests"] += 1
-            logger.error(f"Error fetching {url}: {e}")
+            logger.error(f"Error fetching {url}: {exc}")
             return None
 
     def get_total_pages(self, selector: Selector) -> int:
-        """Sayfalamadan toplam sayfa sayisini al."""
         try:
             count_elements = selector.css("span.applied-filters__count")
             if count_elements:
-                count_text = str(count_elements[0].text).strip()
-                count_text_clean = count_text.replace(".", "")
+                count_text_clean = str(count_elements[0].text).strip().replace(".", "")
                 match = re.search(r"(\d+)", count_text_clean)
-                if match:
-                    total_listings = int(match.group(1))
-                    if total_listings <= 24:
-                        logger.info(f"Total {total_listings} listings - single page")
-                        return 1
-
+                if match and int(match.group(1)) <= 24:
+                    return 1
             pagination_links = selector.css("ul.he-pagination__links a, ul.he-pagination a")
             max_page = 1
-
             for link in pagination_links:
                 text = str(link.text).strip()
                 if text.isdigit():
-                    page_num = int(text)
-                    if page_num > max_page:
-                        max_page = page_num
-
-            logger.info(f"Found {max_page} pages from pagination")
+                    max_page = max(max_page, int(text))
             return max_page
-
-        except Exception as e:
-            logger.warning(f"Error detecting pagination: {e}")
+        except Exception as exc:
+            logger.warning(f"Error detecting pagination: {exc}")
             return 1
 
-    def _extract_text(self, element: Selector, css_selector: str, default: str = "Belirtilmemiş") -> str:
-        """Selector'dan guvenli text cek."""
-        if not css_selector:
-            return default
+    def _extract_text(self, element: Selector, css_selector: str, default: str = "Belirtilmemis") -> str:
         try:
-            elements = element.css(css_selector)
-            if not elements:
-                return default
-            value = str(elements[0].text).strip()
-            return value if value else default
+            elements = element.css(css_selector) if css_selector else []
+            value = str(elements[0].text).strip() if elements else ""
+            return value or default
         except Exception:
             return default
 
-    def _extract_attribute(
-        self,
-        element: Selector,
-        css_selector: str,
-        attribute: str,
-        default: str = "Belirtilmemiş",
-    ) -> str:
-        """Selector'dan guvenli attribute cek."""
-        if not css_selector:
-            return default
+    def _extract_attribute(self, element: Selector, css_selector: str, attribute: str, default: str = "Belirtilmemis") -> str:
         try:
-            elements = element.css(css_selector)
-            if not elements:
-                return default
-            value = str(elements[0].attrib.get(attribute, "")).strip()
-            return value if value else default
+            elements = element.css(css_selector) if css_selector else []
+            value = str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
+            return value or default
         except Exception:
             return default
 
     def _extract_common_data(self, element: Selector, page_url: str = "") -> Dict[str, Any]:
-        """Tum kategoriler icin ortak alanlari cikar."""
-        price_sel = self.common_selectors.get("price", "span.list-view-price")
-        title_sel = self.common_selectors.get("title", "h3")
-        date_sel = self.common_selectors.get("date", "span.list-view-date")
-        link_sel = self.common_selectors.get("link", "a.card-link")
-        firm_sel = self.common_selectors.get("firm", "p.listing-card--owner-info__firm-name")
-
-        listing_link = self._extract_attribute(element, link_sel, "href")
-        if listing_link != "Belirtilmemiş" and page_url:
+        listing_link = self._extract_attribute(element, self.common_selectors.get("link", "a.card-link"), "href")
+        if listing_link != "Belirtilmemis" and page_url:
             listing_link = urljoin(page_url, listing_link)
-
-        location_selectors = [
-            "span.list-view-location address",
-            "span.list-view-location",
-            ".list-view-location address",
-            ".list-view-location",
-            "address",
-        ]
         location_text = ""
-        for loc_selector in location_selectors:
+        for loc_selector in ["span.list-view-location address", "span.list-view-location", ".list-view-location address", ".list-view-location", "address"]:
             location_text = self._extract_text(element, loc_selector, default="")
             if location_text and "/" in location_text:
                 break
-
         location_parts = [part.strip() for part in location_text.split("/") if part.strip()]
-
         return {
-            "fiyat": self._extract_text(element, price_sel),
-            "baslik": self._extract_text(element, title_sel),
-            "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemiş",
-            "ilce": location_parts[1] if len(location_parts) > 1 else "Belirtilmemiş",
-            "mahalle": location_parts[2] if len(location_parts) > 2 else "Belirtilmemiş",
+            "fiyat": self._extract_text(element, self.common_selectors.get("price", "span.list-view-price")),
+            "baslik": self._extract_text(element, self.common_selectors.get("title", "h3")),
+            "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemis",
+            "ilce": location_parts[1] if len(location_parts) > 1 else "Belirtilmemis",
+            "mahalle": location_parts[2] if len(location_parts) > 2 else "Belirtilmemis",
             "ilan_linki": listing_link,
-            "ilan_tarihi": self._extract_text(element, date_sel),
-            "emlak_ofisi": self._extract_text(element, firm_sel),
+            "ilan_tarihi": self._extract_text(element, self.common_selectors.get("date", "span.list-view-date")),
+            "emlak_ofisi": self._extract_text(element, self.common_selectors.get("firm", "p.listing-card--owner-info__firm-name")),
         }
 
-    def extract_listings_from_page(
-        self,
-        selector: Selector,
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        page_url: str = "",
-    ) -> List[Dict[str, Any]]:
-        """Sayfadaki ilanlari cikar."""
-        listings: List[Dict[str, Any]] = []
-
-        try:
-            container_selector = self.common_selectors.get(
-                "listing_container",
-                "li.listing-item:not(.listing-item--promo)",
-            )
-            listing_elements = selector.css(container_selector)
-
-            logger.info(f"Found {len(listing_elements)} listing elements")
-            source_url = page_url or getattr(selector, "url", "")
-
-            for element in listing_elements:
-                try:
-                    data = self._extract_from_scrapling_element(element, page_url=source_url)
-
-                    if data:
-                        if city and (not data.get("il") or data.get("il") == "Belirtilmemiş"):
-                            data["il"] = city
-                        if district and (not data.get("ilce") or data.get("ilce") == "Belirtilmemiş"):
-                            data["ilce"] = district
-
-                        data["scraped_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        data["scraping_method"] = "scrapling"
-                        listings.append(data)
-
-                except Exception as e:
-                    logger.debug(f"Error extracting listing: {e}")
-                    continue
-
-            logger.info(f"Successfully extracted {len(listings)} listings")
-
-        except Exception as e:
-            logger.error(f"Error extracting listings from page: {e}")
-
-        return listings
+    def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
+        if self.category == "konut":
+            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.houseRoomCount")), "metrekare": self._extract_text(element, self.selectors.get("size", "span.list-view-size")), "bina_yasi": self._extract_text(element, self.selectors.get("building_age", "span.buildingAge")), "kat": self._extract_text(element, self.selectors.get("floor", "span.floortype"))}
+        if self.category == "arsa":
+            data = {"arsa_metrekare": "Belirtilmemis", "metrekare_fiyat": "Belirtilmemis"}
+            for size_element in element.css(self.selectors.get("size", "span.celly.squareMeter.list-view-size")):
+                size_text = str(size_element.text).strip()
+                normalized = size_text.lower().replace(" ", "")
+                if ("tl/m²" in normalized or "tl/m2" in normalized) and data["metrekare_fiyat"] == "Belirtilmemis":
+                    data["metrekare_fiyat"] = size_text
+                elif ("m²" in normalized or "m2" in normalized) and data["arsa_metrekare"] == "Belirtilmemis":
+                    data["arsa_metrekare"] = size_text
+            return data
+        if self.category == "isyeri":
+            return {"metrekare": self._extract_text(element, self.selectors.get("size", "span.celly.squareMeter.list-view-size"))}
+        if self.category == "devremulk":
+            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.houseRoomCount")), "metrekare": self._extract_text(element, self.selectors.get("size", "span.celly.squareMeter.list-view-size")), "bina_yasi": self._extract_text(element, self.selectors.get("building_age", "span.buildingAge")), "kat": self._extract_text(element, self.selectors.get("floor", "span.floortype"))}
+        if self.category == "turistik_isletme":
+            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.workRoomCount")), "otel_tipi": self._extract_text(element, self.selectors.get("star_count", "span.startCount"))}
+        return {}
 
     def _extract_from_scrapling_element(self, element: Selector, page_url: str = "") -> Dict[str, Any]:
-        """Scrapling Selector element'inden verileri cikar."""
         data = self._extract_common_data(element, page_url=page_url)
         data.update(self._extract_category_specific_data(element))
         return data
 
-    def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
-        """Kategoriye ozel alanlari cikar."""
-        if self.category == "konut":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element,
-                    self.selectors.get("room_count", "span.houseRoomCount"),
-                ),
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.list-view-size"),
-                ),
-                "bina_yasi": self._extract_text(
-                    element,
-                    self.selectors.get("building_age", "span.buildingAge"),
-                ),
-                "kat": self._extract_text(
-                    element,
-                    self.selectors.get("floor", "span.floortype"),
-                ),
-            }
-
-        if self.category == "arsa":
-            data = {
-                "arsa_metrekare": "Belirtilmemiş",
-                "metrekare_fiyat": "Belirtilmemiş",
-            }
-            size_selector = self.selectors.get("size", "span.celly.squareMeter.list-view-size")
-            for size_element in element.css(size_selector):
-                size_text = str(size_element.text).strip()
-                if not size_text:
+    def extract_listings_from_page(self, selector: Selector, city: Optional[str] = None, district: Optional[str] = None, page_url: str = "") -> List[Dict[str, Any]]:
+        listings: List[Dict[str, Any]] = []
+        try:
+            listing_elements = selector.css(self.common_selectors.get("listing_container", "li.listing-item:not(.listing-item--promo)"))
+            source_url = page_url or getattr(selector, "url", "")
+            for element in listing_elements:
+                data = self._extract_from_scrapling_element(element, page_url=source_url)
+                if not data:
                     continue
-                normalized = size_text.lower().replace(" ", "")
-                is_price_per_m2 = "tl/m²" in normalized or "tl/m2" in normalized
-                if is_price_per_m2 and data["metrekare_fiyat"] == "Belirtilmemiş":
-                    data["metrekare_fiyat"] = size_text
-                elif ("m²" in normalized or "m2" in normalized) and data["arsa_metrekare"] == "Belirtilmemiş":
-                    data["arsa_metrekare"] = size_text
-            return data
+                if city and (not data.get("il") or data.get("il") == "Belirtilmemis"):
+                    data["il"] = city
+                if district and (not data.get("ilce") or data.get("ilce") == "Belirtilmemis"):
+                    data["ilce"] = district
+                data["scraped_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                data["scraping_method"] = self.scraping_method
+                listings.append(data)
+        except Exception as exc:
+            logger.error(f"Error extracting listings from page: {exc}")
+        return listings
 
-        if self.category == "isyeri":
-            return {
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
+    def _persist_listings(self, listings: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+        if not listings:
+            return 0, 0, 0
+        self.total_scraped_count += len(listings)
+        if not self.db:
+            return len(listings), 0, 0
+        new_count, updated_count, unchanged_count = save_listings_to_db(
+            self.db,
+            listings,
+            platform="hepsiemlak",
+            kategori=self.category,
+            ilan_tipi=self.listing_type,
+            alt_kategori=self.subtype_name,
+            scrape_session_id=self.scrape_session_id,
+        )
+        self.new_listings_count += new_count
+        self.duplicate_count += unchanged_count
+        self.total_new_listings += new_count
+        return new_count, updated_count, unchanged_count
+
+    def _make_city_progress_callback(self, progress_callback, current_city_idx: int, num_cities: int, city_name: str):
+        def city_progress_callback(msg, current=None, total=None, progress=None):
+            city_local_progress = progress if progress is not None else 0
+            overall = int(((current_city_idx - 1 + city_local_progress / 100) / num_cities) * 100)
+            if progress_callback:
+                progress_callback(
+                    f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
+                    current=current,
+                    total=total,
+                    progress=overall,
                 )
-            }
+            else:
+                try:
+                    from api.status import task_status
 
-        if self.category == "devremulk":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element,
-                    self.selectors.get("room_count", "span.houseRoomCount"),
-                ),
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
-                ),
-                "bina_yasi": self._extract_text(
-                    element,
-                    self.selectors.get("building_age", "span.buildingAge"),
-                ),
-                "kat": self._extract_text(
-                    element,
-                    self.selectors.get("floor", "span.floortype"),
-                ),
-            }
+                    task_status.update(
+                        message=f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
+                        progress=overall,
+                        current=current,
+                        total=total,
+                    )
+                except Exception:
+                    pass
 
-        if self.category == "turistik_isletme":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element,
-                    self.selectors.get("room_count", "span.workRoomCount"),
-                ),
-                "otel_tipi": self._extract_text(
-                    element,
-                    self.selectors.get("star_count", "span.startCount"),
-                ),
-            }
+        return city_progress_callback
 
-        return {}
+    def _scrape_location_with_session(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: int,
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        listings: List[Dict[str, Any]] = []
+        first_page = self.fetch_page(location_url)
+        if not first_page:
+            logger.warning(f"Could not fetch first page for {location_name}: {location_url}")
+            return listings
 
-    def scrape_city(self, city: str, max_pages: int = 3) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Tek bir sehir icin ilanlari tara."""
-        logger.info(f"Scraping city: {city}")
+        pages_to_scrape = min(max_pages, self.get_total_pages(first_page))
+        logger.info(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
 
-        city_listings: List[Dict[str, Any]] = []
-        city_metrics = {
-            "city": city,
-            "pages_scraped": 0,
-            "listings_found": 0,
-            "start_time": time.time(),
-            "duration": 0,
-        }
+        for page_num in range(1, pages_to_scrape + 1):
+            if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
+                break
 
-        try:
-            city_url = self._get_city_url(city)
-            logger.info(f"City URL: {city_url}")
-
-            selector = self.fetch_page(city_url)
+            current_url = self._build_page_url(location_url, page_num)
+            selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
-                logger.error(f"Failed to fetch city page: {city}")
-                city_metrics["duration"] = time.time() - city_metrics["start_time"]
-                return [], city_metrics
+                continue
 
-            total_pages = self.get_total_pages(selector)
-            pages_to_scrape = min(max_pages, total_pages)
-            logger.info(f"Scraping {pages_to_scrape} pages for {city}")
-
-            for page_num in range(1, pages_to_scrape + 1):
-                logger.info(f"Scraping page {page_num}/{pages_to_scrape}")
-
-                current_url = city_url
-                if page_num > 1:
-                    current_url = f"{city_url}?page={page_num}"
-                    selector = self.fetch_page(current_url)
-                    if not selector:
-                        logger.warning(f"Failed to fetch page {page_num}")
-                        continue
-
-                page_listings = self.extract_listings_from_page(
-                    selector,
-                    city=city,
-                    page_url=getattr(selector, "url", current_url),
+            if progress_callback:
+                progress_callback(
+                    f"{location_name} - Sayfa {page_num}/{pages_to_scrape}",
+                    current=page_num,
+                    total=pages_to_scrape,
+                    progress=int((page_num / max(1, pages_to_scrape)) * 100),
                 )
-                city_listings.extend(page_listings)
 
-                city_metrics["pages_scraped"] += 1
-                city_metrics["listings_found"] += len(page_listings)
-                logger.info(f"Page {page_num}: Found {len(page_listings)} listings")
-
-                if page_num < pages_to_scrape:
-                    time.sleep(random.uniform(1, 3))
-
-            city_metrics["duration"] = time.time() - city_metrics["start_time"]
-            logger.info(
-                f"Completed scraping {city}: {len(city_listings)} listings in {city_metrics['duration']:.2f}s"
+            page_listings = self.extract_listings_from_page(
+                selector,
+                city=city,
+                district=district,
+                page_url=getattr(selector, "url", current_url),
             )
+            listings.extend(page_listings)
+            self._persist_listings(page_listings)
+            self.metrics["total_pages"] += 1
 
-        except Exception as e:
-            logger.error(f"Error scraping city {city}: {e}")
-            city_metrics["duration"] = time.time() - city_metrics["start_time"]
+            if page_num < pages_to_scrape:
+                time.sleep(random.uniform(1, 3))
 
-        return city_listings, city_metrics
+        return listings
 
-    def scrape_district(self, city: str, district: str, max_pages: int = 2) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Tek bir ilce icin ilanlari tara."""
-        logger.info(f"Scraping district: {city}/{district}")
+    def _scrape_location_with_spider(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: int,
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
+        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        listing_results = self.common_selectors.get("listing_results")
+        spider_errors: List[Dict[str, str]] = []
+        visited_pages: set[int] = set()
+        outer = self
 
-        district_listings: List[Dict[str, Any]] = []
-        district_metrics = {
-            "city": city,
-            "district": district,
-            "pages_scraped": 0,
-            "listings_found": 0,
-            "start_time": time.time(),
-            "duration": 0,
-        }
+        logging.getLogger("scrapling").setLevel(logging.WARNING)
+        logging.getLogger("scrapling.spiders").setLevel(logging.WARNING)
 
-        try:
-            district_url = self._get_district_url(district)
-            logger.info(f"District URL: {district_url}")
+        class HepsiemlakSpider(Spider):
+            name = f"hepsiemlak_{session_mode}_{outer._normalize_text(location_name)}"
+            start_urls = [location_url]
+            allowed_domains = {"hepsiemlak.com"}
+            concurrent_requests = mode_settings["concurrent_requests"]
+            download_delay = mode_settings["download_delay"]
+            max_blocked_retries = mode_settings["max_blocked_retries"]
+            logging_level = logging.WARNING
 
-            selector = self.fetch_page(district_url)
-            if not selector:
-                logger.error(f"Failed to fetch district page: {district}")
-                district_metrics["duration"] = time.time() - district_metrics["start_time"]
-                return [], district_metrics
+            def configure_sessions(self, manager):
+                if session_mode == "fetcher":
+                    manager.add(
+                        "default",
+                        FetcherSession(
+                            stealthy_headers=True,
+                            follow_redirects=True,
+                            timeout=mode_settings["timeout_ms"] // 1000,
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                        ),
+                        default=True,
+                    )
+                elif session_mode == "dynamic":
+                    manager.add(
+                        "default",
+                        AsyncDynamicSession(
+                            headless=outer.headless,
+                            disable_resources=True,
+                            timeout=mode_settings["timeout_ms"],
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                            network_idle=False,
+                        ),
+                        default=True,
+                    )
+                else:
+                    manager.add(
+                        "default",
+                        AsyncStealthySession(
+                            headless=outer.headless,
+                            disable_resources=True,
+                            timeout=mode_settings["timeout_ms"],
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                            network_idle=False,
+                        ),
+                        default=True,
+                    )
 
-            total_pages = self.get_total_pages(selector)
-            pages_to_scrape = min(max_pages, total_pages)
-            logger.info(f"Scraping {pages_to_scrape} pages for {district}")
+            async def on_error(self, request, error):
+                spider_errors.append(
+                    {
+                        "url": getattr(request, "url", ""),
+                        "sid": getattr(request, "sid", ""),
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                )
+                logger.warning(f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}")
 
-            for page_num in range(1, pages_to_scrape + 1):
-                logger.info(f"Scraping page {page_num}/{pages_to_scrape}")
+            async def parse(self, response: Response):
+                current_page = outer._get_page_number(response.url)
+                visited_pages.add(current_page)
 
-                current_url = district_url
-                if page_num > 1:
-                    current_url = f"{district_url}?page={page_num}"
-                    selector = self.fetch_page(current_url)
-                    if not selector:
-                        logger.warning(f"Failed to fetch page {page_num}")
-                        continue
+                if outer._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
+                    return
 
-                page_listings = self.extract_listings_from_page(
-                    selector,
+                if progress_callback:
+                    progress_callback(
+                        f"{location_name} - Sayfa {current_page}/{max_pages}",
+                        current=current_page,
+                        total=max_pages,
+                        progress=int((current_page / max(1, max_pages)) * 100),
+                    )
+
+                page_listings = outer.extract_listings_from_page(
+                    response,
                     city=city,
                     district=district,
-                    page_url=getattr(selector, "url", current_url),
+                    page_url=response.url,
                 )
-                district_listings.extend(page_listings)
+                for listing in page_listings:
+                    listing["page"] = current_page
+                    listing["scraping_method"] = outer.scraping_method
+                    yield listing
 
-                district_metrics["pages_scraped"] += 1
-                district_metrics["listings_found"] += len(page_listings)
-                logger.info(f"Page {page_num}: Found {len(page_listings)} listings")
+                if current_page < max_pages and not outer._is_stop_requested():
+                    next_url = outer._build_page_url(location_url, current_page + 1)
+                    follow_kwargs = {"callback": self.parse}
+                    if session_mode != "fetcher" and listing_results:
+                        follow_kwargs["wait_selector"] = listing_results
+                    yield response.follow(next_url, **follow_kwargs)
 
-                if page_num < pages_to_scrape:
-                    time.sleep(random.uniform(1, 3))
+        crawl_result = HepsiemlakSpider().start()
+        method_items = [item for item in crawl_result.items if isinstance(item, dict)]
+        method_items.sort(key=lambda item: (item.get("page", 1), item.get("ilan_linki", "")))
+        self.metrics["total_pages"] += len(visited_pages)
+        self.metrics["successful_requests"] += len(visited_pages)
+        self.metrics["failed_requests"] += len(spider_errors)
+        self._persist_listings(method_items)
+        return method_items
 
-            district_metrics["duration"] = time.time() - district_metrics["start_time"]
-            logger.info(
-                f"Completed scraping {district}: {len(district_listings)} listings in {district_metrics['duration']:.2f}s"
+    def _scrape_location(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: int,
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        if self.scraping_method in SESSION_METHODS:
+            return self._scrape_location_with_session(
+                location_name=location_name,
+                location_url=location_url,
+                max_pages=max_pages,
+                city=city,
+                district=district,
+                progress_callback=progress_callback,
             )
+        return self._scrape_location_with_spider(
+            location_name=location_name,
+            location_url=location_url,
+            max_pages=max_pages,
+            city=city,
+            district=district,
+            progress_callback=progress_callback,
+        )
 
-        except Exception as e:
-            logger.error(f"Error scraping district {district}: {e}")
-            district_metrics["duration"] = time.time() - district_metrics["start_time"]
+    def _export_results(self, all_listings: List[Dict[str, Any]]):
+        if not all_listings:
+            return
 
-        return district_listings, district_metrics
+        listings_by_city: Dict[str, List[Dict[str, Any]]] = {}
+        for listing in all_listings:
+            city_name = str(listing.get("il") or "Belirtilmemis").strip() or "Belirtilmemis"
+            listings_by_city.setdefault(city_name, []).append(listing)
 
-    def start_scraping(self, max_pages_per_city: int = 3, max_pages_per_district: int = 2) -> Dict[str, Any]:
-        """Ana tarama fonksiyonu."""
-        logger.info("Starting Scrapling-based scraping...")
-
-        self.metrics["start_time"] = time.time()
-        all_listings: List[Dict[str, Any]] = []
-        detailed_metrics: List[Dict[str, Any]] = []
+        prefix = self.get_file_prefix()
+        self.exporter.save_by_city(
+            listings_by_city,
+            prefix=prefix,
+            format="excel",
+            city_district_map=self.selected_districts if self.selected_districts else None,
+        )
 
         try:
+            import pandas as pd
+
+            csv_path = os.path.join(self.exporter.output_dir, f"{prefix}.csv")
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            pd.DataFrame(all_listings).to_csv(csv_path, index=False, encoding="utf-8-sig")
+            logger.info(f"Saved {len(all_listings)} listings to {csv_path}")
+        except Exception as exc:
+            logger.warning(f"Could not export CSV for {self.scraping_method}: {exc}")
+
+    def _run_scraping(self, max_pages: int, progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        self._stop_checker = stop_checker
+        logger.info(
+            f"Starting _run_scraping with method={self.scraping_method}, "
+            f"cities={self.selected_cities}, max_pages={max_pages}"
+        )
+        self.metrics.update(
+            {
+                "start_time": time.time(),
+                "end_time": None,
+                "total_pages": 0,
+                "total_listings": 0,
+                "successful_requests": 0,
+                "failed_requests": 0,
+                "total_duration": 0,
+            }
+        )
+        self.total_scraped_count = 0
+        self.new_listings_count = 0
+        self.duplicate_count = 0
+        self.total_new_listings = 0
+
+        all_results: Dict[str, Any] = {}
+        all_listings: List[Dict[str, Any]] = []
+        total_cities = len(self.selected_cities)
+
+        if self.scraping_method in SESSION_METHODS:
+            logger.info(f"Initializing session-backed scraping flow for {self.scraping_method}")
             self._create_session()
 
-            for city in self.selected_cities:
+        try:
+            for city_idx, city in enumerate(self.selected_cities, 1):
+                city_callback = self._make_city_progress_callback(progress_callback, city_idx, total_cities, city)
+                if self._raise_if_stop_requested(city_callback, f"{city}: durdurma istegi alindi."):
+                    break
+
                 if self.selected_districts and city in self.selected_districts:
+                    district_results: Dict[str, List[Dict[str, Any]]] = {}
                     districts = self.selected_districts[city]
-                    logger.info(f"Scraping {len(districts)} districts in {city}")
-
-                    for district in districts:
-                        district_listings, district_metrics = self.scrape_district(
-                            city, district, max_pages_per_district
+                    for district_idx, district in enumerate(districts, 1):
+                        if self._raise_if_stop_requested(city_callback, f"{district}: durdurma istegi alindi."):
+                            break
+                        district_listings = self._scrape_location(
+                            location_name=f"{district} ({district_idx}/{len(districts)})",
+                            location_url=self._get_district_url(district),
+                            max_pages=max_pages,
+                            city=city,
+                            district=district,
+                            progress_callback=city_callback,
                         )
-                        all_listings.extend(district_listings)
-                        detailed_metrics.append(district_metrics)
-                        time.sleep(random.uniform(2, 4))
+                        if district_listings:
+                            district_results[district] = district_listings
+                            all_listings.extend(district_listings)
+                        if district_idx < len(districts):
+                            time.sleep(random.uniform(1, 3))
+                    if district_results:
+                        all_results[city] = district_results
                 else:
-                    city_listings, city_metrics = self.scrape_city(city, max_pages_per_city)
-                    all_listings.extend(city_listings)
-                    detailed_metrics.append(city_metrics)
+                    city_listings = self._scrape_location(
+                        location_name=city,
+                        location_url=self._get_city_url(city),
+                        max_pages=max_pages,
+                        city=city,
+                        progress_callback=city_callback,
+                    )
+                    if city_listings:
+                        all_results[city] = city_listings
+                        all_listings.extend(city_listings)
 
-                if city != self.selected_cities[-1]:
-                    time.sleep(random.uniform(3, 6))
+                if city_idx < total_cities:
+                    time.sleep(random.uniform(2, 4))
 
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
             self.metrics["total_listings"] = len(all_listings)
-            self.metrics["total_pages"] = sum(m.get("pages_scraped", 0) for m in detailed_metrics)
-
-            if all_listings:
-                listings_by_city: Dict[str, List[Dict[str, Any]]] = {}
-                for listing in all_listings:
-                    city_name = str(listing.get("il") or "Belirtilmemiş").strip() or "Belirtilmemiş"
-                    listings_by_city.setdefault(city_name, []).append(listing)
-
-                self.exporter.save_by_city(
-                    listings_by_city,
-                    prefix=f"hepsiemlak_{self.listing_type}_{self.category}_scrapling",
-                    format="excel",
-                    city_district_map=self.selected_districts if self.selected_districts else None,
-                )
-
-                import pandas as pd
-
-                df = pd.DataFrame(all_listings)
-                csv_path = (
-                    f"Outputs/HepsiEmlak Output/Scrapling/"
-                    f"hepsiemlak_{self.listing_type}_{self.category}_scrapling.csv"
-                )
-                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-                df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-                logger.info(f"Saved {len(all_listings)} listings to {csv_path}")
-
-            logger.info("Scraping completed successfully!")
-
-        except Exception as e:
-            logger.error(f"Error during scraping: {e}")
-            raise
+            self._export_results(all_listings)
+            return all_results, all_listings
         finally:
             self._close_session()
 
-        return {
-            "listings": all_listings,
-            "metrics": self.metrics,
-            "detailed_metrics": detailed_metrics,
-            "summary": self.get_summary(),
-        }
+    def start_scraping(self, max_pages_per_city: int = 3, max_pages_per_district: int = 2) -> Dict[str, Any]:
+        logger.info(f"Starting Scrapling-based scraping with method={self.scraping_method}")
+        results, listings = self._run_scraping(
+            max_pages=max(max_pages_per_city, max_pages_per_district),
+            progress_callback=None,
+            stop_checker=None,
+        )
+        return {"results": results, "listings": listings, "metrics": self.metrics, "summary": self.get_summary()}
+
+    def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
+        print(f"\nAPI: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})")
+        logger.info(
+            f"start_scraping_api called with method={self.scraping_method}, "
+            f"cities={self.selected_cities}, max_pages={max_pages}"
+        )
+        if not self.selected_cities:
+            logger.error("No cities provided for API scrape")
+            return {}
+        results, listings = self._run_scraping(
+            max_pages=max_pages or 1,
+            progress_callback=progress_callback,
+            stop_checker=stop_checker,
+        )
+        if results:
+            print(f"\n{'=' * 70}")
+            print("SCRAPLING TARAMA TAMAMLANDI")
+            print(f"Yontem: {self.scraping_method}")
+            print(f"Taranan Sehir Sayisi: {len(results)}")
+            print(f"Toplam Ilan Sayisi: {len(listings)}")
+            print("=" * 70)
+        else:
+            print(f"\n{'=' * 70}")
+            print("HIC ILAN BULUNAMADI")
+            print("=" * 70)
+        return results
 
     def get_summary(self) -> Dict[str, Any]:
-        """Ozet metrikleri getir."""
         total_requests = self.metrics["successful_requests"] + self.metrics["failed_requests"]
         return {
+            "scraping_method": self.scraping_method,
             "total_duration_seconds": round(self.metrics["total_duration"], 2),
             "total_listings": self.metrics["total_listings"],
             "total_pages": self.metrics["total_pages"],
             "successful_requests": self.metrics["successful_requests"],
             "failed_requests": self.metrics["failed_requests"],
             "success_rate": round(self.metrics["successful_requests"] / max(1, total_requests) * 100, 2),
-            "listings_per_second": round(
-                self.metrics["total_listings"] / max(1, self.metrics["total_duration"]), 2
-            ),
-            "pages_per_second": round(
-                self.metrics["total_pages"] / max(1, self.metrics["total_duration"]), 2
-            ),
+            "listings_per_second": round(self.metrics["total_listings"] / max(1, self.metrics["total_duration"]), 2),
+            "pages_per_second": round(self.metrics["total_pages"] / max(1, self.metrics["total_duration"]), 2),
         }
 
     def print_summary(self):
-        """Ozeti konsola yazdir."""
         summary = self.get_summary()
-
         print("\n" + "=" * 70)
         print("SCRAPLING SCRAPER - OZET RAPOR")
         print("=" * 70)
+        print(f"Yontem: {summary['scraping_method']}")
         print(f"Toplam Sure: {summary['total_duration_seconds']} saniye")
         print(f"Toplam Ilan: {summary['total_listings']}")
         print(f"Toplam Sayfa: {summary['total_pages']}")
@@ -705,32 +803,22 @@ class HepsiemlakScraplingScraper:
 
 
 def test_scrapling_scraper():
-    """Scrapling scraper'i test et."""
     print("Scrapling Scraper Testi Basliyor...")
-
     scraper = HepsiemlakScraplingScraper(
         listing_type="kiralik",
         category="konut",
         selected_cities=["Istanbul"],
         selected_districts={"Istanbul": ["Kadikoy"]},
-        use_stealth=True,
+        scraping_method="scrapling_fetcher_session",
         headless=True,
     )
-
     try:
         result = scraper.start_scraping(max_pages_per_city=2, max_pages_per_district=1)
         scraper.print_summary()
-
         print(f"\nToplam {len(result['listings'])} ilan bulundu.")
-        if result["listings"]:
-            print("\nIlk 3 ilan:")
-            for i, listing in enumerate(result["listings"][:3], 1):
-                print(f"{i}. {listing.get('baslik', 'N/A')} - {listing.get('fiyat', 'N/A')}")
-
         return result
-
-    except Exception as e:
-        print(f"Test hatasi: {e}")
+    except Exception as exc:
+        print(f"Test hatasi: {exc}")
         return None
 
 

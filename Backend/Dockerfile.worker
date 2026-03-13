@@ -2,6 +2,9 @@
 # syntax=docker/dockerfile:1.4
 FROM python:3.11-slim-bookworm
 
+ARG APP_UID=10001
+ARG APP_GID=10001
+
 # Chrome ve sistem bağımlılıkları (Debian Bookworm uyumlu)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -63,11 +66,20 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright \
+    && playwright install chromium
+
 # Uygulama kodları
-COPY . .
+COPY Backend/ .
 
 # Dizin izinleri
-RUN mkdir -p /app/database /app/logs /app/outputs \
+RUN groupadd --gid ${APP_GID} appuser \
+    && useradd --uid ${APP_UID} --gid ${APP_GID} --create-home --shell /bin/bash appuser \
+    && mkdir -p /app/database /app/logs /app/outputs /home/appuser/.cache /tmp/.X11-unix \
+    && chown root:root /tmp/.X11-unix \
+    && chmod 1777 /tmp/.X11-unix \
+    && chown -R appuser:appuser /app /home/appuser /ms-playwright \
     && chmod -R 755 /app
 
 # Ortam degiskenleri
@@ -75,6 +87,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV CHROME_HEADLESS=false
 ENV DISPLAY=:99
+ENV HOME=/home/appuser
+ENV XDG_CACHE_HOME=/home/appuser/.cache
 
 # Baslat: Xvfb + Celery worker (lock dosyasi temizlenerek)
-CMD ["sh", "-c", "rm -f /tmp/.X99-lock && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && celery -A celery_app worker --loglevel=info --concurrency=1 -Q scraping"]
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock && mkdir -p /tmp/.X11-unix && chown root:root /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && exec su -s /bin/sh appuser -c 'HOME=/home/appuser XDG_CACHE_HOME=/home/appuser/.cache DISPLAY=:99 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright celery -A celery_app worker --loglevel=info --concurrency=1 -Q scraping'"]

@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { startScrape, getCategories, getSubtypes } from '@/lib/api';
-import type { Platform, ListingType, Category } from '@/types';
+import type { Platform, ListingType, Category, HepsiemlakScrapingMethod } from '@/types';
 import type { Subtype } from '@/lib/api';
 import dynamic from 'next/dynamic';
 
@@ -47,8 +47,18 @@ export default function PlatformScraperPage() {
     const [subtypes, setSubtypes] = useState<Subtype[]>([]);
     const [selectedSubtype, setSelectedSubtype] = useState<Subtype | null>(null);
     const [subtypesLoading, setSubtypesLoading] = useState(false);
+    const [scrapingMethod, setScrapingMethod] = useState<HepsiemlakScrapingMethod>('selenium');
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
+    const hepsiemlakMethodOptions = [
+        { value: 'selenium', label: 'Selenium' },
+        { value: 'scrapling_stealth_session', label: 'Scrapling StealthSession' },
+        { value: 'scrapling_fetcher_session', label: 'Scrapling FetcherSession' },
+        { value: 'scrapling_dynamic_session', label: 'Scrapling DynamicSession' },
+        { value: 'scrapling_spider_fetcher_session', label: 'Scrapling Spider + FetcherSession' },
+        { value: 'scrapling_spider_dynamic_session', label: 'Scrapling Spider + AsyncDynamicSession' },
+        { value: 'scrapling_spider_stealth_session', label: 'Scrapling Spider + AsyncStealthySession' },
+    ];
 
     // Platform/ilan tipi değiştiğinde API'den kategorileri çek
     useEffect(() => {
@@ -119,6 +129,7 @@ export default function PlatformScraperPage() {
                 listing_type: listingType,
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
+                ...(platform === 'hepsiemlak' ? { scraping_method: scrapingMethod } : {}),
                 cities: selectedCities,
                 districts: selectedDistricts,
                 ...(platform === 'emlakjet'
@@ -220,6 +231,18 @@ export default function PlatformScraperPage() {
                             className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                         />
                     </div>
+
+                    {platform === 'hepsiemlak' && (
+                        <div>
+                            <Select
+                                label="Scraping Yontemi"
+                                value={scrapingMethod}
+                                onChange={(e) => setScrapingMethod(e.target.value as HepsiemlakScrapingMethod)}
+                                options={hepsiemlakMethodOptions}
+                                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
+                            />
+                        </div>
+                    )}
 
                     {/* Alt Kategori */}
                     <div>

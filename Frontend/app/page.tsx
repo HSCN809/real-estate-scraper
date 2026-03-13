@@ -138,7 +138,7 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-3 shrink-0">
               <Link
-                href="/scraper/emlakjet"
+                href="/scraper"
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg shadow-sky-500/25 hover:shadow-sky-500/40"
               >
                 <Rocket className="w-4 h-4" />
