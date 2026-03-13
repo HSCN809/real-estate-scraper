@@ -200,6 +200,7 @@ class HepsiemlakScraplingScraper:
     def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
         if not self._is_stop_requested():
             return False
+        print(f"\n⚠️ {message}")
         logger.warning(message)
         if progress_callback:
             progress_callback(message, progress=0)
@@ -405,6 +406,23 @@ class HepsiemlakScraplingScraper:
         self.total_new_listings += new_count
         return new_count, updated_count, unchanged_count
 
+    def _report_page_persist_result(
+        self,
+        page_num: int,
+        extracted_count: int,
+        new_count: int,
+        updated_count: int,
+        unchanged_count: int,
+        location_name: str,
+    ) -> None:
+        print(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
+        print(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
+        logger.info(
+            f"{location_name} / Sayfa {page_num}: "
+            f"{extracted_count} ilan çıkarıldı, {new_count} yeni, "
+            f"{updated_count} güncellendi, {unchanged_count} değişmedi"
+        )
+
     def _make_city_progress_callback(self, progress_callback, current_city_idx: int, num_cities: int, city_name: str):
         def city_progress_callback(msg, current=None, total=None, progress=None):
             city_local_progress = progress if progress is not None else 0
@@ -441,21 +459,31 @@ class HepsiemlakScraplingScraper:
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
         listings: List[Dict[str, Any]] = []
+        print(f"\n{'=' * 70}")
+        print(f"📍 Taranıyor: {location_name}")
+        print(f"🌐 {location_url}")
+        print(f"🕸️ Yöntem: {self.scraping_method}")
+        print("=" * 70)
         first_page = self.fetch_page(location_url)
         if not first_page:
+            print(f"⚠️ İlk sayfa alınamadı: {location_name}")
             logger.warning(f"Could not fetch first page for {location_name}: {location_url}")
             return listings
 
         pages_to_scrape = min(max_pages, self.get_total_pages(first_page))
         logger.info(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
+        print(f"📄 {pages_to_scrape} sayfa taranacak")
 
         for page_num in range(1, pages_to_scrape + 1):
             if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
                 break
 
             current_url = self._build_page_url(location_url, page_num)
+            print(f"\n🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor...")
             selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
+                print(f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor")
+                logger.warning(f"{location_name} / page {page_num}: fetch failed, skipping")
                 continue
 
             if progress_callback:
@@ -473,12 +501,22 @@ class HepsiemlakScraplingScraper:
                 page_url=getattr(selector, "url", current_url),
             )
             listings.extend(page_listings)
-            self._persist_listings(page_listings)
+            new_count, updated_count, unchanged_count = self._persist_listings(page_listings)
+            self._report_page_persist_result(
+                page_num=page_num,
+                extracted_count=len(page_listings),
+                new_count=new_count,
+                updated_count=updated_count,
+                unchanged_count=unchanged_count,
+                location_name=location_name,
+            )
             self.metrics["total_pages"] += 1
 
             if page_num < pages_to_scrape:
                 time.sleep(random.uniform(1, 3))
 
+        print(f"\n✅ {location_name} tamamlandı - {len(listings)} ilan işlendi")
+        logger.info(f"{location_name}: completed with {len(listings)} listings via {self.scraping_method}")
         return listings
 
     def _scrape_location_with_spider(
@@ -566,6 +604,7 @@ class HepsiemlakScraplingScraper:
                 if outer._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
                     return
 
+                print(f"\n🔍 [{current_page}/{max_pages}] {location_name} - Sayfa {current_page} taranıyor...")
                 if progress_callback:
                     progress_callback(
                         f"{location_name} - Sayfa {current_page}/{max_pages}",
@@ -598,7 +637,27 @@ class HepsiemlakScraplingScraper:
         self.metrics["total_pages"] += len(visited_pages)
         self.metrics["successful_requests"] += len(visited_pages)
         self.metrics["failed_requests"] += len(spider_errors)
-        self._persist_listings(method_items)
+        items_by_page: Dict[int, List[Dict[str, Any]]] = {}
+        for item in method_items:
+            items_by_page.setdefault(int(item.get("page", 1)), []).append(item)
+
+        for page_num in sorted(items_by_page):
+            page_items = items_by_page[page_num]
+            new_count, updated_count, unchanged_count = self._persist_listings(page_items)
+            self._report_page_persist_result(
+                page_num=page_num,
+                extracted_count=len(page_items),
+                new_count=new_count,
+                updated_count=updated_count,
+                unchanged_count=unchanged_count,
+                location_name=location_name,
+            )
+
+        if not method_items:
+            print(f"\n⚠️ {location_name} için ilan bulunamadı")
+        else:
+            print(f"\n✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi")
+        logger.info(f"{location_name}: completed with {len(method_items)} listings via {self.scraping_method}")
         return method_items
 
     def _scrape_location(
