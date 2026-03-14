@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
 import { useScraping } from '@/contexts/ScrapingContext';
 import { motion } from 'framer-motion';
-import { Play, Loader2, CheckCircle2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
+import { Play, Loader2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { startScrape, getCategories, getSubtypes } from '@/lib/api';
 import type { Platform, ListingType, Category, HepsiemlakScrapingMethod } from '@/types';
@@ -472,26 +472,17 @@ export default function PlatformScraperPage() {
                         )}
                     </button>
 
-                    {/* Sonuç */}
-                    {result && (
+                    {/* Sonuç (sadece hata göster) */}
+                    {result?.type === 'error' && (
                         <motion.div
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
-                            <div className={`backdrop-blur-xl bg-black/40 rounded-2xl p-6 border-2 ${result.type === 'success'
-                                ? 'border-green-500/30 bg-green-500/10'
-                                : 'border-red-500/30 bg-red-500/10'
-                                }`}>
+                            <div className="backdrop-blur-xl bg-black/40 rounded-2xl p-6 border-2 border-red-500/30 bg-red-500/10">
                                 <div className="flex items-start gap-4">
-                                    {result.type === 'success' ? (
-                                        <CheckCircle2 className="w-8 h-8 text-green-400 flex-shrink-0" />
-                                    ) : (
-                                        <XCircle className="w-8 h-8 text-red-400 flex-shrink-0" />
-                                    )}
+                                    <XCircle className="w-8 h-8 text-red-400 flex-shrink-0" />
                                     <div>
-                                        <p className={`font-bold text-lg ${result.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>
-                                            {result.type === 'success' ? '✅ Başarılı!' : '❌ Hata!'}
-                                        </p>
+                                        <p className="font-bold text-lg text-red-300">❌ Hata!</p>
                                         <p className="text-gray-300 mt-1">{result.message}</p>
                                     </div>
                                 </div>
