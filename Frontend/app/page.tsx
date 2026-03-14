@@ -1,7 +1,6 @@
 'use client';
 
 import CountUp from '@/components/ui/CountUp';
-import AnimatedList from '@/components/ui/AnimatedList';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import {
@@ -32,15 +31,49 @@ function getGreeting(): string {
   return 'İyi Akşamlar';
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
+function parseScrapeDate(dateStr?: string | null): Date | null {
+  if (!dateStr) return null;
+
+  const raw = String(dateStr).trim();
+  if (!raw) return null;
+
+  const direct = new Date(raw);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const trDateMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if (!trDateMatch) return null;
+
+  const [, dayStr, monthStr, yearStr, hourStr = '0', minuteStr = '0'] = trDateMatch;
+  return new Date(
+    Number(yearStr),
+    Number(monthStr) - 1,
+    Number(dayStr),
+    Number(hourStr),
+    Number(minuteStr),
+    0,
+    0
+  );
+}
+
+function parseResultDate(result: ScrapeResult): Date | null {
+  return parseScrapeDate(result.date_iso || result.date);
+}
+
+function formatTimeAgo(dateStr?: string | null): string {
+  const date = parseScrapeDate(dateStr);
+  if (!date) return '-';
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) return 'Az önce';
+
   const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 1) return 'Az önce';
   if (diffMins < 60) return `${diffMins} dk önce`;
+
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours} saat önce`;
+
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return 'Dün';
   return `${diffDays} gün önce`;
@@ -51,26 +84,41 @@ interface ChartDay { label: string; count: number; }
 function getChartData(results: ScrapeResult[]): ChartDay[] {
   const now = new Date();
   const days: ChartDay[] = [];
+
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().split('T')[0];
-    const dayLabel = d.toLocaleDateString('tr-TR', { weekday: 'short' });
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setDate(dayStart.getDate() - i);
+
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    const dayLabel = dayStart.toLocaleDateString('tr-TR', { weekday: 'short' });
     const dayCount = results
-      .filter((r) => r.date && r.date.startsWith(key))
-      .reduce((sum, r) => sum + (r.count || 0), 0);
+      .filter((result) => {
+        const parsedDate = parseResultDate(result);
+        return parsedDate ? parsedDate >= dayStart && parsedDate < dayEnd : false;
+      })
+      .reduce((sum, result) => sum + (result.count || 0), 0);
+
     days.push({ label: dayLabel, count: dayCount });
   }
+
   return days;
 }
 
 export default function Dashboard() {
+  const RECENT_ROW_HEIGHT = 74;
+  const RECENT_VIEWPORT_HEIGHT = 320;
+  const RECENT_OVERSCAN = 4;
+
   const [stats, setStats] = useState({
     total_scrapes: 0, total_listings: 0,
     this_week: 0, this_month: 0, last_scrape: '-',
   });
   const [results, setResults] = useState<ScrapeResult[]>([]);
   const [activeTasks, setActiveTasks] = useState<any[]>([]);
+  const [recentScrollTop, setRecentScrollTop] = useState(0);
 
   useEffect(() => {
     import('@/lib/api').then(({ getStats, getResults, getActiveTasks }) => {
@@ -93,12 +141,27 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    setRecentScrollTop(0);
+  }, [results.length]);
+
   const chartData = useMemo(() => getChartData(results), [results]);
   const maxChart = useMemo(() => Math.max(...chartData.map((d) => d.count), 1), [chartData]);
   const recentResults = useMemo(
-    () => [...results].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8),
+    () => [...results].sort((a, b) => {
+      const bTime = parseResultDate(b)?.getTime() ?? 0;
+      const aTime = parseResultDate(a)?.getTime() ?? 0;
+      return bTime - aTime;
+    }),
     [results]
   );
+  const recentTotalHeight = recentResults.length * RECENT_ROW_HEIGHT;
+  const recentStartIndex = Math.max(0, Math.floor(recentScrollTop / RECENT_ROW_HEIGHT) - RECENT_OVERSCAN);
+  const recentEndIndex = Math.min(
+    recentResults.length,
+    Math.ceil((recentScrollTop + RECENT_VIEWPORT_HEIGHT) / RECENT_ROW_HEIGHT) + RECENT_OVERSCAN
+  );
+  const visibleRecentResults = recentResults.slice(recentStartIndex, recentEndIndex);
 
   return (
     <div className="relative min-h-screen bg-black -mt-16 pt-16">
@@ -122,7 +185,7 @@ export default function Dashboard() {
       {/* İçerik */}
       <div className="relative z-10 px-6 lg:px-8 py-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Hero — sayfa açılınca hemen görünür */}
+          {/* Hero - sayfa açılınca hemen görünür */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -235,7 +298,7 @@ export default function Dashboard() {
 
             {/* Son Aktiviteler */}
             <motion.div variants={item}>
-              <div className="h-full p-5 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 hover:border-sky-500/30 transition-all">
+              <div className="h-full p-5 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 hover:border-sky-500/30 transition-all overflow-hidden">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500/20 to-emerald-500/20 flex items-center justify-center">
                     <Activity className="w-4 h-4 text-sky-400" />
@@ -246,27 +309,39 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {recentResults.length > 0 ? (
-                  <AnimatedList
-                    className="max-h-[260px]"
-                    items={recentResults.map((r) => {
-                      const isSky = r.platform === 'emlakjet';
-                      return (
-                        <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-black/30 border border-white/5 hover:border-sky-500/20 transition-all">
-                          <div className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${isSky ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                            {isSky ? 'EmlakJet' : 'HepsiEmlak'}
+                  <div
+                    className="h-[320px] overflow-y-auto pr-1"
+                    onScroll={(e) => setRecentScrollTop(e.currentTarget.scrollTop)}
+                  >
+                    <div className="relative" style={{ height: `${recentTotalHeight}px` }}>
+                      {visibleRecentResults.map((r, index) => {
+                        const rowIndex = recentStartIndex + index;
+                        const isSky = r.platform === 'emlakjet';
+
+                        return (
+                          <div
+                            key={`${r.id}-${rowIndex}`}
+                            className="absolute left-0 right-0"
+                            style={{ top: `${rowIndex * RECENT_ROW_HEIGHT}px`, height: `${RECENT_ROW_HEIGHT - 10}px` }}
+                          >
+                            <div className="h-full flex items-center gap-3 px-3 rounded-xl bg-black/30 border border-white/5 hover:border-sky-500/20 transition-all">
+                              <div className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${isSky ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                {isSky ? 'EmlakJet' : 'HepsiEmlak'}
+                              </div>
+                              <div className="flex-1 min-w-0 truncate">
+                                <span className="text-sm text-gray-300">{r.category || '-'}</span>
+                                {r.listing_type && <span className="text-sm text-gray-500"> · {r.listing_type}</span>}
+                              </div>
+                              <span className={`shrink-0 text-xs font-bold ${isSky ? 'text-sky-400' : 'text-emerald-400'}`}>
+                                {(r.count || 0).toLocaleString('tr-TR')}
+                              </span>
+                              <span className="shrink-0 text-[10px] text-gray-600">{formatTimeAgo(r.date_iso || r.date)}</span>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0 truncate">
-                            <span className="text-sm text-gray-300">{r.category || '-'}</span>
-                            {r.listing_type && <span className="text-sm text-gray-500"> · {r.listing_type}</span>}
-                          </div>
-                          <span className={`shrink-0 text-xs font-bold ${isSky ? 'text-sky-400' : 'text-emerald-400'}`}>
-                            {(r.count || 0).toLocaleString('tr-TR')}
-                          </span>
-                          <span className="shrink-0 text-[10px] text-gray-600">{r.date ? formatTimeAgo(r.date) : '-'}</span>
-                        </div>
-                      );
-                    })}
-                  />
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-14 text-gray-600">
                     <Activity className="w-10 h-10 mb-2 opacity-30" />

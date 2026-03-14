@@ -748,6 +748,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
 
         # Tarihi biçimlendir
         date_str = row.last_date.strftime('%d.%m.%Y %H:%M') if row.last_date else "-"
+        date_iso = row.last_date.isoformat() if row.last_date else None
 
         # Benzersiz ID oluştur
         result_id = f"db_{row.platform}_{row.kategori}_{row.ilan_tipi}_{city}_{district or 'all'}_{idx}"
@@ -761,6 +762,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
             "city": city,
             "district": district,
             "date": date_str,
+            "date_iso": date_iso,
             "count": row.count,
             "avg_price": round(row.avg_price, 2) if row.avg_price else None,
             "file_size": 0,

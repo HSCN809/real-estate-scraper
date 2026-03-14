@@ -49,6 +49,7 @@ export interface ScrapeResult {
   city?: string;
   district?: string;        // İlçe adı
   date: string;
+  date_iso?: string;
   count: number;
   avg_price?: number | null;
   file_size?: number;

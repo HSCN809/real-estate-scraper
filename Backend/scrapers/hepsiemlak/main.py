@@ -4,7 +4,8 @@
 import time
 import random
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
+from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -27,6 +28,89 @@ logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
 
 
+def _get_expected_hepsiemlak_subtype_slugs(listing_type: str, category: str) -> Set[str]:
+    """HepsiEmlak kategori filtresi icin beklenen subtype slug listesini don."""
+    expected_slugs: Set[str] = set()
+    if not listing_type or not category:
+        return expected_slugs
+
+    try:
+        from .subtype_fetcher import fetch_subtypes
+
+        for subtype in fetch_subtypes(listing_type, category):
+            subtype_id = str(subtype.get("id", "")).strip().lower().replace("_", "-")
+            subtype_path = str(subtype.get("path", "")).strip().lower()
+            if subtype_id:
+                expected_slugs.add(subtype_id)
+            if subtype_path:
+                path_parts = [part for part in subtype_path.strip("/").split("/") if part]
+                if len(path_parts) >= 2:
+                    expected_slugs.add(path_parts[-1])
+    except Exception:
+        # JSON yoksa veya okunamazsa URL tabanli zorlayici filtreleme yapmayiz.
+        pass
+
+    if expected_slugs:
+        expected_slugs.add(category.replace("_", "-").lower())
+
+    return expected_slugs
+
+
+def _extract_hepsiemlak_subtype_slug_from_url(listing_url: str, listing_type: str) -> Optional[str]:
+    """Ilan URL'sinden subtype slug'i cikar."""
+    if not listing_url:
+        return None
+
+    try:
+        parsed = urlparse(listing_url)
+        host = (parsed.netloc or "").lower()
+        if host and "hepsiemlak.com" not in host:
+            return None
+
+        parts = [part for part in parsed.path.split("/") if part]
+        if not parts:
+            return None
+
+        listing_type_marker = f"-{listing_type.lower()}"
+        first_segment = parts[0].lower()
+        if listing_type_marker not in first_segment and first_segment != listing_type.lower():
+            return None
+
+        # /<lokasyon>-satilik/<subtype-or-id> veya /satilik/<subtype-or-id> desenleri
+        if len(parts) < 2:
+            return ""
+
+        return parts[1].strip().lower()
+    except Exception:
+        return None
+
+
+def _matches_hepsiemlak_filters(
+    listing_url: str,
+    listing_type: str,
+    category: str,
+    alt_kategori: Optional[str],
+    expected_subtypes: Set[str],
+) -> bool:
+    """URL bazli listing_type/category/subtype filtre dogrulamasi."""
+    extracted_slug = _extract_hepsiemlak_subtype_slug_from_url(listing_url, listing_type)
+    if extracted_slug is None:
+        return False
+
+    selected_subtype = (alt_kategori or "").replace("_", "-").strip().lower()
+    if selected_subtype:
+        return extracted_slug == selected_subtype
+
+    # Konut ana sayfasinda slug olmayabilir: /<lokasyon>-satilik/<ilan-id>
+    if category == "konut" and (not extracted_slug or extracted_slug[0].isdigit()):
+        return True
+
+    if not expected_subtypes:
+        return True
+
+    return extracted_slug in expected_subtypes
+
+
 def save_listings_to_db(
     db,
     listings: List[Dict],
@@ -46,8 +130,39 @@ def save_listings_to_db(
         new_count = 0
         updated_count = 0
         unchanged_count = 0
+        records_to_save = listings
 
-        for data in listings:
+        if platform == "hepsiemlak":
+            expected_subtypes = _get_expected_hepsiemlak_subtype_slugs(ilan_tipi, kategori)
+            filtered_records: List[Dict] = []
+            filtered_out = 0
+
+            for data in listings:
+                listing_url = data.get("ilan_linki") or data.get("ilan_url")
+                if _matches_hepsiemlak_filters(
+                    listing_url=str(listing_url or ""),
+                    listing_type=ilan_tipi,
+                    category=kategori,
+                    alt_kategori=alt_kategori,
+                    expected_subtypes=expected_subtypes,
+                ):
+                    filtered_records.append(data)
+                else:
+                    filtered_out += 1
+
+            if filtered_out > 0:
+                logger.warning(
+                    "Filtered %s listings due to mismatched listing_type/category/subtype "
+                    "(listing_type=%s, kategori=%s, alt_kategori=%s)",
+                    filtered_out,
+                    ilan_tipi,
+                    kategori,
+                    alt_kategori,
+                )
+
+            records_to_save = filtered_records
+
+        for data in records_to_save:
             listing, status = crud.upsert_listing(
                 db,
                 data=data,
