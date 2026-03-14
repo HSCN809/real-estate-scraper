@@ -3,8 +3,10 @@
 
 import time
 import random
+import re
 import unicodedata
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
+from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -26,6 +28,208 @@ from .parsers import KonutParser, ArsaParser, IsyeriParser, TuristikTesisParser
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
+
+
+def _normalize_emlakjet_slug(value: Optional[str]) -> str:
+    """Normalize slug-like values for robust filter matching."""
+    text = str(value or "").strip().lower().replace("_", "-")
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    ascii_only = (
+        ascii_only.replace("ı", "i")
+        .replace("ş", "s")
+        .replace("ğ", "g")
+        .replace("ü", "u")
+        .replace("ö", "o")
+        .replace("ç", "c")
+    )
+    ascii_only = re.sub(r"[^a-z0-9-]+", "-", ascii_only)
+    ascii_only = re.sub(r"-{2,}", "-", ascii_only).strip("-")
+    return ascii_only
+
+
+def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> Optional[str]:
+    """Extract first URL path segment used by Emlakjet for category/subtype."""
+    if not listing_url:
+        return None
+
+    try:
+        parsed = urlparse(listing_url)
+        host = (parsed.netloc or "").lower()
+        if host and "emlakjet.com" not in host:
+            return None
+
+        parts = [part for part in parsed.path.split("/") if part]
+        if not parts:
+            return None
+        return _normalize_emlakjet_slug(parts[0])
+    except Exception:
+        return None
+
+
+def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> Set[str]:
+    """Build expected first-path slugs for a listing_type/category combo."""
+    expected: Set[str] = set()
+    cfg = get_emlakjet_config()
+    category_map = cfg.categories.get(listing_type or "", {})
+    category_path = str(category_map.get(category or "", "")).strip("/")
+    if category_path:
+        expected.add(_normalize_emlakjet_slug(category_path.split("/")[0]))
+
+    try:
+        from .subtype_fetcher import fetch_subtypes
+
+        for subtype in fetch_subtypes(listing_type, category):
+            subtype_path = str(subtype.get("path", "")).strip("/")
+            subtype_id = _normalize_emlakjet_slug(str(subtype.get("id", "")))
+            if subtype_path:
+                expected.add(_normalize_emlakjet_slug(subtype_path.split("/")[0]))
+            if subtype_id:
+                expected.add(subtype_id)
+                listing_prefix = _normalize_emlakjet_slug(listing_type)
+                if listing_prefix:
+                    expected.add(f"{listing_prefix}-{subtype_id}")
+    except Exception:
+        pass
+
+    return {slug for slug in expected if slug}
+
+
+def _get_disallowed_emlakjet_primary_slugs(listing_type: str, category: str) -> Set[str]:
+    """Collect known primary slugs of other categories to avoid false positives."""
+    disallowed: Set[str] = set()
+    cfg = get_emlakjet_config()
+    category_map = cfg.categories.get(listing_type or "", {})
+    for cat_key, cat_path in category_map.items():
+        if cat_key == category:
+            continue
+        path = str(cat_path or "").strip("/")
+        if not path:
+            continue
+        disallowed.add(_normalize_emlakjet_slug(path.split("/")[0]))
+    return disallowed
+
+
+def _matches_emlakjet_filters(
+    listing_url: str,
+    listing_type: str,
+    category: str,
+    alt_kategori: Optional[str],
+    expected_primary_slugs: Set[str],
+    disallowed_primary_slugs: Set[str],
+) -> bool:
+    """URL based listing_type/category/subtype guard for Emlakjet."""
+    extracted = _extract_emlakjet_primary_slug_from_url(listing_url)
+    if extracted is None:
+        return False
+
+    selected_subtype = _normalize_emlakjet_slug(alt_kategori)
+    if selected_subtype:
+        return extracted == selected_subtype or extracted.endswith(f"-{selected_subtype}")
+
+    if expected_primary_slugs and extracted in expected_primary_slugs:
+        return True
+
+    listing_prefix = _normalize_emlakjet_slug(listing_type)
+    category_slug = _normalize_emlakjet_slug(category)
+
+    # Konut has many subtype slugs (satilik-daire, satilik-villa, ...).
+    if category_slug == "konut" and listing_prefix and extracted.startswith(f"{listing_prefix}-"):
+        return extracted not in disallowed_primary_slugs
+
+    if category_slug and category_slug in extracted:
+        return True
+
+    if disallowed_primary_slugs and extracted in disallowed_primary_slugs:
+        return False
+
+    return not expected_primary_slugs
+
+
+def save_listings_to_db(
+    db,
+    listings: List[Dict],
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: str = None,
+    scrape_session_id: int = None,
+    log_db_save: bool = True,
+):
+    """Save listing rows with URL-level listing_type/category/subtype validation."""
+    if not db:
+        return 0, 0, 0
+
+    try:
+        from database import crud
+
+        records_to_save = listings
+        new_count = 0
+        updated_count = 0
+        unchanged_count = 0
+
+        if platform == "emlakjet":
+            expected_primary_slugs = _get_expected_emlakjet_primary_slugs(ilan_tipi, kategori)
+            disallowed_primary_slugs = _get_disallowed_emlakjet_primary_slugs(ilan_tipi, kategori)
+            filtered_records: List[Dict] = []
+            filtered_out = 0
+
+            for data in listings:
+                listing_url = data.get("ilan_url") or data.get("ilan_linki")
+                if _matches_emlakjet_filters(
+                    listing_url=str(listing_url or ""),
+                    listing_type=ilan_tipi,
+                    category=kategori,
+                    alt_kategori=alt_kategori,
+                    expected_primary_slugs=expected_primary_slugs,
+                    disallowed_primary_slugs=disallowed_primary_slugs,
+                ):
+                    filtered_records.append(data)
+                else:
+                    filtered_out += 1
+
+            if filtered_out > 0:
+                logger.warning(
+                    "Filtered %s listings due to mismatched listing_type/category/subtype "
+                    "(listing_type=%s, kategori=%s, alt_kategori=%s)",
+                    filtered_out,
+                    ilan_tipi,
+                    kategori,
+                    alt_kategori,
+                )
+
+            records_to_save = filtered_records
+
+        for data in records_to_save:
+            _, status = crud.upsert_listing(
+                db,
+                data=data,
+                platform=platform,
+                kategori=kategori,
+                ilan_tipi=ilan_tipi,
+                alt_kategori=alt_kategori,
+                scrape_session_id=scrape_session_id,
+            )
+            if status == "created":
+                new_count += 1
+            elif status == "updated":
+                updated_count += 1
+            elif status == "unchanged":
+                unchanged_count += 1
+
+        db.commit()
+        if log_db_save:
+            logger.info(
+                "DB save: %s new, %s updated, %s unchanged",
+                new_count,
+                updated_count,
+                unchanged_count,
+            )
+        return new_count, updated_count, unchanged_count
+    except Exception as exc:
+        logger.error(f"DB save error: {exc}")
+        db.rollback()
+        return 0, 0, 0
 
 
 class EmlakJetScraper(BaseScraper):
@@ -488,38 +692,19 @@ class EmlakJetScraper(BaseScraper):
                     listing['ilce'] = dist_name
 
             if self.db:
-                from database import crud
-                new_count = 0
-                updated_count = 0
-                unchanged_count = 0
-
-                for data in page_listings:
-                    try:
-                        listing, status = crud.upsert_listing(
-                            self.db,
-                            data=data,
-                            platform="emlakjet",
-                            kategori=self.category,
-                            ilan_tipi=self.listing_type,
-                            alt_kategori=self.subtype_name,
-                            scrape_session_id=self.scrape_session_id
-                        )
-                        if status == 'created':
-                            new_count += 1
-                        elif status == 'updated':
-                            updated_count += 1
-                        elif status == 'unchanged':
-                            unchanged_count += 1
-                    except Exception as e:
-                        task_log.line(f"Sayfa bazlÄ± DB kayÄ±t hatasÄ±: {e}", level="warning")
-                try:
-                    self.db.commit()
-                    page_num_ref[0] += 1
-                    new_listings_count_ref[0] += new_count  # Yeni eklenenleri say
-                    self._log_page_result(page_num_ref[0], len(page_listings), new_count, updated_count, unchanged_count)
-                except Exception as e:
-                    task_log.line(f"Sayfa bazlÄ± DB commit hatasÄ±: {e}", level="error")
-                    self.db.rollback()
+                new_count, updated_count, unchanged_count = save_listings_to_db(
+                    self.db,
+                    page_listings,
+                    platform="emlakjet",
+                    kategori=self.category,
+                    ilan_tipi=self.listing_type,
+                    alt_kategori=self.subtype_name,
+                    scrape_session_id=self.scrape_session_id,
+                    log_db_save=False,
+                )
+                page_num_ref[0] += 1
+                new_listings_count_ref[0] += new_count  # Yeni eklenenleri say
+                self._log_page_result(page_num_ref[0], len(page_listings), new_count, updated_count, unchanged_count)
         return _on_page_scraped
 
     def scrape_pages(self, target_url: str, max_pages: int, on_page_scraped=None,
@@ -969,23 +1154,16 @@ class EmlakJetScraper(BaseScraper):
 
                                     # DB'ye kaydet
                                     if self.db:
-                                        from database import crud
-                                        for data in listings:
-                                            try:
-                                                crud.upsert_listing(
-                                                    self.db, data=data,
-                                                    platform="emlakjet",
-                                                    kategori=self.category,
-                                                    ilan_tipi=self.listing_type,
-                                                    alt_kategori=self.subtype_name,
-                                                    scrape_session_id=self.scrape_session_id
-                                                )
-                                            except:
-                                                pass
-                                        try:
-                                            self.db.commit()
-                                        except:
-                                            self.db.rollback()
+                                        save_listings_to_db(
+                                            self.db,
+                                            listings,
+                                            platform="emlakjet",
+                                            kategori=self.category,
+                                            ilan_tipi=self.listing_type,
+                                            alt_kategori=self.subtype_name,
+                                            scrape_session_id=self.scrape_session_id,
+                                            log_db_save=False,
+                                        )
 
                                     failed_pages_tracker.mark_as_success(
                                         page_info.city, page_info.district, page_info.page_number

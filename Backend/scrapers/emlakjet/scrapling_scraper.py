@@ -21,8 +21,7 @@ from core.selectors import get_common_selectors, get_selectors
 from scrapers.common.proxy_fetch import ProxyFetchClient
 from utils.logger import TaskLogLayout, get_logger
 
-from .main import EmlakJetScraper
-from ..hepsiemlak.main import save_listings_to_db
+from .main import EmlakJetScraper, save_listings_to_db
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
