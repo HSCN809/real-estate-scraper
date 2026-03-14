@@ -180,13 +180,20 @@ export default function ResultsPage() {
     const clearResults = async () => {
         try {
             setClearing(true);
-            const res = await fetch('http://localhost:8000/api/v1/clear-results', { method: 'DELETE' });
-            if (res.ok) {
-                setResults([]);
-                setShowClearConfirm(false);
+            const res = await fetch('http://localhost:8000/api/v1/clear-results', {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            const payload = await res.json().catch(() => ({} as any));
+            if (!res.ok || payload?.status === 'error') {
+                throw new Error(payload?.detail || payload?.message || 'Toplu temizleme başarısız');
             }
+
+            setResults([]);
+            setShowClearConfirm(false);
         } catch (err) {
             console.error('Clear failed:', err);
+            alert(err instanceof Error ? err.message : 'Tüm sonuçlar temizlenemedi');
         } finally {
             setClearing(false);
         }
@@ -1125,12 +1132,14 @@ export default function ResultsPage() {
                             </p>
                             <footer className="flex gap-3">
                                 <button
+                                    type="button"
                                     onClick={() => setShowClearConfirm(false)}
                                     className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-gray-300 hover:bg-slate-700"
                                 >
                                     Ä°ptal
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={clearResults}
                                     disabled={clearing}
                                     className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"

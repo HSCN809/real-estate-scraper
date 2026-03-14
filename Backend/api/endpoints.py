@@ -8,7 +8,7 @@ from api.status import task_status
 from sqlalchemy.orm import Session
 from database.connection import get_db
 from database import crud
-from database.models import Listing, Location, ScrapeSession
+from database.models import Listing, Location, ScrapeSession, FailedPage, PriceHistory
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -748,24 +748,31 @@ async def get_listing_statistics(
 
 @router.delete("/clear-results")
 async def clear_results(db: Session = Depends(get_db)):
-    """Veritabanındaki tüm ilanları ve outputs klasöründeki dosyaları sil"""
+    """Veritabanindaki tum ilanlari ve outputs klasorundeki dosyalari sil"""
     import os
     import shutil
 
+    deleted_failed_pages = 0
+    deleted_price_history = 0
     deleted_listings = 0
+    deleted_sessions = 0
     deleted_files = 0
 
-    # 1. Veritabanındaki tüm ilanları sil
+    # 1. Delete database records in FK-safe order
     try:
-        deleted_listings = db.query(Listing).delete()
-        # ScrapeSession'ları da sil
-        db.query(ScrapeSession).delete()
+        deleted_failed_pages = db.query(FailedPage).delete(synchronize_session=False)
+        deleted_price_history = db.query(PriceHistory).delete(synchronize_session=False)
+        deleted_listings = db.query(Listing).delete(synchronize_session=False)
+        deleted_sessions = db.query(ScrapeSession).delete(synchronize_session=False)
         db.commit()
     except Exception as e:
         db.rollback()
-        return {"status": "error", "message": f"Veritabanı temizleme hatası: {str(e)}", "deleted_listings": 0, "deleted_files": 0}
+        raise HTTPException(
+            status_code=500,
+            detail=f"Veritabani temizleme hatasi: {str(e)}"
+        )
 
-    # 2. Outputs klasöründeki dosyaları da sil
+    # 2. Outputs klasorundeki dosyalari da sil
     current_file = os.path.abspath(__file__)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
     output_dir = os.path.join(project_root, "outputs")
@@ -784,15 +791,23 @@ async def clear_results(db: Session = Depends(get_db)):
                     shutil.rmtree(item_path)
                     deleted_files += 1
         except Exception as e:
-            logger.warning(f"Dosya silme hatası: {e}")
+            logger.warning(f"Dosya silme hatasi: {e}")
 
     return {
         "status": "success",
-        "message": f"{deleted_listings} ilan ve {deleted_files} dosya/klasör silindi",
+        "message": (
+            f"{deleted_failed_pages} failed page, "
+            f"{deleted_price_history} fiyat gecmisi, "
+            f"{deleted_listings} ilan, "
+            f"{deleted_sessions} oturum ve "
+            f"{deleted_files} dosya/klasor silindi"
+        ),
+        "deleted_failed_pages": deleted_failed_pages,
+        "deleted_price_history": deleted_price_history,
         "deleted_listings": deleted_listings,
-        "deleted_files": deleted_files
+        "deleted_sessions": deleted_sessions,
+        "deleted_files": deleted_files,
     }
-
 
 
 @router.get("/results")
