@@ -1,17 +1,16 @@
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-HepsiemlakScrapingMethod = Literal[
+SUPPORTED_SCRAPING_METHODS = (
     "selenium",
-    "go_proxy",
     "scrapling_stealth_session",
     "scrapling_fetcher_session",
     "scrapling_dynamic_session",
     "scrapling_spider_fetcher_session",
     "scrapling_spider_dynamic_session",
     "scrapling_spider_stealth_session",
-]
+)
 
 
 class ScrapeRequest(BaseModel):
@@ -23,7 +22,8 @@ class ScrapeRequest(BaseModel):
     districts: Optional[Dict[str, List[str]]] = None
     max_pages: Optional[int] = None
     max_listings: Optional[int] = None
-    scraping_method: HepsiemlakScrapingMethod = "selenium"
+    scraping_method: str = "selenium"
+    proxy_enabled: bool = False
 
 
 class ScrapeResponse(BaseModel):

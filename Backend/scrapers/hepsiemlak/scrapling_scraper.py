@@ -27,6 +27,7 @@ from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
 from utils.data_exporter import DataExporter
 from utils.logger import TaskLogLayout, get_logger
+from scrapers.common.proxy_fetch import ProxyFetchClient
 
 from .main import save_listings_to_db
 
@@ -74,6 +75,8 @@ class HepsiemlakScraplingScraper:
         use_stealth: bool = True,
         headless: bool = True,
         scraping_method: Optional[str] = None,
+        proxy_enabled: bool = False,
+        proxy_url: Optional[str] = None,
     ):
         base_config = get_hepsiemlak_config()
         category_path = subtype_path or base_config.categories.get(listing_type, {}).get(category, "")
@@ -88,6 +91,13 @@ class HepsiemlakScraplingScraper:
         self.headless = headless
         self.request_timeout_ms = 45000
         self.scraping_method = self._resolve_scraping_method(scraping_method, use_stealth)
+        self.proxy_enabled = proxy_enabled
+        self.proxy_fetcher = ProxyFetchClient(
+            enabled=proxy_enabled,
+            proxy_url=proxy_url,
+            max_retries=6,
+            initial_delay=2.0,
+        )
 
         self.selectors = get_selectors("hepsiemlak", category)
         self.common_selectors = get_common_selectors("hepsiemlak")
@@ -207,6 +217,15 @@ class HepsiemlakScraplingScraper:
         return True
 
     def _create_session(self):
+        if self.proxy_enabled:
+            task_log.line(
+                f"Proxy mode active ({self.proxy_fetcher.proxy_url}); "
+                "Scrapling network sessions are bypassed.",
+            )
+            self.session_context = None
+            self.session = None
+            return None
+
         if self.scraping_method not in SESSION_METHODS:
             return None
 
@@ -251,6 +270,19 @@ class HepsiemlakScraplingScraper:
 
     def fetch_page(self, url: str) -> Optional[Selector]:
         try:
+            if self.proxy_enabled:
+                start_time = time.time()
+                selector = self.proxy_fetcher.fetch_selector(url, task_log=task_log)
+                if not selector:
+                    self.metrics["failed_requests"] += 1
+                    return None
+                self.metrics["successful_requests"] += 1
+                task_log.line(
+                    f"Fetched {url} in {time.time() - start_time:.2f}s via go_proxy_client "
+                    f"(method={self.scraping_method})"
+                )
+                return selector
+
             if self.session is None:
                 raise RuntimeError("Session is not initialized")
 
@@ -734,7 +766,7 @@ class HepsiemlakScraplingScraper:
         district: Optional[str] = None,
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
-        if self.scraping_method in SESSION_METHODS:
+        if self.proxy_enabled or self.scraping_method in SESSION_METHODS:
             return self._scrape_location_with_session(
                 location_name=location_name,
                 location_url=location_url,
@@ -805,7 +837,7 @@ class HepsiemlakScraplingScraper:
         all_listings: List[Dict[str, Any]] = []
         total_cities = len(self.selected_cities)
 
-        if self.scraping_method in SESSION_METHODS:
+        if (not self.proxy_enabled) and self.scraping_method in SESSION_METHODS:
             task_log.line(f"Initializing session-backed scraping flow for {self.scraping_method}")
             self._create_session()
 

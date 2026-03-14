@@ -9,9 +9,24 @@ from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
 
 from celery_app import celery_app
+from api.schemas import SUPPORTED_SCRAPING_METHODS
 from utils.logger import get_logger
 
 logger = get_logger("celery.scraping")
+
+
+def _validate_scraping_method(scraping_method: str) -> Optional[str]:
+    if scraping_method == "go_proxy":
+        return (
+            "scraping_method='go_proxy' is deprecated. "
+            "Use a regular method with proxy_enabled=true."
+        )
+    if scraping_method not in SUPPORTED_SCRAPING_METHODS:
+        return (
+            f"Unsupported scraping_method: {scraping_method}. "
+            f"Supported values: {', '.join(SUPPORTED_SCRAPING_METHODS)}"
+        )
+    return None
 
 
 class TaskProgressManager:
@@ -131,7 +146,8 @@ def scrape_hepsiemlak_task(
     cities: List[str],
     districts: Optional[Dict[str, List[str]]],
     max_pages: int = 50,
-    scraping_method: str = "selenium"
+    scraping_method: str = "selenium",
+    proxy_enabled: bool = False,
 ):
     """Celery worker'da çalışan HepsiEmlak kazıma görevi."""
     task_id = self.request.id
@@ -139,7 +155,7 @@ def scrape_hepsiemlak_task(
 
     logger.info(
         f"[Task {task_id}] Starting HepsiEmlak scrape: {listing_type}/{category}, "
-        f"method={scraping_method}, cities={cities}"
+        f"method={scraping_method}, proxy_enabled={proxy_enabled}, cities={cities}"
     )
     progress_manager.update(
         message="HepsiEmlak taraması başlatılıyor...",
@@ -160,6 +176,15 @@ def scrape_hepsiemlak_task(
     scraper = None
 
     try:
+        method_error = _validate_scraping_method(scraping_method)
+        if method_error:
+            logger.warning(f"[Task {task_id}] Invalid scraping method: {method_error}")
+            progress_manager.fail(method_error)
+            return {
+                "status": "failed",
+                "task_id": task_id,
+                "message": method_error,
+            }
         db = get_db_session()
 
         # Başarısız sayfa takipçisini sıfırla
@@ -203,9 +228,10 @@ def scrape_hepsiemlak_task(
             return progress_manager.is_stop_requested()
 
         # Kazıyıcıyı oluştur
+        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
             from scrapers.hepsiemlak.main import HepsiemlakScraper
-            manager = DriverManager()
+            manager = DriverManager(proxy_url=go_proxy_url if proxy_enabled else None)
             driver = manager.start()
 
             scraper = HepsiemlakScraper(
@@ -215,16 +241,6 @@ def scrape_hepsiemlak_task(
                 subtype_path=subtype_path,
                 selected_cities=cities,
                 selected_districts=districts
-            )
-        elif scraping_method == "go_proxy":
-            from scrapers.hepsiemlak.go_proxy_scraper import HepsiemlakGoProxyScraper
-
-            scraper = HepsiemlakGoProxyScraper(
-                listing_type=listing_type,
-                category=category,
-                subtype_path=subtype_path,
-                selected_cities=cities,
-                selected_districts=districts,
             )
         else:
             from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
@@ -237,13 +253,18 @@ def scrape_hepsiemlak_task(
                 selected_districts=districts,
                 scraping_method=scraping_method,
                 headless=True,
+                proxy_enabled=proxy_enabled,
+                proxy_url=go_proxy_url,
             )
 
         # Veritabanı oturumunu ayarla
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
-        logger.info(f"[Task {task_id}] Starting scraping API call with method={scraping_method}")
+        logger.info(
+            f"[Task {task_id}] Starting scraping API call with "
+            f"method={scraping_method}, proxy_enabled={proxy_enabled}"
+        )
 
         # Kazıyıcıyı durdurma kontrolüyle çalıştır
         scraper.start_scraping_api(
@@ -333,12 +354,16 @@ def scrape_emlakjet_task(
     max_listings: int = 0,
     max_pages: int = 50,  # kullanım dışı, geriye uyumluluk için tutuldu
     scraping_method: str = "selenium",
+    proxy_enabled: bool = False,
 ):
     """Celery worker'da çalışan EmlakJet kazıma görevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
-    logger.info(f"[Task {task_id}] Starting EmlakJet scrape: {listing_type}/{category}, method={scraping_method}")
+    logger.info(
+        f"[Task {task_id}] Starting EmlakJet scrape: {listing_type}/{category}, "
+        f"method={scraping_method}, proxy_enabled={proxy_enabled}"
+    )
     progress_manager.update(
         message="EmlakJet taraması başlatılıyor...",
         progress=0,
@@ -356,6 +381,15 @@ def scrape_emlakjet_task(
     scraper = None
 
     try:
+        method_error = _validate_scraping_method(scraping_method)
+        if method_error:
+            logger.warning(f"[Task {task_id}] Invalid scraping method: {method_error}")
+            progress_manager.fail(method_error)
+            return {
+                "status": "failed",
+                "task_id": task_id,
+                "message": method_error,
+            }
         db = get_db_session()
         config = get_emlakjet_config()
 
@@ -401,10 +435,11 @@ def scrape_emlakjet_task(
         def stop_checker():
             return progress_manager.is_stop_requested()
 
+        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
             from scrapers.emlakjet.main import EmlakJetScraper
 
-            manager = DriverManager()
+            manager = DriverManager(proxy_url=go_proxy_url if proxy_enabled else None)
             driver = manager.start()
             scraper = EmlakJetScraper(
                 driver=driver,
@@ -424,6 +459,8 @@ def scrape_emlakjet_task(
                 selected_districts=districts,
                 scraping_method=scraping_method,
                 headless=True,
+                proxy_enabled=proxy_enabled,
+                proxy_url=go_proxy_url,
             )
 
         # Veritabanı oturumunu kazıyıcıya ayarla

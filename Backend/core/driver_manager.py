@@ -45,9 +45,10 @@ def _kill_zombie_chrome():
 class DriverManager:
     """Chrome WebDriver yaşam döngüsünü yönetir"""
 
-    def __init__(self, headless: Optional[bool] = None):
+    def __init__(self, headless: Optional[bool] = None, proxy_url: Optional[str] = None):
         self.config = get_config()
         self.headless = headless if headless is not None else self.config.headless
+        self.proxy_url = proxy_url
         self.driver = None
         self.wait: Optional[WebDriverWait] = None
         self.user_agent = random.choice(USER_AGENTS)
@@ -63,6 +64,8 @@ class DriverManager:
         options.add_argument("--window-size=1920,1080")
         if self.headless:
             options.add_argument("--headless=new")
+        if self.proxy_url:
+            options.add_argument(f"--proxy-server={self.proxy_url}")
 
         # Docker/container ortamı için kritik ayarlar
         options.add_argument("--disable-gpu")

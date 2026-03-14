@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.config import get_emlakjet_config
 from core.selectors import get_common_selectors, get_selectors
+from scrapers.common.proxy_fetch import ProxyFetchClient
 from utils.data_exporter import DataExporter
 from utils.logger import TaskLogLayout, get_logger
 
@@ -61,6 +62,8 @@ class EmlakJetScraplingScraper:
         use_stealth: bool = True,
         headless: bool = True,
         scraping_method: Optional[str] = None,
+        proxy_enabled: bool = False,
+        proxy_url: Optional[str] = None,
     ):
         base_config = get_emlakjet_config()
         category_path = subtype_path or base_config.categories.get(listing_type, {}).get(category, "")
@@ -75,6 +78,13 @@ class EmlakJetScraplingScraper:
         self.headless = headless
         self.request_timeout_ms = 45000
         self.scraping_method = self._resolve_scraping_method(scraping_method, use_stealth)
+        self.proxy_enabled = proxy_enabled
+        self.proxy_fetcher = ProxyFetchClient(
+            enabled=proxy_enabled,
+            proxy_url=proxy_url,
+            max_retries=6,
+            initial_delay=2.0,
+        )
 
         self.selectors = get_selectors("emlakjet", category)
         self.common_selectors = get_common_selectors("emlakjet")
@@ -166,6 +176,15 @@ class EmlakJetScraplingScraper:
         return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
 
     def _create_session(self):
+        if self.proxy_enabled:
+            task_log.line(
+                f"Proxy mode active ({self.proxy_fetcher.proxy_url}); "
+                "Scrapling network sessions are bypassed.",
+            )
+            self.session_context = None
+            self.session = None
+            return None
+
         effective_method = self._effective_session_method()
         wait_selector = self.common_selectors.get("listing_container")
         task_log.line(f"Creating Scrapling session via {self.scraping_method} (effective={effective_method}, headless={self.headless})")
@@ -209,6 +228,19 @@ class EmlakJetScraplingScraper:
 
     def fetch_page(self, url: str) -> Optional[Selector]:
         try:
+            if self.proxy_enabled:
+                start_time = time.time()
+                selector = self.proxy_fetcher.fetch_selector(url, task_log=task_log)
+                if not selector:
+                    self.metrics["failed_requests"] += 1
+                    return None
+                self.metrics["successful_requests"] += 1
+                task_log.line(
+                    f"Fetched {url} in {time.time() - start_time:.2f}s via go_proxy_client "
+                    f"(method={self.scraping_method})"
+                )
+                return selector
+
             if self.session is None:
                 raise RuntimeError("Session is not initialized")
 

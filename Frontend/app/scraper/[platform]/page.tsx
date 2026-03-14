@@ -48,11 +48,11 @@ export default function PlatformScraperPage() {
     const [selectedSubtype, setSelectedSubtype] = useState<Subtype | null>(null);
     const [subtypesLoading, setSubtypesLoading] = useState(false);
     const [scrapingMethod, setScrapingMethod] = useState<HepsiemlakScrapingMethod>('selenium');
+    const [proxyEnabled, setProxyEnabled] = useState(false);
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
-    const hepsiemlakMethodOptions = [
+    const scrapingMethodOptions = [
         { value: 'selenium', label: 'Selenium' },
-        { value: 'go_proxy', label: 'Go Proxy (Cloudflare Bypass)' },
         { value: 'scrapling_stealth_session', label: 'Scrapling StealthSession' },
         { value: 'scrapling_fetcher_session', label: 'Scrapling FetcherSession' },
         { value: 'scrapling_dynamic_session', label: 'Scrapling DynamicSession' },
@@ -121,6 +121,17 @@ export default function PlatformScraperPage() {
             return;
         }
 
+        const isMethodValid = scrapingMethodOptions.some(
+            (option) => option.value === scrapingMethod
+        );
+        if (!isMethodValid) {
+            setResult({
+                type: 'error',
+                message: 'Geçersiz scraping yöntemi seçimi. Lütfen sayfayı yenileyip tekrar deneyin.',
+            });
+            return;
+        }
+
         setIsLoading(true);
         setResult(null);
 
@@ -130,7 +141,8 @@ export default function PlatformScraperPage() {
                 listing_type: listingType,
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
-                ...(platform === 'hepsiemlak' ? { scraping_method: scrapingMethod } : {}),
+                scraping_method: scrapingMethod,
+                proxy_enabled: Boolean(proxyEnabled),
                 cities: selectedCities,
                 districts: selectedDistricts,
                 ...(platform === 'emlakjet'
@@ -233,17 +245,24 @@ export default function PlatformScraperPage() {
                         />
                     </div>
 
-                    {platform === 'hepsiemlak' && (
-                        <div>
+                    <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+                        <div className="flex-1">
                             <Select
                                 label="Scraping Yontemi"
                                 value={scrapingMethod}
                                 onChange={(e) => setScrapingMethod(e.target.value as HepsiemlakScrapingMethod)}
-                                options={hepsiemlakMethodOptions}
-                                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
+                                options={scrapingMethodOptions}
+                                className="w-full bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                             />
                         </div>
-                    )}
+                        <div className="pb-3 md:ml-auto md:shrink-0">
+                            <Checkbox
+                                label="Proxy Kullan"
+                                checked={proxyEnabled}
+                                onChange={setProxyEnabled}
+                            />
+                        </div>
+                    </div>
 
                     {/* Alt Kategori */}
                     <div>

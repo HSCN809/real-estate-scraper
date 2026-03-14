@@ -6,6 +6,7 @@ export interface ScrapeRequest {
   subtype?: string;       // Alt tip ID'si
   subtype_path?: string;  // Alt tip URL path'i
   scraping_method?: HepsiemlakScrapingMethod;
+  proxy_enabled?: boolean;
   cities?: string[];
   districts?: Record<string, string[]>;  // İl -> [İlçeler] mapping
   max_pages?: number;           // HepsiEmlak için sayfa limiti
@@ -26,7 +27,6 @@ export type ListingType = 'satilik' | 'kiralik';
 
 export type HepsiemlakScrapingMethod =
   | 'selenium'
-  | 'go_proxy'
   | 'scrapling_stealth_session'
   | 'scrapling_fetcher_session'
   | 'scrapling_dynamic_session'

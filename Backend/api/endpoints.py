@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import FileResponse, JSONResponse
-from api.schemas import ScrapeRequest, ScrapeResponse
+from api.schemas import ScrapeRequest, ScrapeResponse, SUPPORTED_SCRAPING_METHODS
 from core.driver_manager import DriverManager
 from core.config import get_emlakjet_config, get_hepsiemlak_config
 from api.status import task_status
@@ -66,6 +67,25 @@ CATEGORY_NAMES = {
     "gunluk_kiralik": "Günlük Kiralık"
 }
 
+
+def _validate_scraping_method_or_raise(scraping_method: str) -> None:
+    if scraping_method == "go_proxy":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "scraping_method='go_proxy' artik desteklenmiyor. "
+                "Bir scraping yontemi secip proxy_enabled=true gonderin."
+            ),
+        )
+    if scraping_method not in SUPPORTED_SCRAPING_METHODS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Gecersiz scraping_method: {scraping_method}. "
+                f"Desteklenenler: {', '.join(SUPPORTED_SCRAPING_METHODS)}"
+            ),
+        )
+
 @router.get("/config/categories")
 async def get_categories():
     """Tüm platform kategorilerini getir"""
@@ -111,7 +131,9 @@ async def get_subtypes(listing_type: str, category: str, platform: str = "hepsie
 def run_emlakjet_task(request: ScrapeRequest):
     manager = None
     try:
+        _validate_scraping_method_or_raise(request.scraping_method)
         config = get_emlakjet_config()
+        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
 
         # Durumu sıfırla ve başlat
         task_status.reset()
@@ -133,7 +155,7 @@ def run_emlakjet_task(request: ScrapeRequest):
         if request.scraping_method == "selenium":
             from scrapers.emlakjet.main import EmlakJetScraper
 
-            manager = DriverManager()
+            manager = DriverManager(proxy_url=go_proxy_url if request.proxy_enabled else None)
             driver = manager.start()
             scraper = EmlakJetScraper(
                 driver=driver,
@@ -153,6 +175,8 @@ def run_emlakjet_task(request: ScrapeRequest):
                 selected_districts=request.districts,
                 scraping_method=request.scraping_method,
                 headless=True,
+                proxy_enabled=request.proxy_enabled,
+                proxy_url=go_proxy_url,
             )
 
         print(
@@ -161,6 +185,7 @@ def run_emlakjet_task(request: ScrapeRequest):
             f"category={request.category}, "
             f"subtype_path={request.subtype_path}, "
             f"scraping_method={request.scraping_method}, "
+            f"proxy_enabled={request.proxy_enabled}, "
             f"cities={request.cities}"
         )
 
@@ -188,13 +213,14 @@ def run_hepsiemlak_task(request: ScrapeRequest):
     from database.connection import get_db_session
     from database import crud
 
-    manager = DriverManager()
+    manager = None
     db = None
     scrape_session = None
     scraper = None
 
     try:
-        driver = manager.start()
+        _validate_scraping_method_or_raise(request.scraping_method)
+        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         db = get_db_session()
 
         # Takipçileri sıfırla
@@ -229,6 +255,8 @@ def run_hepsiemlak_task(request: ScrapeRequest):
 
         if request.scraping_method == "selenium":
             from scrapers.hepsiemlak.main import HepsiemlakScraper
+            manager = DriverManager(proxy_url=go_proxy_url if request.proxy_enabled else None)
+            driver = manager.start()
 
             scraper = HepsiemlakScraper(
                 driver=driver,
@@ -237,16 +265,6 @@ def run_hepsiemlak_task(request: ScrapeRequest):
                 subtype_path=request.subtype_path,
                 selected_cities=request.cities,
                 selected_districts=request.districts
-            )
-        elif request.scraping_method == "go_proxy":
-            from scrapers.hepsiemlak.go_proxy_scraper import HepsiemlakGoProxyScraper
-
-            scraper = HepsiemlakGoProxyScraper(
-                listing_type=request.listing_type,
-                category=request.category,
-                subtype_path=request.subtype_path,
-                selected_cities=request.cities,
-                selected_districts=request.districts,
             )
         else:
             from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
@@ -259,6 +277,8 @@ def run_hepsiemlak_task(request: ScrapeRequest):
                 selected_districts=request.districts,
                 scraping_method=request.scraping_method,
                 headless=True,
+                proxy_enabled=request.proxy_enabled,
+                proxy_url=go_proxy_url,
             )
 
         # Scraper'a DB session'ı ve session_id'yi ekle
@@ -271,6 +291,7 @@ def run_hepsiemlak_task(request: ScrapeRequest):
             f"category={request.category}, "
             f"subtype_path={request.subtype_path}, "
             f"scraping_method={request.scraping_method}, "
+            f"proxy_enabled={request.proxy_enabled}, "
             f"cities={request.cities}"
         )
 
@@ -307,11 +328,13 @@ def run_hepsiemlak_task(request: ScrapeRequest):
         task_status.update("İşlem tamamlandı", progress=100)
         if db:
             db.close()
-        manager.stop()
+        if manager:
+            manager.stop()
 
 @router.post("/scrape/emlakjet", response_model=ScrapeResponse)
 async def scrape_emlakjet(request: ScrapeRequest):
     """Celery ile EmlakJet tarama görevi başlat"""
+    _validate_scraping_method_or_raise(request.scraping_method)
     # Görevi Celery'ye gönder
     task = scrape_emlakjet_task.apply_async(
         kwargs={
@@ -323,6 +346,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
             "max_listings": request.max_listings or 0,
             "max_pages": request.max_pages or 50,
             "scraping_method": request.scraping_method,
+            "proxy_enabled": request.proxy_enabled,
         },
         queue="scraping"
     )
@@ -360,6 +384,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
 @router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
 async def scrape_hepsiemlak(request: ScrapeRequest):
     """Celery ile HepsiEmlak tarama görevi başlat"""
+    _validate_scraping_method_or_raise(request.scraping_method)
     # Şehirleri doğrula
     if not request.cities or len(request.cities) == 0:
         raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
@@ -383,6 +408,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
             "districts": request.districts,
             "max_pages": request.max_pages,
             "scraping_method": request.scraping_method,
+            "proxy_enabled": request.proxy_enabled,
         },
         queue="scraping"
     )
