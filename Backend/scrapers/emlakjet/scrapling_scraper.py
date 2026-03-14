@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.config import get_emlakjet_config
 from core.selectors import get_common_selectors, get_selectors
 from scrapers.common.proxy_fetch import ProxyFetchClient
-from utils.data_exporter import DataExporter
 from utils.logger import TaskLogLayout, get_logger
 
 from .main import EmlakJetScraper
@@ -112,13 +111,6 @@ class EmlakJetScraplingScraper:
             "failed_requests": 0,
             "total_duration": 0,
         }
-
-        self.exporter = DataExporter(
-            output_dir="Outputs/EmlakJet Output/Scrapling",
-            listing_type=listing_type,
-            category=category,
-            subtype=self.subtype_name,
-        )
 
     @staticmethod
     def _resolve_scraping_method(scraping_method: Optional[str], use_stealth: bool) -> str:

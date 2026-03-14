@@ -25,7 +25,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
-from utils.data_exporter import DataExporter
 from utils.logger import TaskLogLayout, get_logger
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
@@ -122,13 +121,6 @@ class HepsiemlakScraplingScraper:
             "total_duration": 0,
         }
 
-        self.exporter = DataExporter(
-            output_dir="Outputs/HepsiEmlak Output/Scrapling",
-            listing_type=listing_type,
-            category=category,
-            subtype=self.subtype_name,
-        )
-
     @staticmethod
     def _resolve_scraping_method(scraping_method: Optional[str], use_stealth: bool) -> str:
         if scraping_method is None:
@@ -144,13 +136,6 @@ class HepsiemlakScraplingScraper:
             if len(parts) >= 2:
                 return parts[-1].replace("-", "_")
         return None
-
-    def get_file_prefix(self) -> str:
-        parts = ["hepsiemlak", self.listing_type, self.category]
-        if self.subtype_name:
-            parts.append(self.subtype_name)
-        parts.append(self.scraping_method)
-        return "_".join(parts)
 
     def _normalize_text(self, text: str) -> str:
         import unicodedata
@@ -784,33 +769,6 @@ class HepsiemlakScraplingScraper:
             progress_callback=progress_callback,
         )
 
-    def _export_results(self, all_listings: List[Dict[str, Any]]):
-        if not all_listings:
-            return
-
-        listings_by_city: Dict[str, List[Dict[str, Any]]] = {}
-        for listing in all_listings:
-            city_name = str(listing.get("il") or "Belirtilmemis").strip() or "Belirtilmemis"
-            listings_by_city.setdefault(city_name, []).append(listing)
-
-        prefix = self.get_file_prefix()
-        self.exporter.save_by_city(
-            listings_by_city,
-            prefix=prefix,
-            format="excel",
-            city_district_map=self.selected_districts if self.selected_districts else None,
-        )
-
-        try:
-            import pandas as pd
-
-            csv_path = os.path.join(self.exporter.output_dir, f"{prefix}.csv")
-            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-            pd.DataFrame(all_listings).to_csv(csv_path, index=False, encoding="utf-8-sig")
-            task_log.line(f"Saved {len(all_listings)} listings to {csv_path}")
-        except Exception as exc:
-            task_log.line(f"Could not export CSV for {self.scraping_method}: {exc}", level="warning")
-
     def _run_scraping(self, max_pages: Optional[int], progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         self._stop_checker = stop_checker
         task_log.line(
@@ -886,7 +844,6 @@ class HepsiemlakScraplingScraper:
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
             self.metrics["total_listings"] = len(all_listings)
-            task_log.line("Skipping automatic CSV/Excel export; results remain available in the database.")
             return all_results, all_listings
         finally:
             self._close_session()
