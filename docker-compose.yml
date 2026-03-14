@@ -1,4 +1,58 @@
 services:
+  # Invisible Go Proxy - Cloudflare Bypass
+  invisible-proxy:
+    build:
+      context: ./Backend/go
+      dockerfile: Dockerfile
+    container_name: invisible-proxy
+    ports:
+      - "8080:8080"
+    environment:
+      - PROXY_HOST=0.0.0.0
+      - PROXY_PORT=8080
+      - PROXY_READ_TIMEOUT=30
+      - PROXY_WRITE_TIMEOUT=30
+
+      # Mobile Proxy Configuration (optional)
+      # - MOBILE_PROXY_URL=socks5://user:pass@mobile-proxy.com:port
+      # - MOBILE_PROXY_USER=username
+      # - MOBILE_PROXY_PASS=password
+
+      # TLS Fingerprint Configuration
+      - TLS_CLIENT_ID=HelloChrome_120
+      - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+
+      # Connection Pool Configuration
+      - MAX_IDLE_CONNS=100
+      - MAX_IDLE_CONNS_PER_HOST=10
+      - IDLE_CONN_TIMEOUT=90
+
+      # Retry Configuration
+      - MAX_RETRIES=3
+      - RETRY_DELAY=1000
+
+      # Debug mode
+      - DEBUG=false
+      - GOSUMDB=off
+      - GOPROXY=direct
+
+    volumes:
+      - ./Backend/go/logs:/app/logs
+    networks:
+      - real-estate-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # PostgreSQL Database
   real-estate-db:
     image: postgres:16-alpine
@@ -66,6 +120,8 @@ services:
         condition: service_healthy
       real-estate-redis:
         condition: service_healthy
+      invisible-proxy:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
@@ -92,12 +148,16 @@ services:
       - REDIS_URL=${REDIS_URL}
       - CHROME_HEADLESS=${CHROME_HEADLESS}
       - LOG_LEVEL=${LOG_LEVEL}
+      - GO_PROXY_URL=http://invisible-proxy:8080
+      - USE_GO_PROXY=false
       - LOG_FILE=/tmp/scraper-logs/scraper.log
       - LOG_FALLBACK_DIR=/tmp/scraper-logs
     depends_on:
       real-estate-db:
         condition: service_healthy
       real-estate-redis:
+        condition: service_healthy
+      invisible-proxy:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "celery -A celery_app inspect ping --timeout 5 || exit 1"]

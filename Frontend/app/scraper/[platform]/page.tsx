@@ -52,6 +52,7 @@ export default function PlatformScraperPage() {
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const hepsiemlakMethodOptions = [
         { value: 'selenium', label: 'Selenium' },
+        { value: 'go_proxy', label: 'Go Proxy (Cloudflare Bypass)' },
         { value: 'scrapling_stealth_session', label: 'Scrapling StealthSession' },
         { value: 'scrapling_fetcher_session', label: 'Scrapling FetcherSession' },
         { value: 'scrapling_dynamic_session', label: 'Scrapling DynamicSession' },

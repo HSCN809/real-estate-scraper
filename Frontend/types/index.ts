@@ -26,6 +26,7 @@ export type ListingType = 'satilik' | 'kiralik';
 
 export type HepsiemlakScrapingMethod =
   | 'selenium'
+  | 'go_proxy'
   | 'scrapling_stealth_session'
   | 'scrapling_fetcher_session'
   | 'scrapling_dynamic_session'

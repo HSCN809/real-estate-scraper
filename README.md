@@ -30,10 +30,47 @@ real-estate-scraper/
 ├── Backend/                 # Web scraping modülleri
 │   ├── core/               # Temel bileşenler
 │   ├── scrapers/           # Platform-spesifik scraperlar
+│   ├── go/                # Go proxy server (Cloudflare bypass)
+│   ├── python_proxy/       # Python client for Go proxy
 │   ├── utils/              # Yardımcı araçlar
 │   └── main.py             # Ana giriş noktası
-└── Frontend/               # (Eklenecek)
+└── Frontend/               # Next.js frontend
 ```
+
+---
+
+## 🛡️ Invisible Go Proxy - Cloudflare Bypass
+
+Advanced proxy server with uTLS fingerprint spoofing for bypassing Cloudflare protection.
+
+### 🎯 Özellikler
+
+- **TLS Parmak İzi Spoofing**: Chrome 120 tarayıcı parmak izlerini taklit eder
+- **Mobil Proxy Desteği**: İsteğe bağlı mobil/konut proxy entegrasyonu
+- **Bağlantı Havuzu**: Yeniden kullanılabilir HTTP bağlantıları
+- **Akıllı Yeniden Deneme**: Cloudflare challenge'ları için üstel geri sayma
+- **Python Entegrasyonu**: Kolay kullanılabilir Python client
+
+### 🚀 Hızlı Başlatma
+
+#### Docker ile (Önerilen)
+```bash
+# Tüm sistem ile birlikte proxy'yi başlat
+docker-compose up -d invisible-proxy
+
+# Logları görüntüleme
+docker-compose logs -f invisible-proxy
+
+# Test et
+curl http://127.0.0.1:8080/
+python test_proxy.py
+```
+
+Not: Proxy için ayrı bir compose dosyası yoktur; kök dizindeki `docker-compose.yml` kullanılır.
+
+### 📚 Detaylı Bilgi
+
+Daha fazla bilgi için [Backend/go/README.md](Backend/go/README.md) dosyasına bakın.
 
 ---
 

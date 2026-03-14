@@ -319,6 +319,19 @@ class TaskLogLayout:
         self.lines(*messages, level=level)
         self.divider(char=char, level=level)
 
+    # Convenience wrappers for code paths that use logger-like methods.
+    def debug(self, message: str):
+        self._write(message, level="debug")
+
+    def info(self, message: str):
+        self._write(message, level="info")
+
+    def warning(self, message: str):
+        self._write(message, level="warning")
+
+    def error(self, message: str):
+        self._write(message, level="error")
+
 
 # Varsayılan logger örneğini oluştur
 default_logger = ScraperLogger()

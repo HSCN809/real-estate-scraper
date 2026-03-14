@@ -216,6 +216,16 @@ def scrape_hepsiemlak_task(
                 selected_cities=cities,
                 selected_districts=districts
             )
+        elif scraping_method == "go_proxy":
+            from scrapers.hepsiemlak.go_proxy_scraper import HepsiemlakGoProxyScraper
+
+            scraper = HepsiemlakGoProxyScraper(
+                listing_type=listing_type,
+                category=category,
+                subtype_path=subtype_path,
+                selected_cities=cities,
+                selected_districts=districts,
+            )
         else:
             from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
 

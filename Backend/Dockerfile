@@ -77,5 +77,9 @@ ENV DATABASE_PATH=/app/database/real_estate.db
 ENV CHROME_HEADLESS=false
 ENV DISPLAY=:99
 
+# Go Proxy Configuration (Docker network)
+ENV GO_PROXY_URL=http://invisible-proxy:8080
+ENV USE_GO_PROXY=false
+
 # Başlatma komutu - Xvfb ile sanal ekran (lock dosyası temizlenerek)
 CMD rm -f /tmp/.X99-lock && Xvfb :99 -screen 0 1920x1080x24 & sleep 1 && uvicorn main:app --host 0.0.0.0 --port 8000

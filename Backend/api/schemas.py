@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 HepsiemlakScrapingMethod = Literal[
     "selenium",
+    "go_proxy",
     "scrapling_stealth_session",
     "scrapling_fetcher_session",
     "scrapling_dynamic_session",
