@@ -177,6 +177,8 @@ services:
       - "5555:5555"
     volumes:
       - real-estate-flower-data:/app/flower_data
+      # Avoid anonymous volume created by image-level VOLUME /data
+      - real-estate-flower-runtime-data:/data
     environment:
       - CELERY_BROKER_URL=${REDIS_URL}
       - FLOWER_PORT=5555
@@ -228,3 +230,4 @@ volumes:
   real-estate-redis-data:
   real-estate-frontend-node-modules:
   real-estate-flower-data:
+  real-estate-flower-runtime-data:
