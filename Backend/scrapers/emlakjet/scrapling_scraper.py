@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """EmlakJet Scrapling tabanli scraper."""
 
+import logging
 import os
 import random
 import re
@@ -11,8 +12,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
-from scrapling.fetchers import DynamicSession, FetcherSession, StealthySession
+from scrapling.fetchers import (
+    AsyncDynamicSession,
+    AsyncStealthySession,
+    DynamicSession,
+    FetcherSession,
+    StealthySession,
+)
 from scrapling.parser import Selector
+from scrapling.spiders import Response, Spider
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -35,13 +43,22 @@ SUPPORTED_SCRAPLING_METHODS = (
     "scrapling_spider_stealth_session",
 )
 
-SESSION_METHOD_ALIASES = {
-    "scrapling_stealth_session": "scrapling_stealth_session",
-    "scrapling_fetcher_session": "scrapling_fetcher_session",
-    "scrapling_dynamic_session": "scrapling_dynamic_session",
-    "scrapling_spider_fetcher_session": "scrapling_fetcher_session",
-    "scrapling_spider_dynamic_session": "scrapling_dynamic_session",
-    "scrapling_spider_stealth_session": "scrapling_stealth_session",
+SESSION_METHODS = {
+    "scrapling_stealth_session",
+    "scrapling_fetcher_session",
+    "scrapling_dynamic_session",
+}
+
+SPIDER_METHOD_TO_SESSION = {
+    "scrapling_spider_fetcher_session": "fetcher",
+    "scrapling_spider_dynamic_session": "dynamic",
+    "scrapling_spider_stealth_session": "stealth",
+}
+
+SPIDER_SESSION_CONFIG = {
+    "fetcher": {"concurrent_requests": 3, "download_delay": 0.0, "timeout_ms": 30000, "retries": 3, "retry_delay": 1, "max_blocked_retries": 3},
+    "dynamic": {"concurrent_requests": 2, "download_delay": 0.0, "timeout_ms": 45000, "retries": 4, "retry_delay": 2, "max_blocked_retries": 4},
+    "stealth": {"concurrent_requests": 1, "download_delay": 0.4, "timeout_ms": 60000, "retries": 5, "retry_delay": 2, "max_blocked_retries": 5},
 }
 
 
@@ -127,7 +144,14 @@ class EmlakJetScraplingScraper:
         return None
 
     def _effective_session_method(self) -> str:
-        return SESSION_METHOD_ALIASES[self.scraping_method]
+        if self.scraping_method in SESSION_METHODS:
+            return self.scraping_method
+        session_mode = SPIDER_METHOD_TO_SESSION.get(self.scraping_method, "stealth")
+        if session_mode == "fetcher":
+            return "scrapling_fetcher_session"
+        if session_mode == "dynamic":
+            return "scrapling_dynamic_session"
+        return "scrapling_stealth_session"
 
     def _normalize_text(self, text: str) -> str:
         normalized = unicodedata.normalize("NFKD", text or "")
@@ -144,6 +168,19 @@ class EmlakJetScraplingScraper:
         query["sayfa"] = [str(page_num)]
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
+    @staticmethod
+    def _get_page_number(url: str) -> int:
+        try:
+            page_values = parse_qs(urlparse(url).query).get("sayfa")
+            if page_values and page_values[0].isdigit():
+                return int(page_values[0])
+        except Exception:
+            pass
+        return 1
+
+    def _is_listing_limit_reached(self) -> bool:
+        return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
+
     def _create_session(self):
         if self.proxy_enabled:
             task_log.line(
@@ -152,6 +189,9 @@ class EmlakJetScraplingScraper:
             )
             self.session_context = None
             self.session = None
+            return None
+
+        if self.scraping_method not in SESSION_METHODS:
             return None
 
         effective_method = self._effective_session_method()
@@ -195,6 +235,56 @@ class EmlakJetScraplingScraper:
         self.session_context = None
         self.session = None
 
+    def _fetch_with_persistent_session(self, url: str, effective_method: str):
+        if self.session is None:
+            raise RuntimeError("Session is not initialized")
+        if effective_method == "scrapling_fetcher_session":
+            return self.session.get(url)
+
+        fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+        if effective_method == "scrapling_stealth_session":
+            fetch_kwargs["network_idle"] = True
+        wait_selector = self.common_selectors.get("listing_container")
+        if wait_selector:
+            fetch_kwargs["wait_selector"] = wait_selector
+        return self.session.fetch(url, **fetch_kwargs)
+
+    def _fetch_with_temporary_session(self, url: str, effective_method: str):
+        wait_selector = self.common_selectors.get("listing_container")
+        if effective_method == "scrapling_fetcher_session":
+            with FetcherSession(
+                stealthy_headers=True,
+                follow_redirects=True,
+                timeout=30,
+                retries=3,
+                retry_delay=1,
+            ) as session:
+                return session.get(url)
+        if effective_method == "scrapling_dynamic_session":
+            with DynamicSession(
+                headless=self.headless,
+                disable_resources=True,
+                timeout=self.request_timeout_ms,
+                network_idle=False,
+            ) as session:
+                fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+                if wait_selector:
+                    fetch_kwargs["wait_selector"] = wait_selector
+                return session.fetch(url, **fetch_kwargs)
+        with StealthySession(
+            headless=self.headless,
+            solve_cloudflare=False,
+            google_search=False,
+            timeout=self.request_timeout_ms,
+            network_idle=True,
+            disable_resources=True,
+            wait_selector=wait_selector,
+        ) as session:
+            fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+            if wait_selector:
+                fetch_kwargs["wait_selector"] = wait_selector
+            return session.fetch(url, **fetch_kwargs)
+
     def fetch_page(self, url: str) -> Optional[Selector]:
         try:
             if self.proxy_enabled:
@@ -210,21 +300,14 @@ class EmlakJetScraplingScraper:
                 )
                 return selector
 
-            if self.session is None:
-                raise RuntimeError("Session is not initialized")
-
             effective_method = self._effective_session_method()
             start_time = time.time()
-            if effective_method == "scrapling_fetcher_session":
-                response = self.session.get(url)
+            if self.session is not None:
+                response = self._fetch_with_persistent_session(url, effective_method)
+            elif self.scraping_method in SESSION_METHODS:
+                raise RuntimeError("Session is not initialized")
             else:
-                fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
-                if effective_method == "scrapling_stealth_session":
-                    fetch_kwargs["network_idle"] = True
-                wait_selector = self.common_selectors.get("listing_container")
-                if wait_selector:
-                    fetch_kwargs["wait_selector"] = wait_selector
-                response = self.session.fetch(url, **fetch_kwargs)
+                response = self._fetch_with_temporary_session(url, effective_method)
 
             if not response:
                 self.metrics["failed_requests"] += 1
@@ -373,26 +456,37 @@ class EmlakJetScraplingScraper:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
 
-    def _parse_listing_count(self, selector: Selector) -> int:
+    def _parse_listing_count(self, selector: Selector) -> Optional[int]:
+        if not selector:
+            return None
         try:
             for element in selector.css("span.styles_adsCount__A1YW5, span.styles_title__e_y3h"):
-                if "bulunamadi" in self._normalize_text(str(element.text)):
+                normalized_text = self._normalize_text(str(element.text))
+                if "bulunamadi" in normalized_text:
                     return 0
+
             for css_selector in [
                 "span.styles_adsCount__A1YW5 strong.styles_strong__cw1jn",
                 "strong.styles_strong__cw1jn",
             ]:
                 text = self._extract_text(selector, css_selector)
+                if not text:
+                    continue
                 digits = re.sub(r"[^\d]", "", text)
                 if digits.isdigit():
                     return int(digits)
-            return 0
-        except Exception:
-            return 0
 
-    def get_listing_count(self, url: str) -> int:
+            return None
+        except Exception:
+            return None
+
+    def get_listing_count(self, url: str) -> Optional[int]:
         selector = self.fetch_page(url)
-        return self._parse_listing_count(selector) if selector else 0
+        return self._parse_listing_count(selector) if selector else None
+
+    @staticmethod
+    def _format_listing_count(listing_count: Optional[int]) -> str:
+        return str(listing_count) if listing_count is not None else "Bilinmiyor"
 
     def _clean_location_name(self, text: str) -> str:
         compact = " ".join(str(text).split())
@@ -400,11 +494,11 @@ class EmlakJetScraplingScraper:
         compact = re.sub(r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE).strip()
         return compact
 
-    def get_location_options(self, location_type: str, current_url: str) -> Tuple[List[Dict[str, str]], int]:
+    def get_location_options(self, location_type: str, current_url: str) -> Tuple[List[Dict[str, str]], Optional[int]]:
         task_log.line(f"Getting {location_type} options via {self.scraping_method}")
         selector = self.fetch_page(current_url)
         if not selector:
-            return [], 0
+            return [], None
 
         listing_count = self._parse_listing_count(selector)
         location_options: List[Dict[str, str]] = []
@@ -443,6 +537,286 @@ class EmlakJetScraplingScraper:
             return total_pages
         return min(requested_max_pages, total_pages)
 
+    def _fetch_spider_seed_page(self, url: str, session_mode: str) -> Optional[Selector]:
+        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        listing_selector = self.common_selectors.get("listing_container")
+
+        try:
+            if session_mode == "fetcher":
+                with FetcherSession(
+                    stealthy_headers=True,
+                    follow_redirects=True,
+                    timeout=mode_settings["timeout_ms"] // 1000,
+                    retries=mode_settings["retries"],
+                    retry_delay=mode_settings["retry_delay"],
+                ) as session:
+                    response = session.get(url)
+            elif session_mode == "dynamic":
+                with DynamicSession(
+                    headless=self.headless,
+                    disable_resources=True,
+                    timeout=mode_settings["timeout_ms"],
+                    retries=mode_settings["retries"],
+                    retry_delay=mode_settings["retry_delay"],
+                    network_idle=False,
+                ) as session:
+                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    if listing_selector:
+                        fetch_kwargs["wait_selector"] = listing_selector
+                    response = session.fetch(url, **fetch_kwargs)
+            else:
+                with StealthySession(
+                    headless=self.headless,
+                    solve_cloudflare=False,
+                    google_search=False,
+                    timeout=mode_settings["timeout_ms"],
+                    network_idle=True,
+                    disable_resources=True,
+                ) as session:
+                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    if listing_selector:
+                        fetch_kwargs["wait_selector"] = listing_selector
+                    response = session.fetch(url, **fetch_kwargs)
+
+            if not response:
+                return None
+
+            status = getattr(response, "status", 200)
+            body = getattr(response, "body", b"")
+            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+                return None
+            return response
+        except Exception as exc:
+            task_log.line(f"Could not detect pagination seed for {url}: {exc}", level="warning")
+            return None
+
+    def _scrape_location_with_session(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: Optional[int],
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        neighborhood: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        listings: List[Dict[str, Any]] = []
+        self._log_location_start(location_name, location_url)
+
+        first_page = self.fetch_page(location_url)
+        if not first_page:
+            task_log.line(f"âš ï¸ Ilk sayfa alinamadi: {location_name}", level="warning")
+            return listings
+
+        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
+        self._log_location_plan(location_name, pages_to_scrape)
+
+        for page_num in range(1, pages_to_scrape + 1):
+            if self._is_listing_limit_reached():
+                task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                break
+
+            current_url = self._build_page_url(location_url, page_num)
+            task_log.line(f"ğŸ” [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor...")
+            selector = first_page if page_num == 1 else self.fetch_page(current_url)
+            if not selector:
+                task_log.line(f"   âš ï¸ Sayfa {page_num} alinamadi, atlaniyor", level="warning")
+                continue
+
+            if progress_callback:
+                progress_callback(
+                    f"{location_name} - Sayfa {page_num}/{pages_to_scrape}",
+                    current=page_num,
+                    total=pages_to_scrape,
+                    progress=int((page_num / max(1, pages_to_scrape)) * 100),
+                )
+
+            page_listings = self.extract_listings_from_page(
+                selector,
+                page_url=getattr(selector, "url", current_url),
+                city=city,
+                district=district,
+                neighborhood=neighborhood,
+            )
+            page_listings = self._trim_page_listings(page_listings)
+            self.all_listings.extend(page_listings)
+            listings.extend(page_listings)
+            new_count, updated_count, unchanged_count = self._persist_listings(page_listings)
+            self._report_page_persist_result(page_num, len(page_listings), new_count, updated_count, unchanged_count, location_name)
+            self.metrics["total_pages"] += 1
+
+            if self._is_listing_limit_reached():
+                task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                break
+
+            if page_num < pages_to_scrape:
+                time.sleep(random.uniform(1, 3))
+
+        if listings:
+            task_log.line(f"âœ… {location_name} tamamlandi - {len(listings)} ilan islendi")
+        else:
+            task_log.line(f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning")
+        return listings
+
+    def _scrape_location_with_spider(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: Optional[int],
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        neighborhood: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
+        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        listing_selector = self.common_selectors.get("listing_container")
+        spider_errors: List[Dict[str, str]] = []
+        visited_pages: set[int] = set()
+        processed_pages: set[int] = set()
+        collected_items: List[Dict[str, Any]] = []
+        outer = self
+
+        self._log_location_start(location_name, location_url)
+        seed_page = self._fetch_spider_seed_page(location_url, session_mode)
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(seed_page) if seed_page else None,
+            max_pages,
+        )
+        self._log_location_plan(location_name, pages_to_scrape)
+
+        logging.getLogger("scrapling").setLevel(logging.ERROR)
+        logging.getLogger("scrapling.spiders").setLevel(logging.ERROR)
+
+        class EmlakjetSpider(Spider):
+            name = f"emlakjet_{session_mode}_{outer._normalize_text(location_name).replace(' ', '-')}"
+            start_urls = [location_url]
+            allowed_domains = {"emlakjet.com"}
+            concurrent_requests = mode_settings["concurrent_requests"]
+            download_delay = mode_settings["download_delay"]
+            max_blocked_retries = mode_settings["max_blocked_retries"]
+            logging_level = logging.WARNING
+
+            def configure_sessions(self, manager):
+                if session_mode == "fetcher":
+                    manager.add(
+                        "default",
+                        FetcherSession(
+                            stealthy_headers=True,
+                            follow_redirects=True,
+                            timeout=mode_settings["timeout_ms"] // 1000,
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                        ),
+                        default=True,
+                    )
+                elif session_mode == "dynamic":
+                    manager.add(
+                        "default",
+                        AsyncDynamicSession(
+                            headless=outer.headless,
+                            disable_resources=True,
+                            timeout=mode_settings["timeout_ms"],
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                            network_idle=False,
+                        ),
+                        default=True,
+                    )
+                else:
+                    manager.add(
+                        "default",
+                        AsyncStealthySession(
+                            headless=outer.headless,
+                            disable_resources=True,
+                            timeout=mode_settings["timeout_ms"],
+                            retries=mode_settings["retries"],
+                            retry_delay=mode_settings["retry_delay"],
+                            network_idle=False,
+                        ),
+                        default=True,
+                    )
+
+            async def on_error(self, request, error):
+                spider_errors.append(
+                    {
+                        "url": getattr(request, "url", ""),
+                        "sid": getattr(request, "sid", ""),
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                )
+                task_log.line(
+                    f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}",
+                    level="warning",
+                )
+
+            async def parse(self, response: Response):
+                current_page = outer._get_page_number(response.url)
+                visited_pages.add(current_page)
+                if current_page in processed_pages:
+                    return
+                if outer._is_listing_limit_reached():
+                    return
+
+                task_log.line(f"ğŸ” [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taraniyor...")
+                if progress_callback:
+                    progress_callback(
+                        f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
+                        current=current_page,
+                        total=pages_to_scrape,
+                        progress=int((current_page / max(1, pages_to_scrape)) * 100),
+                    )
+
+                page_listings = outer.extract_listings_from_page(
+                    response,
+                    page_url=response.url,
+                    city=city,
+                    district=district,
+                    neighborhood=neighborhood,
+                )
+                page_listings = outer._trim_page_listings(page_listings)
+                for listing in page_listings:
+                    listing["page"] = current_page
+                    listing["scraping_method"] = outer.scraping_method
+
+                outer.all_listings.extend(page_listings)
+                new_count, updated_count, unchanged_count = outer._persist_listings(page_listings)
+                outer._report_page_persist_result(
+                    page_num=current_page,
+                    extracted_count=len(page_listings),
+                    new_count=new_count,
+                    updated_count=updated_count,
+                    unchanged_count=unchanged_count,
+                    location_name=location_name,
+                )
+                processed_pages.add(current_page)
+                collected_items.extend(page_listings)
+
+                if outer._is_listing_limit_reached():
+                    return
+                if current_page < pages_to_scrape:
+                    next_url = outer._build_page_url(location_url, current_page + 1)
+                    follow_kwargs = {"callback": self.parse}
+                    if session_mode != "fetcher" and listing_selector:
+                        follow_kwargs["wait_selector"] = listing_selector
+                    yield response.follow(next_url, **follow_kwargs)
+
+        EmlakjetSpider().start()
+        method_items = list(collected_items)
+        method_items.sort(key=lambda item: (item.get("page", 1), item.get("ilan_url", "")))
+        self.metrics["total_pages"] += len(processed_pages)
+        self.metrics["successful_requests"] += len(visited_pages)
+        self.metrics["failed_requests"] += len(spider_errors)
+
+        if self._is_listing_limit_reached():
+            task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+
+        if not method_items:
+            task_log.line(f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning")
+        else:
+            task_log.line(f"âœ… {location_name} tamamlandi - {len(method_items)} ilan islendi")
+        return method_items
+
     def _scrape_location(
         self,
         location_name: str,
@@ -453,6 +827,45 @@ class EmlakJetScraplingScraper:
         neighborhood: Optional[str] = None,
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
+        if self.proxy_enabled or self.scraping_method in SESSION_METHODS:
+            return self._scrape_location_with_session(
+                location_name=location_name,
+                location_url=location_url,
+                max_pages=max_pages,
+                city=city,
+                district=district,
+                neighborhood=neighborhood,
+                progress_callback=progress_callback,
+            )
+        return self._scrape_location_with_spider(
+            location_name=location_name,
+            location_url=location_url,
+            max_pages=max_pages,
+            city=city,
+            district=district,
+            neighborhood=neighborhood,
+            progress_callback=progress_callback,
+        )
+
+    def _scrape_location_legacy_disabled(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: Optional[int],
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        neighborhood: Optional[str] = None,
+        progress_callback=None,
+    ) -> List[Dict[str, Any]]:
+        return self._scrape_location_with_session(
+            location_name=location_name,
+            location_url=location_url,
+            max_pages=max_pages,
+            city=city,
+            district=district,
+            neighborhood=neighborhood,
+            progress_callback=progress_callback,
+        )
         listings: List[Dict[str, Any]] = []
         self._log_location_start(location_name, location_url)
 
@@ -574,7 +987,8 @@ class EmlakJetScraplingScraper:
             task_log.line("API taramasi icin sehir belirtilmedi", level="error")
             return {}
 
-        self._create_session()
+        if (not self.proxy_enabled) and self.scraping_method in SESSION_METHODS:
+            self._create_session()
         scrape_stats: Dict[str, Dict[str, int]] = {}
         page_limit = max_pages
         stopped = False
@@ -595,6 +1009,16 @@ class EmlakJetScraplingScraper:
                     break
 
                 province_count = self.get_listing_count(province["url"])
+                if province_count is None:
+                    task_log.line(
+                        f"{province_name} ilan sayisi parse edilemedi; il seviyesinde tarama yapilacak.",
+                        level="warning",
+                    )
+                    target = {"url": province["url"], "label": province_name, "type": "il"}
+                    should_skip, new_count = self._scrape_target(target, page_limit, city=province_name, progress_callback=province_callback)
+                    if not should_skip:
+                        scrape_stats[province_name] = {"(il seviyesi)": new_count}
+                    continue
                 task_log.section(f"🏙️ IL {prov_idx}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})")
 
                 if province_count == 0:
@@ -632,6 +1056,22 @@ class EmlakJetScraplingScraper:
                         break
 
                     district_count = self.get_listing_count(district_item["url"])
+                    if district_count is None:
+                        task_log.line(
+                            f"{province_name}/{district_name} ilan sayisi parse edilemedi; ilce seviyesinde tarama yapilacak.",
+                            level="warning",
+                        )
+                        target = {"url": district_item["url"], "label": f"{province_name} / {district_name}", "type": "ilce"}
+                        should_skip, new_count = self._scrape_target(
+                            target,
+                            page_limit,
+                            city=province_name,
+                            district=district_name,
+                            progress_callback=province_callback,
+                        )
+                        if not should_skip:
+                            scrape_stats.setdefault(province_name, {})[district_name] = new_count
+                        continue
                     if district_count == 0:
                         continue
 

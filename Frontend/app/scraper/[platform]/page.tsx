@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
 import { useScraping } from '@/contexts/ScrapingContext';
 import { motion } from 'framer-motion';
-import { Play, Loader2, XCircle, Sparkles, X, MapPin } from 'lucide-react';
+import { Play, Loader2, XCircle, Sparkles, X, MapPin, Info } from 'lucide-react';
 import Link from 'next/link';
 import { startScrape, getCategories, getSubtypes } from '@/lib/api';
 import type { Platform, ListingType, Category, HepsiemlakScrapingMethod } from '@/types';
@@ -49,6 +49,7 @@ export default function PlatformScraperPage() {
     const [subtypesLoading, setSubtypesLoading] = useState(false);
     const [scrapingMethod, setScrapingMethod] = useState<HepsiemlakScrapingMethod>('selenium');
     const [proxyEnabled, setProxyEnabled] = useState(false);
+    const isProxyToggleDisabled = scrapingMethod === 'selenium';
 
     const platformName = platform === 'emlakjet' ? 'EmlakJet' : 'HepsiEmlak';
     const scrapingMethodOptions = [
@@ -108,6 +109,12 @@ export default function PlatformScraperPage() {
         fetchSubtypesData();
     }, [platform, listingType, category]);
 
+    useEffect(() => {
+        if (isProxyToggleDisabled && proxyEnabled) {
+            setProxyEnabled(false);
+        }
+    }, [isProxyToggleDisabled, proxyEnabled]);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -142,7 +149,7 @@ export default function PlatformScraperPage() {
                 subtype: selectedSubtype?.id,
                 subtype_path: selectedSubtype?.path,
                 scraping_method: scrapingMethod,
-                proxy_enabled: Boolean(proxyEnabled),
+                proxy_enabled: isProxyToggleDisabled ? false : Boolean(proxyEnabled),
                 cities: selectedCities,
                 districts: selectedDistricts,
                 ...(platform === 'emlakjet'
@@ -255,12 +262,29 @@ export default function PlatformScraperPage() {
                                 className="w-full bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-sky-500/50 focus:ring-sky-500/20"
                             />
                         </div>
-                        <div className="pb-3 md:ml-auto md:shrink-0">
-                            <Checkbox
-                                label="Proxy Kullan"
-                                checked={proxyEnabled}
-                                onChange={setProxyEnabled}
-                            />
+                        <div className="md:ml-auto md:shrink-0 md:self-end md:pb-2">
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    label="Proxy Kullan"
+                                    checked={proxyEnabled}
+                                    onChange={setProxyEnabled}
+                                    disabled={isProxyToggleDisabled}
+                                />
+                                {isProxyToggleDisabled && (
+                                    <div className="relative group">
+                                        <button
+                                            type="button"
+                                            aria-label="Proxy bilgi"
+                                            className="text-slate-400 hover:text-slate-200 transition-colors"
+                                        >
+                                            <Info className="w-4 h-4" />
+                                        </button>
+                                        <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/15 bg-black/90 px-2 py-1 text-xs text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                                            Selenium ile proxy desteklenmiyor.
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
