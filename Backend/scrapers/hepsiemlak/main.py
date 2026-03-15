@@ -299,23 +299,16 @@ class HepsiemlakScraper(BaseScraper):
             f"   ❌ Kalan başarısız: {failed_count}",
         )
 
-    def _log_final_summary(self, stopped_early: bool, city_count: int, total_listings: int) -> None:
-        if stopped_early:
+    def _log_final_summary(self, city_count: int, total_listings: int) -> None:
+        if total_listings > 0:
             task_log.section(
-                "⚠️ ERKEN DURDURULDU",
-                f"Taranan Şehir Sayısı: {city_count}",
-                f"Toplam İlan Sayısı: {total_listings}",
-                level="warning",
-            )
-        elif total_listings > 0:
-            task_log.section(
-                "TARAMA BAŞARIYLA TAMAMLANDI",
-                f"Taranan Şehir Sayısı: {city_count}",
-                f"Toplam İlan Sayısı: {total_listings}",
+                "TARAMA BA?ARIYLA TAMAMLANDI",
+                f"Taranan ?ehir Say?s?: {city_count}",
+                f"Toplam ?lan Say?s?: {total_listings}",
             )
         else:
             task_log.section("HIC ILAN BULUNAMADI", level="warning")
-    
+
     def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
         """Kategori parser'ı ile ilan verisini çıkar"""
         return self.parser.extract_listing_data(container)
@@ -842,17 +835,9 @@ class HepsiemlakScraper(BaseScraper):
             logger.warning(f"Pagination detection failed: {e}")
             return 1
     
-    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None, stop_checker=None) -> List[Dict[str, Any]]:
+    def scrape_city(self, city: str, max_pages: int = None, api_mode: bool = False, progress_callback=None) -> List[Dict[str, Any]]:
         """Tek bir şehir için tüm ilanları tara"""
         self._log_location_start(city, self._build_location_url(city))
-
-        # Durdurma denetleyicisini belirle
-        _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
-
-        def is_stop_requested():
-            if _stop_checker and _stop_checker():
-                return True
-            return False
 
         if progress_callback:
             progress_callback(f"{city} için tarama başlatılıyor...", current=0, total=100)
@@ -910,10 +895,6 @@ class HepsiemlakScraper(BaseScraper):
 
             # Sayfaları tara
             for page in range(1, pages_to_scrape + 1):
-                # Durdurma kontrolü - her sayfa başında kontrol et
-                if is_stop_requested():
-                    task_log.line(f"⚠️ Durdurma isteği alındı! {total_new_listings} yeni ilan kaydediliyor...", level="warning")
-                    break
 
                 self._log_page_start(city, page, pages_to_scrape)
 
@@ -995,18 +976,10 @@ class HepsiemlakScraper(BaseScraper):
             task_log.line(f"❌ {city} tarama hatası: {e}", level="error")
             return []
 
-    def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None, stop_checker=None) -> Dict[str, List[Dict[str, Any]]]:
+    def scrape_city_with_districts(self, city: str, districts: List[str], max_pages: int = None, progress_callback=None) -> Dict[str, List[Dict[str, Any]]]:
         """Bir şehir için belirtilen ilçeleri ayrı ayrı tara ve kaydet"""
         all_results = {}  # İlçe -> İlanlar mapping
         total_new_listings = 0  # Sadece yeni eklenen ilan sayısı
-
-        # Durdurma denetleyicisini belirle
-        _stop_checker = stop_checker or getattr(self, '_stop_checker', None)
-
-        def is_stop_requested():
-            if _stop_checker and _stop_checker():
-                return True
-            return False
 
         task_log.section(
             f"📍 Taranıyor: {city}",
@@ -1018,7 +991,7 @@ class HepsiemlakScraper(BaseScraper):
         if not districts or len(districts) == 0:
             task_log.line(f"{city}: tüm ilçeler taranıyor")
             # Şehir bazlı kayıt için eski formatta döndür
-            city_listings = self.scrape_city(city, max_pages, api_mode=True, progress_callback=progress_callback, stop_checker=_stop_checker)
+            city_listings = self.scrape_city(city, max_pages, api_mode=True, progress_callback=progress_callback)
             return {city: city_listings}
 
         task_log.line(f"📋 Seçili ilçeler: {', '.join(districts)}")
@@ -1033,10 +1006,6 @@ class HepsiemlakScraper(BaseScraper):
 
         # Her ilçeyi ayrı ayrı tara
         for idx, district in enumerate(districts, 1):
-            # Durdurma kontrolü - her ilçe başında kontrol et
-            if is_stop_requested():
-                task_log.line(f"⚠️ Durdurma isteği alındı! {len(all_results)} ilçe kaydedildi.", level="warning")
-                break
 
             district_listings = []  # Bu ilçenin ilanları
 
@@ -1095,14 +1064,6 @@ class HepsiemlakScraper(BaseScraper):
 
                 # Bu ilçe için sayfaları tara
                 for page in range(1, pages_to_scrape + 1):
-                    # Durdurma kontrolü - her sayfa başında kontrol et
-                    if is_stop_requested():
-                        task_log.line(f"⚠️ Durdurma isteği alındı! {district} için {len(district_listings)} ilan kaydediliyor...", level="warning")
-                        # Mevcut ilçe verilerini kaydet
-                        if district_listings:
-                            all_results[district] = district_listings
-                            self._save_district_data(city, district, district_listings)
-                        break
 
                     self._log_page_start(f"{city} / {district}", page, pages_to_scrape)
 
@@ -1241,19 +1202,9 @@ class HepsiemlakScraper(BaseScraper):
 
         return listings
     
-    def start_scraping_api(self, max_pages: int = 1, progress_callback=None, stop_checker=None):
-        """API tarama giriş noktası; max_pages, progress_callback ve stop_checker parametreleri alır"""
+    def start_scraping_api(self, max_pages: int = 1, progress_callback=None):
+        """API tarama giriş noktası; max_pages ve progress_callback parametreleri alır"""
         task_log.line(f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper (selenium)")
-
-        # Durdurma denetleyicisini iç metotlarda kullanmak için sakla
-        self._stop_checker = stop_checker
-
-        def is_stop_requested():
-            """Durdurma isteğini kontrol et - hem Celery hem bellek içi destekler"""
-            if stop_checker and stop_checker():
-                return True
-            # Celery dışı çağrılar için bellek içi duruma geri dön
-            return False
 
         try:
             if not self.selected_cities:
@@ -1265,15 +1216,7 @@ class HepsiemlakScraper(BaseScraper):
             total_listings_count = 0
             total_cities = len(self.selected_cities)
 
-            stopped_early = False  # Erken durdurulup durdurulmadığını takip et
-
             for city_idx, city in enumerate(self.selected_cities, 1):
-                # Durdurma kontrolü - kullanıcı durdur dediyse mevcut verileri kaydet
-                if is_stop_requested():
-                    task_log.line(f"⚠️ Durdurma isteği alındı! {len(all_results)} şehir tarandı.", level="warning")
-                    stopped_early = True
-                    break
-
                 # Toplam ilerleme hesabı için sarmalayıcı callback
                 # city_idx ve total_cities'i closure'a alıyoruz
                 # progress_callback varsa (Celery) onu kullan, yoksa task_status'u dene
@@ -1345,9 +1288,9 @@ class HepsiemlakScraper(BaseScraper):
             # Özet bilgi (veriler zaten kaydedildi)
             if all_results:
                 total = total_listings_count
-                self._log_final_summary(stopped_early, len(all_results), total)
+                self._log_final_summary(len(all_results), total)
             else:
-                self._log_final_summary(stopped_early, 0, 0)
+                self._log_final_summary(0, 0)
 
             # ============================================================
             # RETRY MEKANİZMASI - Başarısız sayfaları yeniden dene
@@ -1376,11 +1319,6 @@ class HepsiemlakScraper(BaseScraper):
 
                 # Her başarısız sayfa için yeni tarayıcı ile dene
                 for idx, page_info in enumerate(failed_pages, 1):
-                    # Durdurma kontrolü
-                    if is_stop_requested():
-                        task_log.line("⚠️ Retry durduruldu!", level="warning")
-                        break
-
                     task_log.line(f"🔄 [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}")
 
                     if progress_callback:

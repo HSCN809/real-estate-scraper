@@ -103,7 +103,6 @@ class HepsiemlakScraplingScraper:
 
         self.session_context = None
         self.session = None
-        self._stop_checker = None
 
         self.db = None
         self.scrape_session_id = None
@@ -182,19 +181,6 @@ class HepsiemlakScraplingScraper:
         except Exception:
             pass
         return 1
-
-    def _is_stop_requested(self) -> bool:
-        if self._stop_checker and self._stop_checker():
-            return True
-            return False
-
-    def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
-        if not self._is_stop_requested():
-            return False
-        task_log.line(f"⚠️ {message}", level="warning")
-        if progress_callback:
-            progress_callback(message, progress=0)
-        return True
 
     def _create_session(self):
         if self.proxy_enabled:
@@ -547,8 +533,6 @@ class HepsiemlakScraplingScraper:
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
-            if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
-                break
 
             current_url = self._build_page_url(location_url, page_num)
             task_log.line(f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor...")
@@ -680,9 +664,6 @@ class HepsiemlakScraplingScraper:
             async def parse(self, response: Response):
                 current_page = outer._get_page_number(response.url)
                 visited_pages.add(current_page)
-
-                if outer._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
-                    return
                 if current_page in processed_pages:
                     return
 
@@ -717,7 +698,7 @@ class HepsiemlakScraplingScraper:
                 processed_pages.add(current_page)
                 collected_items.extend(page_listings)
 
-                if current_page < pages_to_scrape and not outer._is_stop_requested():
+                if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
                     follow_kwargs = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_results:
@@ -764,8 +745,7 @@ class HepsiemlakScraplingScraper:
             progress_callback=progress_callback,
         )
 
-    def _run_scraping(self, max_pages: Optional[int], progress_callback=None, stop_checker=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-        self._stop_checker = stop_checker
+    def _run_scraping(self, max_pages: Optional[int], progress_callback=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         task_log.line(
             f"Starting _run_scraping with method={self.scraping_method}, "
             f"cities={self.selected_cities}, max_pages={max_pages}"
@@ -797,15 +777,11 @@ class HepsiemlakScraplingScraper:
         try:
             for city_idx, city in enumerate(self.selected_cities, 1):
                 city_callback = self._make_city_progress_callback(progress_callback, city_idx, total_cities, city)
-                if self._raise_if_stop_requested(city_callback, f"{city}: durdurma istegi alindi."):
-                    break
 
                 if self.selected_districts and city in self.selected_districts:
                     district_results: Dict[str, List[Dict[str, Any]]] = {}
                     districts = self.selected_districts[city]
                     for district_idx, district in enumerate(districts, 1):
-                        if self._raise_if_stop_requested(city_callback, f"{district}: durdurma istegi alindi."):
-                            break
                         district_listings = self._scrape_location(
                             location_name=f"{district} ({district_idx}/{len(districts)})",
                             location_url=self._get_district_url(district),
@@ -848,11 +824,10 @@ class HepsiemlakScraplingScraper:
         results, listings = self._run_scraping(
             max_pages=max(max_pages_per_city, max_pages_per_district),
             progress_callback=None,
-            stop_checker=None,
         )
         return {"results": results, "listings": listings, "metrics": self.metrics, "summary": self.get_summary()}
 
-    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None, stop_checker=None):
+    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None):
         task_log.line(
             f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})",
         )
@@ -866,7 +841,6 @@ class HepsiemlakScraplingScraper:
         results, listings = self._run_scraping(
             max_pages=max_pages,
             progress_callback=progress_callback,
-            stop_checker=stop_checker,
         )
         if results:
             task_log.section(

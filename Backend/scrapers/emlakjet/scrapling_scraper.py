@@ -91,7 +91,6 @@ class EmlakJetScraplingScraper:
 
         self.session_context = None
         self.session = None
-        self._stop_checker = None
         self._max_listings = 0
 
         self.db = None
@@ -144,22 +143,6 @@ class EmlakJetScraplingScraper:
         query = parse_qs(parsed.query)
         query["sayfa"] = [str(page_num)]
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-
-    def _is_stop_requested(self) -> bool:
-        if self._stop_checker and self._stop_checker():
-            return True
-            return False
-
-    def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
-        if not self._is_stop_requested():
-            return False
-        task_log.line(f"⚠️ {message}", level="warning")
-        if progress_callback:
-            progress_callback(message, progress=0)
-        return True
-
-    def _is_listing_limit_reached(self) -> bool:
-        return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
 
     def _create_session(self):
         if self.proxy_enabled:
@@ -482,8 +465,6 @@ class EmlakJetScraplingScraper:
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
-            if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
-                break
             if self._is_listing_limit_reached():
                 task_log.line(f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
                 break
@@ -565,11 +546,9 @@ class EmlakJetScraplingScraper:
         max_listings: int = 0,
         max_pages: Optional[int] = None,
         progress_callback=None,
-        stop_checker=None,
     ):
         self.selected_cities = cities or self.selected_cities
         self.selected_districts = districts or self.selected_districts
-        self._stop_checker = stop_checker
         self._max_listings = max_listings or 0
         self.all_listings = []
         self.total_scraped_count = 0
@@ -611,10 +590,6 @@ class EmlakJetScraplingScraper:
             for prov_idx, province in enumerate(provinces, 1):
                 province_name = province["name"]
                 province_callback = self._make_progress_callback(progress_callback, prov_idx, len(provinces), province_name)
-
-                if self._raise_if_stop_requested(province_callback, f"{province_name}: durdurma istegi alindi."):
-                    stopped = True
-                    break
                 if self._is_listing_limit_reached():
                     stopped = True
                     break
@@ -652,9 +627,6 @@ class EmlakJetScraplingScraper:
 
                 for district_item in district_list:
                     district_name = district_item["name"]
-                    if self._raise_if_stop_requested(province_callback, f"{district_name}: durdurma istegi alindi."):
-                        stopped = True
-                        break
                     if self._is_listing_limit_reached():
                         stopped = True
                         break
@@ -692,9 +664,6 @@ class EmlakJetScraplingScraper:
 
                     for neighborhood_item in neighborhoods:
                         neighborhood_name = neighborhood_item["name"]
-                        if self._raise_if_stop_requested(province_callback, f"{neighborhood_name}: durdurma istegi alindi."):
-                            stopped = True
-                            break
                         if self._is_listing_limit_reached():
                             stopped = True
                             break
@@ -727,7 +696,7 @@ class EmlakJetScraplingScraper:
             self.metrics["total_listings"] = len(self.all_listings)
 
             task_log.divider()
-            if stopped and self._is_stop_requested():
+            if stopped:
                 task_log.line("⚠️ ERKEN DURDURULDU", level="warning")
             elif self.all_listings:
                 task_log.line("✅ TARAMA BASARIYLA TAMAMLANDI")

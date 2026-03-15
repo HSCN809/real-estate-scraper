@@ -671,11 +671,6 @@ class EmlakJetScraper(BaseScraper):
             return selected
         else:
             return [district]
-    
-    def _is_stop_requested(self) -> bool:
-        """Durdurma isteği olup olmadığını kontrol et"""
-        return self._stop_checker is not None and self._stop_checker()
-
     def _is_listing_limit_reached(self) -> bool:
         """Maksimum ilan limitine ulaşılıp ulaşılmadığını kontrol et"""
         return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
@@ -714,9 +709,6 @@ class EmlakJetScraper(BaseScraper):
         first_page_count = 0
 
         for current_page in range(1, max_pages + 1):
-            if hasattr(self, '_stop_checker') and self._stop_checker and self._stop_checker():
-                task_log.line("Durdurma isteği alındı, sayfa tarama sonlandırılıyor", level="warning")
-                break
 
             if hasattr(self, '_max_listings') and self._max_listings > 0 and len(self.all_listings) >= self._max_listings:
                 task_log.line(f"İlan limitine ulaşıldı ({self._max_listings}), sayfa tarama sonlandırılıyor", level="warning")
@@ -821,10 +813,9 @@ class EmlakJetScraper(BaseScraper):
             self._log_location_complete(target['label'], new_listings_count_ref[0])
         return should_skip, new_listings_count_ref[0]
 
-    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None, stop_checker=None):
+    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None):
         """İki katmanlı optimizasyonla API tarama giriş noktası"""
         print = task_log.line
-        self._stop_checker = stop_checker
         self._max_listings = max_listings
 
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
@@ -866,11 +857,6 @@ class EmlakJetScraper(BaseScraper):
             stopped = False
             scrape_stats = {}  # {il_adı: {ilçe_adı: ilan_sayısı}} — özet rapor için
             for prov_idx, province in enumerate(provinces, 1):
-                if self._is_stop_requested():
-                    print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
-                    logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
-                    stopped = True
-                    break
                 if self._is_listing_limit_reached():
                     stopped = True
                     break
@@ -940,11 +926,6 @@ class EmlakJetScraper(BaseScraper):
 
                 # Her ilçeyi işle
                 for dist_idx, district in enumerate(district_list, 1):
-                    if self._is_stop_requested():
-                        print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
-                        logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
-                        stopped = True
-                        break
                     if self._is_listing_limit_reached():
                         stopped = True
                         break
@@ -1022,11 +1003,6 @@ class EmlakJetScraper(BaseScraper):
 
                     total_targets = len(targets)
                     for target_idx, target in enumerate(targets, 1):
-                        if self._is_stop_requested():
-                            print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
-                            logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
-                            stopped = True
-                            break
                         if self._is_listing_limit_reached():
                             stopped = True
                             break
@@ -1065,7 +1041,7 @@ class EmlakJetScraper(BaseScraper):
 
             # ── HİYERARŞİK ÖZET RAPOR ──
             print(f"\n{'=' * 70}")
-            if stopped and self._is_stop_requested():
+            if stopped and self._is_listing_limit_reached():
                 print("⚠️  ERKEN DURDURULDU")
                 logger.warning(f"⚠️ Tarama erken durduruldu: {self.total_new_listings} yeni ilan")
             elif self.all_listings:
@@ -1091,10 +1067,6 @@ class EmlakJetScraper(BaseScraper):
             successful_retries = 0
 
             while failed_pages_tracker.has_failed_pages() and retry_round < max_retries:
-                if self._is_stop_requested():
-                    print(f"\n⚠️ Retry durduruldu!")
-                    break
-
                 retry_round += 1
                 failed_pages = failed_pages_tracker.get_unretried(max_retry_count=max_retries)
 
@@ -1113,10 +1085,6 @@ class EmlakJetScraper(BaseScraper):
                     )
 
                 for idx, page_info in enumerate(failed_pages, 1):
-                    if self._is_stop_requested():
-                        print(f"\n⚠️ Retry durduruldu!")
-                        break
-
                     print(f"\n🔄 [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}")
 
                     if progress_callback:

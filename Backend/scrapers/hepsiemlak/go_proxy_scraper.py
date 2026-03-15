@@ -71,7 +71,6 @@ class HepsiemlakGoProxyScraper:
         self.common_selectors = get_common_selectors("hepsiemlak")
 
         # Session state
-        self._stop_checker = None
         self.session_cookies = {}
 
         # Database and export
@@ -166,19 +165,6 @@ class HepsiemlakGoProxyScraper:
         query = parse_qs(parsed.query)
         query["page"] = [str(page_num)]
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-
-    def _is_stop_requested(self) -> bool:
-        if self._stop_checker and self._stop_checker():
-            return True
-            return False
-
-    def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:
-        if not self._is_stop_requested():
-            return False
-        task_log.line(f"WARNING: {message}", level="warning")
-        if progress_callback:
-            progress_callback(message, progress=0)
-        return True
 
     def _fetch_page_with_retry(self, url: str, max_retries: int = 10) -> Optional[BeautifulSoup]:
         """
@@ -577,8 +563,6 @@ class HepsiemlakGoProxyScraper:
 
         # Scrape pages
         for page_num in range(1, pages_to_scrape + 1):
-            if self._raise_if_stop_requested(progress_callback, f"{location_name}: durdurma istegi alindi."):
-                break
 
             current_url = self._build_page_url(location_url, page_num)
             task_log.info(f"[{page_num}/{pages_to_scrape}] {location_name} - page {page_num} is being scraped...")
@@ -654,9 +638,8 @@ class HepsiemlakGoProxyScraper:
 
         return city_progress_callback
 
-    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None, stop_checker=None) -> Dict[str, Any]:
+    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None) -> Dict[str, Any]:
         """API-compatible entry point used by Celery tasks."""
-        self._stop_checker = stop_checker
         return self.start_scraping(
             max_pages_per_city=max_pages,
             max_pages_per_district=max_pages,
@@ -686,16 +669,11 @@ class HepsiemlakGoProxyScraper:
             for city_idx, city in enumerate(self.selected_cities, 1):
                 city_callback = self._make_city_progress_callback(progress_callback, city_idx, total_cities, city)
 
-                if self._raise_if_stop_requested(city_callback, f"{city}: durdurma istegi alindi."):
-                    break
-
                 # Check if we need to scrape districts
                 if self.selected_districts and city in self.selected_districts:
                     districts = self.selected_districts[city]
 
                     for district_idx, district in enumerate(districts, 1):
-                        if self._raise_if_stop_requested(city_callback, f"{district}: durdurma istegi alindi."):
-                            break
 
                         district_data = self._scrape_location(
                             location_name=f"{district} ({district_idx}/{len(districts)})",
