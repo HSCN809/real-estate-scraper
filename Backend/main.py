@@ -15,8 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 from auth.router import router as auth_router
 
-# Veritabanı başlatma
-from database.connection import engine, DATABASE_URL
+# Veritabani baslatma
+from database.connection import DATABASE_URL, SessionLocal, engine
+from database import crud
 from database.models import Base
 
 # Loglama ayarla
@@ -24,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def init_database(max_retries=5, retry_delay=3):
-    """Veritabanı tablolarını yoksa oluşturur (yeniden deneme destekli)"""
+    """Veritabani tablolari yoksa olusturur (yeniden deneme destekli)."""
     for attempt in range(1, max_retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
@@ -43,12 +44,20 @@ def init_database(max_retries=5, retry_delay=3):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Başlatma
+    # Baslatma
     init_database()
+    db = SessionLocal()
+    try:
+        updated = crud.normalize_legacy_scrape_session_statuses(db)
+        if updated:
+            db.commit()
+            logger.info("Normalized %s legacy scrape session statuses", updated)
+    finally:
+        db.close()
     yield
     # Kapatma
 
-# FastAPI uygulamasını başlat
+# FastAPI uygulamasini baslat
 app = FastAPI(
     title="Real Estate Scraper API",
     description="API for EmlakJet and HepsiEmlak scrapers",
@@ -56,7 +65,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - çerez kimlik doğrulaması için açık origin'ler gerekli
+# CORS - cerez kimlik dogrulamasi icin acik origin'ler gerekli
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 app.add_middleware(

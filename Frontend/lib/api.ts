@@ -2,9 +2,9 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-import type { ScrapeRequest, ScrapeResponse, Platform, ScrapeResult } from '@/types';
+import type { ScrapeRequest, ScrapeStartResponse, Platform, ScrapeResult } from '@/types';
 
-export async function startScrape(platform: Platform, data: ScrapeRequest): Promise<ScrapeResponse> {
+export async function startScrape(platform: Platform, data: ScrapeRequest): Promise<ScrapeStartResponse> {
     const response = await fetch(`${API_BASE_URL}/scrape/${platform}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -224,24 +224,22 @@ export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.
 // ==================== Görev Durumu API (Celery Entegrasyonu) ====================
 
 export interface TaskStatus {
-    task_id?: string;
-    status?: string;
-    is_running: boolean;
+    task_id: string;
+    status: 'queued' | 'running' | 'completed' | 'failed';
     message: string;
     progress: number;
     total: number;
     current: number;
     details: string;
+    error?: string | null;
+    platform?: 'emlakjet' | 'hepsiemlak';
     started_at?: string;
     updated_at?: string;
+    finished_at?: string | null;
 }
 
-export async function getTaskStatus(taskId?: string): Promise<TaskStatus> {
-    const url = taskId
-        ? `${API_BASE_URL}/status?task_id=${taskId}`
-        : `${API_BASE_URL}/status`;
-
-    const response = await fetch(url, {
+export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
         credentials: 'include',
     });
     if (!response.ok) {

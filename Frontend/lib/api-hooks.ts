@@ -59,12 +59,12 @@ export function useSubtypes(listingType: string, category: string, platform: str
 export function useTaskStatus(taskId: string | null) {
     return useQuery({
         queryKey: ['task-status', taskId],
-        queryFn: () => getTaskStatus(taskId || undefined),
+        queryFn: () => getTaskStatus(taskId!),
         enabled: !!taskId,
         refetchInterval: (query) => {
-            // Auto-poll when task is processing
+            // Auto-poll while task is still active
             const taskData = query.state.data as TaskStatus | undefined;
-            if (taskData?.status === 'processing' || taskData?.is_running) {
+            if (taskData?.status === 'queued' || taskData?.status === 'running') {
                 return 2000; // Poll every 2 seconds
             }
             return false; // Stop polling when finished

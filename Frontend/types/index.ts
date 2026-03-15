@@ -13,12 +13,10 @@ export interface ScrapeRequest {
   max_listings?: number;        // EmlakJet için ilan limiti
 }
 
-export interface ScrapeResponse {
-  status: string;
+export interface ScrapeStartResponse {
+  task_id: string;
+  status: 'queued';
   message: string;
-  data_count: number;
-  output_files: string[];
-  task_id?: string;  // Celery task ID for tracking
 }
 
 export type Platform = 'emlakjet' | 'hepsiemlak';

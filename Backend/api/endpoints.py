@@ -1,43 +1,28 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
-from fastapi.responses import FileResponse, JSONResponse
-from api.schemas import ScrapeRequest, ScrapeResponse, SUPPORTED_SCRAPING_METHODS
-from core.driver_manager import DriverManager
-from core.config import get_emlakjet_config, get_hepsiemlak_config
-from api.status import task_status
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+
+from api.schemas import (
+    ActiveTasksResponse,
+    ScrapeRequest,
+    ScrapeStartResponse,
+    SUPPORTED_SCRAPING_METHODS,
+    TaskStatusResponse,
+)
+from core.config import get_emlakjet_config, get_hepsiemlak_config
+from core.task_status import get_task_status_store
 from database.connection import get_db
 from database import crud
-from database.models import Listing, Location, ScrapeSession, FailedPage, PriceHistory
-import logging
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-from pathlib import Path
-import json
-import os
+from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
+from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
 import io
-import redis
-
-# Celery import'ları
-from celery.result import AsyncResult
-from tasks.scraping_tasks import scrape_hepsiemlak_task, scrape_emlakjet_task
-from celery_app import celery_app
-
-# Görev durumu için Redis istemcisi
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-redis_client = None
-
-def get_redis_client():
-    """Redis istemcisini al veya oluştur"""
-    global redis_client
-    if redis_client is None:
-        try:
-            redis_client = redis.from_url(REDIS_URL)
-            redis_client.ping()  # Test connection
-        except Exception as e:
-            logging.warning(f"Redis connection failed: {e}. Falling back to in-memory status.")
-            return None
-    return redis_client
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # İlçe verileri dizini
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
@@ -45,11 +30,6 @@ DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
 # İlçe GeoJSON verileri için bellek içi önbellek
 _districts_cache: Dict[str, Any] = {}
 _districts_index: Optional[Dict[str, Any]] = None
-
-# Scraper import'ları (temiz import için refactor gerekebilir)
-# Dinamik import veya refactor sonrası doğrudan import yapılacak
-# from scrapers.emlakjet.main import EmlakJetScraper
-# from scrapers.hepsiemlak.main import HepsiemlakScraper
 
 router = APIRouter()
 logger = logging.getLogger("api")
@@ -86,18 +66,35 @@ def _validate_scraping_method_or_raise(scraping_method: str) -> None:
             ),
         )
 
+
+def _require_task_status_store():
+    try:
+        return get_task_status_store()
+    except Exception as exc:
+        logger.error("Task status store unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="Task status store unavailable") from exc
+
+
+def _enqueue_scrape_task(task_callable, *, kwargs: Dict[str, Any], message: str, platform: str) -> TaskStatusResponse:
+    store = _require_task_status_store()
+    task_id = uuid4().hex
+    task_callable.apply_async(kwargs=kwargs, queue="scraping", task_id=task_id)
+    payload = store.create_queued_task(task_id, message=message, platform=platform)
+    return TaskStatusResponse(**payload)
+
+
 @router.get("/config/categories")
 async def get_categories():
     """Tüm platform kategorilerini getir"""
     emlakjet = get_emlakjet_config()
     hepsiemlak = get_hepsiemlak_config()
-    
+
     def format_categories(categories_dict):
         return [
             {"id": k, "name": CATEGORY_NAMES.get(k, k.replace("_", " ").title())}
             for k in categories_dict.keys()
         ]
-    
+
     return {
         "emlakjet": {
             "satilik": format_categories(emlakjet.categories["satilik"]),
@@ -109,15 +106,15 @@ async def get_categories():
         }
     }
 
+
 @router.get("/config/subtypes")
 async def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
     """Belirli kategori için alt tipleri JSON'dan oku"""
     if platform == "emlakjet":
-        from scrapers.emlakjet.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
+        from scrapers.emlakjet.subtype_fetcher import SUBCATEGORIES_JSON_PATH, fetch_subtypes
     else:
-        from scrapers.hepsiemlak.subtype_fetcher import fetch_subtypes, SUBCATEGORIES_JSON_PATH
+        from scrapers.hepsiemlak.subtype_fetcher import SUBCATEGORIES_JSON_PATH, fetch_subtypes
 
-    # JSON dosyasından oku
     subtypes = fetch_subtypes(listing_type, category)
 
     if not SUBCATEGORIES_JSON_PATH.exists():
@@ -128,215 +125,14 @@ async def get_subtypes(listing_type: str, category: str, platform: str = "hepsie
 
     return {"subtypes": subtypes, "cached": True}
 
-def run_emlakjet_task(request: ScrapeRequest):
-    manager = None
-    try:
-        _validate_scraping_method_or_raise(request.scraping_method)
-        config = get_emlakjet_config()
-        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
 
-        # Durumu sıfırla ve başlat
-        task_status.reset()
-        task_status.set_running(True)
-        task_status.update("EmlakJet scraper başlatılıyor...", progress=0)
-
-        def progress_callback(message, current=0, total=0, progress=0):
-            task_status.update(message=message, current=current, total=total, progress=progress)
-
-        # Girdilere göre temel URL oluştur
-        # subtype_path varsa onu kullan, yoksa ana kategori
-        if request.subtype_path:
-            base_url = config.base_url + request.subtype_path
-            logger.info(f"Using subtype path: {request.subtype_path}")
-        else:
-            category_path = config.categories[request.listing_type].get(request.category, '')
-            base_url = config.base_url + category_path
-
-        if request.scraping_method == "selenium":
-            from scrapers.emlakjet.main import EmlakJetScraper
-
-            manager = DriverManager(proxy_url=go_proxy_url if request.proxy_enabled else None)
-            driver = manager.start()
-            scraper = EmlakJetScraper(
-                driver=driver,
-                base_url=base_url,
-                category=request.category,
-                listing_type=request.listing_type,
-                subtype_path=request.subtype_path
-            )
-        else:
-            from scrapers.emlakjet.scrapling_scraper import EmlakJetScraplingScraper
-
-            scraper = EmlakJetScraplingScraper(
-                listing_type=request.listing_type,
-                category=request.category,
-                subtype_path=request.subtype_path,
-                selected_cities=request.cities,
-                selected_districts=request.districts,
-                scraping_method=request.scraping_method,
-                headless=True,
-                proxy_enabled=request.proxy_enabled,
-                proxy_url=go_proxy_url,
-            )
-
-        print(
-            "DEBUG API: "
-            f"listing_type={request.listing_type}, "
-            f"category={request.category}, "
-            f"subtype_path={request.subtype_path}, "
-            f"scraping_method={request.scraping_method}, "
-            f"proxy_enabled={request.proxy_enabled}, "
-            f"cities={request.cities}"
-        )
-
-        if hasattr(scraper, 'start_scraping_api'):
-            scraper.start_scraping_api(
-                cities=request.cities,
-                districts=request.districts,
-                max_listings=request.max_listings or 0,
-                max_pages=request.max_pages,
-                progress_callback=progress_callback
-            )
-        else:
-            logger.warning("Scraper api method not found (Refactor needed)")
-
-    except Exception as e:
-        logger.error(f"EmlakJet task error: {e}")
-    finally:
-        task_status.set_running(False)
-        task_status.update("İşlem tamamlandı", progress=100)
-        if manager:
-            manager.stop()
-
-def run_hepsiemlak_task(request: ScrapeRequest):
-    from core.failed_pages_tracker import failed_pages_tracker
-    from database.connection import get_db_session
-    from database import crud
-
-    manager = None
-    db = None
-    scrape_session = None
-    scraper = None
-
-    try:
-        _validate_scraping_method_or_raise(request.scraping_method)
-        go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
-        db = get_db_session()
-
-        # Takipçileri sıfırla
-        task_status.reset()
-        failed_pages_tracker.reset()
-
-        task_status.set_running(True)
-        task_status.update("HepsiEmlak scraper başlatılıyor...", progress=0)
-
-        # Alt kategori adını çıkar
-        alt_kategori = None
-        if request.subtype_path:
-            parts = request.subtype_path.strip('/').split('/')
-            if len(parts) >= 2:
-                alt_kategori = parts[-1].replace('-', '_')
-
-        # Veritabanında scrape session oluştur
-        scrape_session = crud.create_scrape_session(
-            db,
-            platform="hepsiemlak",
-            kategori=request.category,
-            ilan_tipi=request.listing_type,
-            alt_kategori=alt_kategori,
-            target_cities=request.cities,
-            target_districts=request.districts
-        )
-        db.commit()
-        logger.info(f"ScrapeSession created: ID={scrape_session.id}")
-
-        def progress_callback(message, current=0, total=0, progress=0):
-            task_status.update(message=message, current=current, total=total, progress=progress)
-
-        if request.scraping_method == "selenium":
-            from scrapers.hepsiemlak.main import HepsiemlakScraper
-            manager = DriverManager(proxy_url=go_proxy_url if request.proxy_enabled else None)
-            driver = manager.start()
-
-            scraper = HepsiemlakScraper(
-                driver=driver,
-                listing_type=request.listing_type,
-                category=request.category,
-                subtype_path=request.subtype_path,
-                selected_cities=request.cities,
-                selected_districts=request.districts
-            )
-        else:
-            from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
-
-            scraper = HepsiemlakScraplingScraper(
-                listing_type=request.listing_type,
-                category=request.category,
-                subtype_path=request.subtype_path,
-                selected_cities=request.cities,
-                selected_districts=request.districts,
-                scraping_method=request.scraping_method,
-                headless=True,
-                proxy_enabled=request.proxy_enabled,
-                proxy_url=go_proxy_url,
-            )
-
-        # Scraper'a DB session'ı ve session_id'yi ekle
-        scraper.db = db
-        scraper.scrape_session_id = scrape_session.id
-
-        print(
-            "DEBUG API: "
-            f"listing_type={request.listing_type}, "
-            f"category={request.category}, "
-            f"subtype_path={request.subtype_path}, "
-            f"scraping_method={request.scraping_method}, "
-            f"proxy_enabled={request.proxy_enabled}, "
-            f"cities={request.cities}"
-        )
-
-        if hasattr(scraper, 'start_scraping_api'):
-            scraper.start_scraping_api(max_pages=request.max_pages, progress_callback=progress_callback)
-        else:
-            logger.warning("Scraper api method not found (Refactor needed)")
-
-        # Scrape tamamlandıktan sonra session'ı güncelle
-        if scrape_session:
-            # Scraper'dan toplam ilan sayısını al
-            total_listings = getattr(scraper, 'total_scraped_count', 0)
-            new_listings = getattr(scraper, 'new_listings_count', 0)
-            duplicate_listings = getattr(scraper, 'duplicate_count', 0)
-
-            crud.update_scrape_session(
-                db,
-                scrape_session.id,
-                total_listings=total_listings,
-                new_listings=new_listings,
-                duplicate_listings=duplicate_listings
-            )
-            crud.complete_scrape_session(db, scrape_session.id, status="completed")
-            db.commit()
-            logger.info(f"ScrapeSession completed: ID={scrape_session.id}, total={total_listings}")
-
-    except Exception as e:
-        logger.error(f"HepsiEmlak task error: {e}")
-        if scrape_session and db:
-            crud.complete_scrape_session(db, scrape_session.id, status="failed", error_message=str(e))
-            db.commit()
-    finally:
-        task_status.set_running(False)
-        task_status.update("İşlem tamamlandı", progress=100)
-        if db:
-            db.close()
-        if manager:
-            manager.stop()
-
-@router.post("/scrape/emlakjet", response_model=ScrapeResponse)
+@router.post("/scrape/emlakjet", response_model=ScrapeStartResponse)
 async def scrape_emlakjet(request: ScrapeRequest):
-    """Celery ile EmlakJet tarama görevi başlat"""
+    """Celery ile EmlakJet tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
-    # Görevi Celery'ye gönder
-    task = scrape_emlakjet_task.apply_async(
+
+    task_status = _enqueue_scrape_task(
+        scrape_emlakjet_task,
         kwargs={
             "listing_type": request.listing_type,
             "category": request.category,
@@ -348,46 +144,24 @@ async def scrape_emlakjet(request: ScrapeRequest):
             "scraping_method": request.scraping_method,
             "proxy_enabled": request.proxy_enabled,
         },
-        queue="scraping"
+        message="EmlakJet taraması sıraya alındı.",
+        platform="emlakjet",
     )
 
-    # Redis'te görev durumunu başlat
-    r = get_redis_client()
-    if r:
-        initial_status = {
-            "task_id": task.id,
-            "status": "pending",
-            "message": "EmlakJet taraması başlatılıyor...",
-            "progress": 0,
-            "current": 0,
-            "total": 0,
-            "details": "",
-            "started_at": datetime.now().isoformat(),
-        }
-        r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
-
-    # Geriye dönük uyumluluk için bellek içi durumu da güncelle
-    task_status.reset()
-    task_status.set_running(True)
-    task_status.update("EmlakJet taraması başlatılıyor...", progress=0)
-
-    return ScrapeResponse(
-        status="accepted",
-        message="EmlakJet scraping task started",
-        task_id=task.id,
-        data_count=0,
-        output_files=[]
+    return ScrapeStartResponse(
+        task_id=task_status.task_id,
+        status=task_status.status,
+        message=task_status.message,
     )
 
-@router.post("/scrape/hepsiemlak", response_model=ScrapeResponse)
+
+@router.post("/scrape/hepsiemlak", response_model=ScrapeStartResponse)
 async def scrape_hepsiemlak(request: ScrapeRequest):
-    """Celery ile HepsiEmlak tarama görevi başlat"""
+    """Celery ile HepsiEmlak tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
-    # Şehirleri doğrula
-    if not request.cities or len(request.cities) == 0:
+    if not request.cities:
         raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
 
-    # İlçeler belirtildiyse doğrula
     if request.districts:
         for city, districts in request.districts.items():
             if city not in request.cities:
@@ -396,8 +170,8 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
                     detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok"
                 )
 
-    # Görevi Celery'ye gönder
-    task = scrape_hepsiemlak_task.apply_async(
+    task_status = _enqueue_scrape_task(
+        scrape_hepsiemlak_task,
         kwargs={
             "listing_type": request.listing_type,
             "category": request.category,
@@ -408,36 +182,34 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
             "scraping_method": request.scraping_method,
             "proxy_enabled": request.proxy_enabled,
         },
-        queue="scraping"
+        message="HepsiEmlak taraması sıraya alındı.",
+        platform="hepsiemlak",
     )
 
-    # Redis'te görev durumunu başlat
-    r = get_redis_client()
-    if r:
-        initial_status = {
-            "task_id": task.id,
-            "status": "pending",
-            "message": "HepsiEmlak taraması başlatılıyor...",
-            "progress": 0,
-            "current": 0,
-            "total": 0,
-            "details": "",
-            "started_at": datetime.now().isoformat(),
-        }
-        r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
-
-    # Geriye dönük uyumluluk için bellek içi durumu da güncelle
-    task_status.reset()
-    task_status.set_running(True)
-    task_status.update("HepsiEmlak taraması başlatılıyor...", progress=0)
-
-    return ScrapeResponse(
-        status="accepted",
-        message="HepsiEmlak scraping task started",
-        task_id=task.id,
-        data_count=0,
-        output_files=[]
+    return ScrapeStartResponse(
+        task_id=task_status.task_id,
+        status=task_status.status,
+        message=task_status.message,
     )
+
+
+@router.get("/tasks/active", response_model=ActiveTasksResponse)
+async def get_active_tasks():
+    """Tüm aktif görevleri al."""
+    store = _require_task_status_store()
+    tasks = [TaskStatusResponse(**item) for item in store.get_active_tasks()]
+    return ActiveTasksResponse(active_tasks=tasks, count=len(tasks))
+
+
+@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(task_id: str):
+    """Belirli bir scraping görevinin kanonik durumunu al."""
+    store = _require_task_status_store()
+    task = store.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return TaskStatusResponse(**task)
+
 
 @router.get("/analytics/prices")
 async def get_price_analytics(
@@ -447,12 +219,12 @@ async def get_price_analytics(
     db: Session = Depends(get_db)
 ):
     """Veritabanından fiyat verilerini çek - grafikler için (filtrelenebilir)"""
-    # Görüntüleme adları için platform/kategori/ilan tipi eşlemeleri
+    # Goruntuleme adlari icin platform/kategori/ilan tipi eslemeleri
     platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
     category_map = {"konut": "Konut", "arsa": "Arsa", "isyeri": "İşyeri", "devremulk": "Devremülk"}
     listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
 
-    # Filtreleme için görüntüleme adlarını DB değerlerine çevir
+    # Filtreleme icin goruntuleme adlarini DB degerlerine cevir
     db_platform = None
     db_category = None
     db_listing_type = None
@@ -487,7 +259,7 @@ async def get_price_analytics(
         ilan_tipi=db_listing_type
     )
 
-    # Görüntüleme adlarına dönüştür
+    # Goruntuleme adlarina donustur
     prices = []
     for p in result["prices"]:
         prices.append({
@@ -509,8 +281,8 @@ async def get_city_analytics(
     subtype: str = None,
     db: Session = Depends(get_db)
 ):
-    """Veritabanından belirli bir şehrin ilanlarını ve istatistiklerini döndür"""
-    # Görüntüleme adlarını DB değerlerine çevir
+    """Veritabanindan belirli bir sehrin ilanlarini ve istatistiklerini dondur."""
+    # Goruntuleme adlarini DB degerlerine cevir
     db_platform = None
     db_category = None
     db_listing_type = None
@@ -551,7 +323,7 @@ async def get_listing_statistics(
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
     import statistics
 
-    # Sorgu oluştur
+    # Sorgu olustur
     query = db.query(Listing.fiyat).filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
 
     # Filtreleri uygula
@@ -610,23 +382,23 @@ async def get_listing_statistics(
         "max": round(max(prices), 2)
     }
 
-    # Yüzdelik tabanlı gruplama ile dinamik fiyat aralığı dağılımı
+    # Yuzdelik tabanli gruplama ile dinamik fiyat araligi dagilimi
     num_bins = 5
     bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
 
-    # Benzersiz kenarları sağla
+    # Benzersiz kenarlari sagla
     unique_edges = []
     for e in bin_edges:
         if not unique_edges or e > unique_edges[-1]:
             unique_edges.append(e)
 
-    # Yeterli benzersiz kenar yoksa eşit genişlikli gruplara dön
+    # Yeterli benzersiz kenar yoksa esit genislikli gruplara don
     if len(unique_edges) < 3:
         min_p, max_p = min(prices), max(prices)
         bin_width = (max_p - min_p) / num_bins
         unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
 
-    # Her gruptaki öğeleri say
+    # Her gruptaki ogeleri say
     price_ranges = []
     for i in range(len(unique_edges) - 1):
         low = unique_edges[i]
@@ -643,7 +415,7 @@ async def get_listing_statistics(
 
         label = f"{format_price(low)} - {format_price(high)}"
 
-        # Aralıktaki öğeleri say
+        # Araliktaki ogeleri say
         if i == len(unique_edges) - 2:  # Son grup üst sınırı dahil eder
             count = sum(1 for p in prices if low <= p <= high)
         else:
@@ -740,7 +512,7 @@ async def get_listings_preview(
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
-    """Veritabanından filtrelenmiş ilanların önizlemesini döndür"""
+    """Veritabanindan filtrelenmis ilanlarin onizlemesini dondur."""
     listings, total = crud.get_listings(
         db,
         platform=platform,
@@ -754,90 +526,6 @@ async def get_listings_preview(
 
     data = [l.to_dict() for l in listings]
     return {"data": data, "total": total, "showing": len(data)}
-
-@router.get("/status")
-async def get_status(task_id: Optional[str] = None):
-    """Görev durumunu al - Redis ve bellek içi durum desteği"""
-    r = get_redis_client()
-
-    # task_id belirtildiyse o görevi al
-    if task_id and r:
-        key = f"scrape_task:{task_id}"
-        data = r.get(key)
-        if data:
-            status_data = json.loads(data)
-            # Frontend uyumluluğu için status'ü is_running'e eşle
-            status_data["is_running"] = status_data.get("status") in ["pending", "running"]
-            return status_data
-        else:
-            # Task ID verildi ama Redis'te bulunamadı - henüz başlamamış demek
-            # "pending" olarak dön, başka task'ın status'unu dönme!
-            return {
-                "task_id": task_id,
-                "status": "failed",
-                "is_running": False,
-                "message": "Task bulunamadi veya sona erdi.",
-                "progress": 0,
-                "current": 0,
-                "total": 0,
-                "details": ""
-            }
-
-    # task_id yoksa: Redis'ten aktif görevi bul
-    if r:
-        for key in r.scan_iter("scrape_task:*"):
-            data = r.get(key)
-            if data:
-                status_data = json.loads(data)
-                if status_data.get("status") in ["pending", "running"]:
-                    status_data["is_running"] = True
-                    return status_data
-
-    # Bellek içi duruma geri dön
-    return task_status.to_dict()
-
-
-@router.get("/task/{task_id}")
-async def get_task_status(task_id: str):
-    """Belirli bir Celery görevi için detaylı durum bilgisi al"""
-    r = get_redis_client()
-
-    # Redis'ten al
-    if r:
-        key = f"scrape_task:{task_id}"
-        data = r.get(key)
-        if data:
-            status_data = json.loads(data)
-            status_data["is_running"] = status_data.get("status") in ["pending", "running"]
-            return status_data
-
-    # Doğrudan Celery'den al
-    result = AsyncResult(task_id, app=celery_app)
-
-    return {
-        "task_id": task_id,
-        "status": result.status,
-        "is_running": result.status in ["PENDING", "STARTED", "PROGRESS"],
-        "result": result.result if result.ready() else None,
-        "info": result.info if hasattr(result, 'info') else None
-    }
-
-
-@router.get("/tasks/active")
-async def get_active_tasks():
-    """Tüm aktif/bekleyen görevleri al"""
-    r = get_redis_client()
-    active_tasks = []
-
-    if r:
-        for key in r.scan_iter("scrape_task:*"):
-            data = r.get(key)
-            if data:
-                status_data = json.loads(data)
-                if status_data.get("status") in ["pending", "running"]:
-                    active_tasks.append(status_data)
-
-    return {"active_tasks": active_tasks, "count": len(active_tasks)}
 
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):
@@ -922,14 +610,14 @@ async def get_scrape_sessions(
 
 @router.get("/cities")
 async def get_cities(db: Session = Depends(get_db)):
-    """Veritabanındaki tüm şehirleri listele"""
+    """Veritabanindaki tum sehirleri listele."""
     cities = crud.get_all_cities(db)
     return {"cities": cities}
 
 
 @router.get("/cities/{city}/districts")
 async def get_districts(city: str, db: Session = Depends(get_db)):
-    """Bir şehrin ilçelerini listele"""
+    """Bir sehrin ilcelerini listele."""
     districts = crud.get_districts_by_city(db, city)
     return {"city": city, "districts": districts}
 
@@ -947,7 +635,7 @@ async def export_to_excel(
     import pandas as pd
     from datetime import datetime as dt
 
-    # İlanları al (dışa aktarım için maks 10000)
+    # Ilanlari al (disa aktarim icin maks 10000)
     listings, total = crud.get_listings(
         db,
         platform=platform,
@@ -962,7 +650,7 @@ async def export_to_excel(
     if not listings:
         raise HTTPException(status_code=404, detail="Dışa aktarılacak veri bulunamadı")
 
-    # DataFrame'e dönüştür
+    # DataFrame'e donustur
     data = []
     for l in listings:
         row = {
@@ -987,7 +675,7 @@ async def export_to_excel(
 
     df = pd.DataFrame(data)
 
-    # Bellekte oluştur, diske yazmadan stream olarak gönder
+    # Bellekte olustur, diske yazmadan stream olarak gonder
     from fastapi.responses import StreamingResponse
 
     buffer = io.BytesIO()
@@ -1019,7 +707,7 @@ async def delete_listing_group(
 
     query = db.query(Listing)
 
-    # Platform filtresi (görüntülenen adı veritabanı adına dönüştür)
+    # Platform filtresi (goruntulenen adi veritabani adina donustur)
     if platform:
         platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
         db_platform = platform_map.get(platform, platform.lower())
@@ -1040,7 +728,7 @@ async def delete_listing_group(
 
     # Alt kategori filtresi
     if alt_kategori:
-        # "Cafe Bar" -> "cafe_bar" dönüşümü
+        # "Cafe Bar" -> "cafe_bar" donusumu
         db_alt = alt_kategori.lower().replace(' ', '_')
         query = query.filter(Listing.alt_kategori == db_alt)
 
@@ -1081,10 +769,10 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": f"İlan {listing_id} silindi"}
 
 
-# ==================== İLÇE GeoJSON ENDPOINTLER ====================
+# ==================== ILCE GEOJSON ENDPOINTLER ====================
 
 def _load_districts_index() -> Dict[str, Any]:
-    """İlçe index.json dosyasını yükle ve önbelleğe al"""
+    """Ilce index.json dosyasini yukle ve onbellege al."""
     global _districts_index
     if _districts_index is not None:
         return _districts_index
@@ -1100,8 +788,8 @@ def _load_districts_index() -> Dict[str, Any]:
 
 
 def _load_district_geojson(province_name: str) -> Dict[str, Any]:
-    """İl GeoJSON verisini yükle ve önbelleğe al"""
-    # Önce önbellekte kontrol et
+    """Il GeoJSON verisini yukle ve onbellege al."""
+    # Once onbellekte kontrol et
     if province_name in _districts_cache:
         return _districts_cache[province_name]
 
@@ -1123,7 +811,7 @@ def _load_district_geojson(province_name: str) -> Dict[str, Any]:
     with open(filepath, "r", encoding="utf-8") as f:
         geojson_data = json.load(f)
 
-    # Önbelleğe al
+    # Onbellege al
     _districts_cache[province_name] = geojson_data
 
     return geojson_data
@@ -1160,7 +848,7 @@ async def get_district_info(province_name: str):
 
 @router.post("/districts/cache/clear")
 async def clear_districts_cache():
-    """Bellek içi ilçe önbelleğini temizle"""
+    """Bellek ici ilce onbelleğini temizle."""
     global _districts_cache, _districts_index
     cache_size = len(_districts_cache)
     _districts_cache = {}
@@ -1170,7 +858,7 @@ async def clear_districts_cache():
 
 @router.get("/districts/cache/status")
 async def get_cache_status():
-    """Önbellek durumunu getir"""
+    """Onbellek durumunu getir."""
     return {
         "cached_provinces": list(_districts_cache.keys()),
         "cache_size": len(_districts_cache),

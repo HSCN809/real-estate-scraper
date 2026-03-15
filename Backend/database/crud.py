@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Veritabanı CRUD işlemleri"""
+"""Veritabani CRUD islemleri."""
 
 import re
 import hashlib
@@ -10,6 +10,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from sqlalchemy.exc import IntegrityError
 
+from core.task_status import (
+    SCRAPE_SESSION_STATUS_COMPLETED,
+    SCRAPE_SESSION_STATUS_RUNNING,
+    SCRAPE_SESSION_STATUS_VALUES,
+    normalize_scrape_session_status,
+)
 from .models import Location, Listing, ScrapeSession, FailedPage, PriceHistory
 
 
@@ -26,7 +32,7 @@ def compute_content_hash(data: Dict[str, Any]) -> str:
         'emlak_ofisi', 'tip'
     ]
 
-    # İçerik string'i oluştur
+    # Icerik string'ini olustur
     content_parts = []
     for field in hash_fields:
         value = data.get(field)
@@ -50,7 +56,7 @@ def get_or_create_location(
     ilce: Optional[str] = None,
     mahalle: Optional[str] = None
 ) -> Location:
-    """Mevcut lokasyonu getir veya yeni oluştur"""
+    """Mevcut lokasyonu getir veya yeni olustur."""
     # Girdileri normalize et
     il = il.strip() if il else None
     ilce = ilce.strip() if ilce else None
@@ -59,7 +65,7 @@ def get_or_create_location(
     if not il:
         il = "Belirtilmemiş"
 
-    # Mevcut olanı bulmaya çalış
+    # Mevcut olani bulmaya calis
     location = db.query(Location).filter(
         Location.il == il,
         Location.ilce == ilce if ilce else Location.ilce.is_(None),
@@ -69,7 +75,7 @@ def get_or_create_location(
     if location:
         return location
 
-    # Yeni oluştur
+    # Yeni olustur
     location = Location(il=il, ilce=ilce, mahalle=mahalle)
     db.add(location)
 
@@ -77,7 +83,7 @@ def get_or_create_location(
         db.flush()  # Commit etmeden ID al
     except IntegrityError:
         db.rollback()
-        # Yarış durumu - yeni oluşturulanı getir
+        # Yaris durumu - yeni olusturulani getir
         location = db.query(Location).filter(
             Location.il == il,
             Location.ilce == ilce if ilce else Location.ilce.is_(None),
@@ -88,13 +94,13 @@ def get_or_create_location(
 
 
 def get_all_cities(db: Session) -> List[str]:
-    """Tüm benzersiz şehir adlarını getir"""
+    """Tum benzersiz sehir adlarini getir."""
     result = db.query(Location.il).distinct().order_by(Location.il).all()
     return [r[0] for r in result if r[0]]
 
 
 def get_districts_by_city(db: Session, city: str) -> List[str]:
-    """Bir şehrin tüm ilçelerini getir"""
+    """Bir sehrin tum ilcelerini getir."""
     result = db.query(Location.ilce).filter(
         Location.il == city,
         Location.ilce.isnot(None)
@@ -114,7 +120,7 @@ def parse_price(price_str: str) -> Optional[float]:
         val_str = re.sub(r'\s+', '', val_str)
         val_str = val_str.replace('TL', '').replace('₺', '')
 
-        # Türkçe sayı formatını işle
+        # Turkce sayi formatini isle
         if ',' in val_str and '.' in val_str:
             val_str = val_str.replace('.', '').replace(',', '.')
         elif '.' in val_str and val_str.count('.') > 1:
@@ -139,7 +145,7 @@ def create_listing(
     alt_kategori: Optional[str] = None,
     scrape_session_id: Optional[int] = None
 ) -> Tuple[Optional[Listing], bool]:
-    """Yeni ilan oluştur, (ilan, yeni_mi) döndür"""
+    """Yeni ilan olustur, (ilan, yeni_mi) dondur."""
     # Tekrar kontrolü için ilan_url al
     ilan_url = data.get('ilan_linki') or data.get('ilan_url')
 
@@ -149,7 +155,7 @@ def create_listing(
         if existing:
             return (None, False)  # Tekrar
 
-    # Lokasyon al veya oluştur
+    # Lokasyon al veya olustur
     il = data.get('il')
     ilce = data.get('ilce')
     mahalle = data.get('mahalle')
@@ -158,7 +164,7 @@ def create_listing(
         # Fallback: lokasyon alanından parse et
         lokasyon = data.get('lokasyon', '')
         if lokasyon:
-            # EmlakJet formatı: "İstanbul / Kadıköy / Caferağa"
+            # EmlakJet formati: "İstanbul / Kadıköy / Caferağa"
             # HepsiEmlak formatı: "İstanbul, Kadıköy"
             if '/' in lokasyon:
                 parts = [p.strip() for p in lokasyon.split('/')]
@@ -174,7 +180,7 @@ def create_listing(
 
     location = get_or_create_location(db, il, ilce, mahalle)
 
-    # Fiyatı ayrıştır
+    # Fiyati ayristir
     fiyat_text = data.get('fiyat', '')
     fiyat = parse_price(fiyat_text)
 
@@ -190,7 +196,7 @@ def create_listing(
         if field in data and data[field]:
             details[field] = data[field]
 
-    # İlan tarihini ayrıştır
+    # Ilan tarihini ayristir
     ilan_tarihi = None
     if data.get('ilan_tarihi'):
         try:
@@ -208,7 +214,7 @@ def create_listing(
     # İçerik hash'i hesapla
     content_hash = compute_content_hash(data)
 
-    # İlan oluştur
+    # Ilan olustur
     listing = Listing(
         baslik=data.get('baslik', 'Başlık Yok'),
         fiyat=fiyat,
@@ -251,7 +257,7 @@ def upsert_listing(
     ilan_url = data.get('ilan_linki') or data.get('ilan_url')
 
     if not ilan_url:
-        # URL yoksa tekrar kontrolü yapılamaz - doğrudan oluştur
+        # URL yoksa tekrar kontrolu yapilamaz - dogrudan olustur
         listing, is_new = create_listing(db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id)
         if listing:
             listing.content_hash = compute_content_hash(data)
@@ -261,7 +267,7 @@ def upsert_listing(
     existing = db.query(Listing).filter(Listing.ilan_url == ilan_url).first()
 
     if not existing:
-        # Yeni ilan - oluştur
+        # Yeni ilan - olustur
         listing, is_new = create_listing(db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id)
         if listing:
             listing.content_hash = compute_content_hash(data)
@@ -272,21 +278,21 @@ def upsert_listing(
     new_fiyat_text = data.get('fiyat', '')
     new_fiyat = parse_price(new_fiyat_text)
 
-    # Fiyat değişikliği kontrolü
+    # Fiyat degisikligi kontrolu
     price_changed = False
     old_price = existing.fiyat
     if new_fiyat is not None and existing.fiyat != new_fiyat:
         price_changed = True
 
-    # Hash kullanarak içerik değişikliği kontrolü
+    # Hash kullanarak icerik degisikligi kontrolu
     content_changed = (existing.content_hash != new_content_hash)
 
-    # Değişiklik yoksa güncellemeyi atla
+    # Degisiklik yoksa guncellemeyi atla
     if not price_changed and not content_changed:
         existing.scrape_session_id = scrape_session_id
         return (existing, 'unchanged')
 
-    # Uygunsa fiyat değişikliğini kaydet
+    # Uygunsa fiyat degisikligini kaydet
     if price_changed and old_price is not None and new_fiyat is not None:
         price_change = new_fiyat - old_price
         price_change_percent = (price_change / old_price) * 100 if old_price > 0 else 0
@@ -407,7 +413,7 @@ def create_scrape_session(
     target_cities: Optional[List[str]] = None,
     target_districts: Optional[Dict[str, List[str]]] = None
 ) -> ScrapeSession:
-    """Yeni tarama oturumu oluştur"""
+    """Yeni tarama oturumu olustur."""
     session = ScrapeSession(
         platform=platform,
         kategori=kategori,
@@ -415,7 +421,7 @@ def create_scrape_session(
         alt_kategori=alt_kategori,
         target_cities=target_cities,
         target_districts=target_districts,
-        status="running"
+        status=SCRAPE_SESSION_STATUS_RUNNING
     )
     db.add(session)
     db.flush()
@@ -443,15 +449,19 @@ def update_scrape_session(
 def complete_scrape_session(
     db: Session,
     session_id: int,
-    status: str = "completed",
+    status: str = SCRAPE_SESSION_STATUS_COMPLETED,
     error_message: Optional[str] = None
 ) -> Optional[ScrapeSession]:
-    """Tarama oturumunu tamamlandı olarak işaretle"""
+    """Tarama oturumunu tamamlandi olarak isaretle."""
     session = db.query(ScrapeSession).filter(ScrapeSession.id == session_id).first()
     if not session:
         return None
 
-    session.status = status
+    normalized_status = normalize_scrape_session_status(status)
+    if normalized_status not in SCRAPE_SESSION_STATUS_VALUES:
+        raise ValueError(f"Unsupported scrape session status: {status}")
+
+    session.status = normalized_status
     session.completed_at = datetime.utcnow()
     if session.started_at:
         session.duration_seconds = int((session.completed_at - session.started_at).total_seconds())
@@ -460,6 +470,21 @@ def complete_scrape_session(
 
     db.flush()
     return session
+
+
+
+def normalize_legacy_scrape_session_statuses(db: Session) -> int:
+    """Eski status değerlerini kanonik sete dönüştür."""
+    sessions = db.query(ScrapeSession).all()
+    updated = 0
+    for session in sessions:
+        normalized = normalize_scrape_session_status(session.status)
+        if normalized != session.status:
+            session.status = normalized
+            updated += 1
+    if updated:
+        db.flush()
+    return updated
 
 
 def get_scrape_sessions(
@@ -546,10 +571,10 @@ def get_city_analytics(
     kategori: Optional[str] = None,
     ilan_tipi: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Belirli bir şehrin detaylı analizlerini getir"""
+    """Belirli bir sehrin detayli analizlerini getir."""
     import statistics
 
-    # Karşılaştırma için şehir adını normalize et
+    # Karsilastirma icin sehir adini normalize et
     def normalize_turkish(text):
         replacements = {
             'ı': 'i', 'İ': 'i', 'ş': 's', 'Ş': 's', 'ğ': 'g', 'Ğ': 'g',
@@ -561,7 +586,7 @@ def get_city_analytics(
 
     city_normalized = normalize_turkish(city_name)
 
-    # Eşleşen lokasyonu bul
+    # Eslesen lokasyonu bul
     locations = db.query(Location).all()
     matching_location_ids = []
     for loc in locations:
@@ -632,7 +657,7 @@ def get_city_analytics(
         "max": round(max(prices), 2)
     }
 
-    # Fiyat aralığı dağılımı
+    # Fiyat araligi dagilimi
     num_bins = 5
     bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
 
@@ -707,8 +732,8 @@ def get_stats_summary(db: Session) -> Dict[str, Any]:
 
 
 def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
-    """Frontend için şehir bazlı gruplanmış sonuçları getir"""
-    # Kategori/ilan tipi görüntüleme eşlemeleri
+    """Frontend icin sehir bazli gruplanmis sonuclari getir."""
+    # Kategori/ilan tipi goruntuleme eslemeleri
     platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
     category_map = {"konut": "Konut", "arsa": "Arsa", "isyeri": "İşyeri", "devremulk": "Devremülk",
                     "turistik_isletme": "Turistik İşletme", "turistik_tesis": "Turistik Tesis"}
@@ -750,7 +775,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
         date_str = row.last_date.strftime('%d.%m.%Y %H:%M') if row.last_date else "-"
         date_iso = row.last_date.isoformat() if row.last_date else None
 
-        # Benzersiz ID oluştur
+        # Benzersiz ID olustur
         result_id = f"db_{row.platform}_{row.kategori}_{row.ilan_tipi}_{city}_{district or 'all'}_{idx}"
 
         results.append({
@@ -774,7 +799,7 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
     return results
 
 
-# ============== Başarısız Sayfa CRUD ==============
+# ============== Basarisiz Sayfa CRUD ==============
 
 def create_failed_page(
     db: Session,
@@ -785,7 +810,7 @@ def create_failed_page(
     district: Optional[str] = None,
     error_message: Optional[str] = None
 ) -> FailedPage:
-    """Başarısız sayfayı kaydet"""
+    """Basarisiz sayfayi kaydet."""
     failed = FailedPage(
         scrape_session_id=scrape_session_id,
         url=url,

@@ -141,7 +141,7 @@ class ScrapeSession(Base):
     duration_seconds = Column(Integer)
 
     # Durum
-    status = Column(String(20), default="running", index=True)  # running, completed, failed, stopped
+    status = Column(String(20), default="running", index=True)  # running, completed, failed
     error_message = Column(Text)
 
     # İlişkiler

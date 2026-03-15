@@ -93,10 +93,10 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             if (taskIdRef.current !== currentTaskId) return;
             if (data.task_id && data.task_id !== currentTaskId) return;
 
-            const isTaskFinished = data.status === 'completed' || data.status === 'failed' || data.status === 'stopped';
+            const isTaskFinished = data.status === 'completed' || data.status === 'failed';
 
             // Gorev devam ediyor
-            if (data.status === 'pending' || data.status === 'running' || data.is_running) {
+            if (data.status === 'queued' || data.status === 'running') {
                 setActiveTask(prev => {
                     if (!prev || prev.taskId !== currentTaskId) return prev;
                     return { ...prev, status: data };

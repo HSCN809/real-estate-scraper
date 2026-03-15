@@ -2,12 +2,9 @@
 """Celery uygulama yapılandırması"""
 
 from celery import Celery
-import os
+from core.task_status import REDIS_URL
 
-# Ortam değişkeninden veya varsayılandan Redis URL
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-
-# Celery uygulamasını oluştur
+# Celery uygulamasini olustur
 celery_app = Celery(
     "real_estate_scraper",
     broker=REDIS_URL,
@@ -24,23 +21,23 @@ celery_app.conf.update(
     timezone="Europe/Istanbul",
     enable_utc=True,
 
-    # Görev çalıştırma ayarları
+    # Gorev calistirma ayarlari
     task_acks_late=True,  # Görev tamamlandıktan sonra onayla
     task_reject_on_worker_lost=True,  # Worker çökerse yeniden dene
     task_time_limit=7200,  # 2 saatlik kesin limit
-    task_soft_time_limit=6900,  # Düzgün kapatma için yumuşak limit
+    task_soft_time_limit=6900,  # Duzgun kapatma icin yumusak limit
 
     # Worker ayarları
-    worker_prefetch_multiplier=1,  # Aynı anda tek görev (kazıma yoğun kaynak kullanır)
+    worker_prefetch_multiplier=1,  # Ayni anda tek gorev (kazima yogun kaynak kullanir)
     worker_concurrency=1,  # Kazıma için tek worker
 
     # Sonuç backend ayarları
     result_expires=86400,  # Sonuçlar 24 saat sonra sona erer
-    result_extended=True,  # Genişletilmiş görev bilgisini sakla
+    result_extended=True,  # Genisletilmis gorev bilgisini sakla
 
     # Görev takibi
-    task_track_started=True,  # Görev başladığında takip et
-    task_send_sent_event=True,  # Görev gönderildiğinde olay gönder
+    task_track_started=True,  # Gorev basladiginda takip et
+    task_send_sent_event=True,  # Gorev gonderildiginde olay gonder
 
     # Yeniden deneme ayarları
     task_default_retry_delay=60,  # Yeniden denemeler arası 1 dakika gecikme
@@ -49,7 +46,7 @@ celery_app.conf.update(
 
 # Loglama için özel görev temel sınıfı
 class LoggingTask(celery_app.Task):
-    """Gelişmiş loglama destekli temel görev sınıfı"""
+    """Gelismis loglama destekli temel gorev sinifi."""
 
     def on_success(self, retval, task_id, args, kwargs):
         from utils.logger import get_logger

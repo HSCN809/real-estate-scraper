@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Celery kazıma görevleri - ayrı worker konteynerinde çalışır"""
+"""Celery kazima gorevleri - ayri worker konteynerinde calisir."""
 
 import os
-import json
-from datetime import datetime
 from typing import Dict, List, Optional
 from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
 
 from celery_app import celery_app
 from api.schemas import SUPPORTED_SCRAPING_METHODS
+from core.task_status import TASK_STATUS_RUNNING, TaskStatusStore
 from utils.logger import get_logger
 
 logger = get_logger("celery.scraping")
@@ -34,14 +33,7 @@ class TaskProgressManager:
 
     def __init__(self, task_id: str):
         self.task_id = task_id
-        self.redis_client = None
-        self._init_redis()
-
-    def _init_redis(self):
-        """Redis bağlantısını başlat"""
-        import redis
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-        self.redis_client = redis.from_url(redis_url)
+        self.store = TaskStatusStore()
 
     def update(
         self,
@@ -50,47 +42,23 @@ class TaskProgressManager:
         current: int = None,
         total: int = None,
         details: str = None,
-        status: str = "running"
+        status: str = TASK_STATUS_RUNNING,
+        error: Optional[str] = None,
+        platform: Optional[str] = None,
     ):
-        """Redis'teki görev ilerlemesini güncelle"""
-        key = f"scrape_task:{self.task_id}"
+        """Redis'teki görev ilerlemesini güncelle."""
+        data = self.store.update(
+            self.task_id,
+            status=status,
+            message=message,
+            progress=progress,
+            current=current,
+            total=total,
+            details=details,
+            error=error,
+            platform=platform,
+        )
 
-        # Mevcut veriyi al
-        existing = self.redis_client.get(key)
-        if existing:
-            data = json.loads(existing)
-        else:
-            data = {
-                "task_id": self.task_id,
-                "status": "running",
-                "message": "",
-                "progress": 0,
-                "current": 0,
-                "total": 0,
-                "details": "",
-                "started_at": datetime.now().isoformat(),
-            }
-
-        # Sağlanan alanları güncelle
-        if message is not None:
-            data["message"] = message
-        if progress is not None:
-            data["progress"] = progress
-        if current is not None:
-            data["current"] = current
-        if total is not None:
-            data["total"] = total
-        if details is not None:
-            data["details"] = details
-        if status is not None:
-            data["status"] = status
-
-        data["updated_at"] = datetime.now().isoformat()
-
-        # 24 saatlik süre ile Redis'e kaydet
-        self.redis_client.setex(key, 86400, json.dumps(data))
-
-        # Celery görev durumunu da güncelle
         current_task.update_state(
             state="PROGRESS",
             meta={
@@ -102,20 +70,20 @@ class TaskProgressManager:
         )
 
     def complete(self, message: str = "Tamamlandı", success: bool = True):
-        """Görevi tamamlanmış olarak işaretle"""
-        self.update(
-            message=message,
-            progress=100,
-            status="completed" if success else "failed"
-        )
+        """Görevi tamamlanmış olarak işaretle."""
+        if success:
+            self.store.mark_completed(self.task_id, message=message)
+        else:
+            self.fail(message)
 
     def fail(self, error: str):
-        """Görevi başarısız olarak işaretle"""
-        self.update(
-            message=f"Hata: {error}",
-            status="failed"
+        """Görevi başarısız olarak işaretle."""
+        self.store.mark_failed(
+            self.task_id,
+            message="Tarama başarısız oldu.",
+            error=error,
+            details=error,
         )
-
 
 @celery_app.task(bind=True, name="scrape_hepsiemlak")
 def scrape_hepsiemlak_task(
@@ -129,7 +97,7 @@ def scrape_hepsiemlak_task(
     scraping_method: str = "selenium",
     proxy_enabled: bool = False,
 ):
-    """Celery worker'da çalışan HepsiEmlak kazıma görevi."""
+    """Celery worker'da calisan HepsiEmlak kazima gorevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
@@ -138,12 +106,13 @@ def scrape_hepsiemlak_task(
         f"method={scraping_method}, proxy_enabled={proxy_enabled}, cities={cities}"
     )
     progress_manager.update(
-        message="HepsiEmlak taraması başlatılıyor...",
+        message="HepsiEmlak taramasi baslatiliyor...",
         progress=0,
-        status="running"
+        status=TASK_STATUS_RUNNING,
+        platform="hepsiemlak",
     )
 
-    # Döngüsel import'ları önlemek ve doğru başlatmayı sağlamak için burada import et
+    # Dongusel import'lari onlemek ve dogru baslatmayi saglamak icin burada import et
     from core.driver_manager import DriverManager
     from core.failed_pages_tracker import failed_pages_tracker
     from database.connection import get_db_session
@@ -159,15 +128,10 @@ def scrape_hepsiemlak_task(
         method_error = _validate_scraping_method(scraping_method)
         if method_error:
             logger.warning(f"[Task {task_id}] Invalid scraping method: {method_error}")
-            progress_manager.fail(method_error)
-            return {
-                "status": "failed",
-                "task_id": task_id,
-                "message": method_error,
-            }
+            raise ValueError(method_error)
         db = get_db_session()
 
-        # Başarısız sayfa takipçisini sıfırla
+        # Basarisiz sayfa takipcisini sifirla
         failed_pages_tracker.reset()
 
         # subtype_path'tan alt_kategori çıkar
@@ -177,7 +141,7 @@ def scrape_hepsiemlak_task(
             if len(parts) >= 2:
                 alt_kategori = parts[-1].replace('-', '_')
 
-        # Veritabanında kazıma oturumu oluştur
+        # Veritabaninda kazima oturumu olustur
         scrape_session = crud.create_scrape_session(
             db,
             platform="hepsiemlak",
@@ -190,7 +154,7 @@ def scrape_hepsiemlak_task(
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
-        # Redis'i güncelleyen ilerleme geri çağırma fonksiyonu
+        # Redis'i guncelleyen ilerleme geri cagirima fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
                 message=message,
@@ -198,11 +162,11 @@ def scrape_hepsiemlak_task(
                 total=total,
                 progress=progress
             )
-            # Durdurma isteğini kontrol et
+            # Durdurma istegini kontrol et
 
         # Kazıyıcı için durdurma kontrol fonksiyonu
 
-        # Kazıyıcıyı oluştur
+        # Kaziyiciyi olustur
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
             from scrapers.hepsiemlak.main import HepsiemlakScraper
@@ -241,7 +205,7 @@ def scrape_hepsiemlak_task(
             f"method={scraping_method}, proxy_enabled={proxy_enabled}"
         )
 
-        # Kazıyıcıyı durdurma kontrolüyle çalıştır
+        # Kaziyiciyi durdurma kontroluyle calistir
         scraper.start_scraping_api(
             max_pages=max_pages,
             progress_callback=progress_callback,
@@ -263,8 +227,9 @@ def scrape_hepsiemlak_task(
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
-        progress_manager.fail("Zaman limiti aşıldı")
-        _final_status = "timeout"
+        progress_manager.fail("Zaman limiti asildi")
+        _final_status = "failed"
+        _error_msg = "Zaman limiti asildi"
         raise
 
     except Exception as e:
@@ -288,7 +253,7 @@ def scrape_hepsiemlak_task(
                     new_listings=new_listings,
                     duplicate_listings=duplicate_listings
                 )
-                status = locals().get('_final_status', 'terminated')
+                status = locals().get('_final_status', 'failed')
                 error_msg = locals().get('_error_msg', None)
                 crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
                 db.commit()
@@ -315,11 +280,11 @@ def scrape_emlakjet_task(
     cities: List[str],
     districts: Optional[Dict[str, List[str]]],
     max_listings: int = 0,
-    max_pages: int = 50,  # kullanım dışı, geriye uyumluluk için tutuldu
+    max_pages: int = 50,  # kullanim disi, geriye uyumluluk icin tutuldu
     scraping_method: str = "selenium",
     proxy_enabled: bool = False,
 ):
-    """Celery worker'da çalışan EmlakJet kazıma görevi."""
+    """Celery worker'da calisan EmlakJet kazima gorevi."""
     task_id = self.request.id
     progress_manager = TaskProgressManager(task_id)
 
@@ -328,9 +293,10 @@ def scrape_emlakjet_task(
         f"method={scraping_method}, proxy_enabled={proxy_enabled}"
     )
     progress_manager.update(
-        message="EmlakJet taraması başlatılıyor...",
+        message="EmlakJet taramasi baslatiliyor...",
         progress=0,
-        status="running"
+        status=TASK_STATUS_RUNNING,
+        platform="emlakjet",
     )
 
     from core.driver_manager import DriverManager
@@ -347,12 +313,7 @@ def scrape_emlakjet_task(
         method_error = _validate_scraping_method(scraping_method)
         if method_error:
             logger.warning(f"[Task {task_id}] Invalid scraping method: {method_error}")
-            progress_manager.fail(method_error)
-            return {
-                "status": "failed",
-                "task_id": task_id,
-                "message": method_error,
-            }
+            raise ValueError(method_error)
         db = get_db_session()
         config = get_emlakjet_config()
 
@@ -363,7 +324,7 @@ def scrape_emlakjet_task(
             if len(parts) >= 2:
                 alt_kategori = parts[-1].replace('-', '_')
 
-        # Veritabanında kazıma oturumu oluştur
+        # Veritabaninda kazima oturumu olustur
         scrape_session = crud.create_scrape_session(
             db,
             platform="emlakjet",
@@ -376,14 +337,14 @@ def scrape_emlakjet_task(
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
-        # Temel URL'yi oluştur
+        # Temel URL'yi olustur
         if subtype_path:
             base_url = config.base_url + subtype_path
         else:
             category_path = config.categories[listing_type].get(category, '')
             base_url = config.base_url + category_path
 
-        # İlerleme geri çağırma fonksiyonu
+        # Ilerleme geri cagirima fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
                 message=message,
@@ -450,8 +411,9 @@ def scrape_emlakjet_task(
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
-        progress_manager.fail("Zaman limiti aşıldı")
-        _final_status = "timeout"
+        progress_manager.fail("Zaman limiti asildi")
+        _final_status = "failed"
+        _error_msg = "Zaman limiti asildi"
         raise
 
     except Exception as e:
@@ -472,7 +434,7 @@ def scrape_emlakjet_task(
                     db, scrape_session.id,
                     total_listings=total_listings,
                 )
-                status = locals().get('_final_status', 'terminated')
+                status = locals().get('_final_status', 'failed')
                 error_msg = locals().get('_error_msg', None)
                 crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
                 db.commit()
@@ -488,5 +450,3 @@ def scrape_emlakjet_task(
                 db.close()
             if manager:
                 manager.stop()
-
-
