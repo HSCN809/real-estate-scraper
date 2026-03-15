@@ -1,14 +1,13 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { getTaskStatus, stopTask, getActiveTasks, type TaskStatus } from '@/lib/api';
+import { getTaskStatus, getActiveTasks, type TaskStatus } from '@/lib/api';
 
 interface ScrapingTask {
     taskId: string;
     platform?: string;
     status: TaskStatus | null;
     isFinished: boolean;
-    isStopping: boolean;
 }
 
 interface ScrapingContextType {
@@ -16,7 +15,6 @@ interface ScrapingContextType {
     isPanelVisible: boolean;
     startTracking: (taskId: string, platform?: string) => void;
     stopTracking: () => void;
-    requestStop: () => Promise<void>;
     togglePanel: () => void;
     showPanel: () => void;
     hidePanel: () => void;
@@ -32,7 +30,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
     const taskIdRef = useRef<string | undefined>(undefined);
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Yüklendiğinde sessionStorage'dan geri yükle
+    // Yuklendiginde sessionStorage'dan geri yukle
     useEffect(() => {
         const stored = sessionStorage.getItem(TASK_STORAGE_KEY);
         if (stored) {
@@ -45,7 +43,6 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                         platform: parsed.platform,
                         status: null,
                         isFinished: false,
-                        isStopping: false,
                     });
                     setIsPanelVisible(true);
                 }
@@ -53,22 +50,23 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 sessionStorage.removeItem(TASK_STORAGE_KEY);
             }
         } else {
-            // sessionStorage yok — backend'den aktif görevleri kontrol et (yeni sekme)
-            getActiveTasks().then(response => {
-                if (response.count > 0 && response.active_tasks.length > 0) {
-                    const task = response.active_tasks[0];
-                    if (task.task_id) {
-                        taskIdRef.current = task.task_id;
-                        setActiveTask({
-                            taskId: task.task_id,
-                            status: task,
-                            isFinished: false,
-                            isStopping: false,
-                        });
-                        setIsPanelVisible(true);
+            // sessionStorage yoksa backend'den aktif gorevleri kontrol et
+            getActiveTasks()
+                .then(response => {
+                    if (response.count > 0 && response.active_tasks.length > 0) {
+                        const task = response.active_tasks[0];
+                        if (task.task_id) {
+                            taskIdRef.current = task.task_id;
+                            setActiveTask({
+                                taskId: task.task_id,
+                                status: task,
+                                isFinished: false,
+                            });
+                            setIsPanelVisible(true);
+                        }
                     }
-                }
-            }).catch(() => {});
+                })
+                .catch(() => {});
         }
     }, []);
 
@@ -84,7 +82,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         }
     }, [activeTask]);
 
-    // Durum sorgulama mantığı
+    // Durum sorgulama mantigi
     const pollStatus = useCallback(async () => {
         const currentTaskId = taskIdRef.current;
         if (!currentTaskId) return;
@@ -95,11 +93,9 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             if (taskIdRef.current !== currentTaskId) return;
             if (data.task_id && data.task_id !== currentTaskId) return;
 
-            const isTaskFinished = data.status === 'completed'
-                || data.status === 'failed'
-                || data.status === 'stopped';
+            const isTaskFinished = data.status === 'completed' || data.status === 'failed' || data.status === 'stopped';
 
-            // Görev devam ediyor — bitmiş olarak işaretleme
+            // Gorev devam ediyor
             if (data.status === 'pending' || data.status === 'running' || data.is_running) {
                 setActiveTask(prev => {
                     if (!prev || prev.taskId !== currentTaskId) return prev;
@@ -117,11 +113,11 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 };
             });
         } catch (error) {
-            console.error('Durum kontrolü başarısız', error);
+            console.error('Durum kontrolu basarisiz', error);
         }
     }, []);
 
-    // Polling aralığını yönet
+    // Polling araligini yonet
     useEffect(() => {
         if (!activeTask || activeTask.isFinished) {
             if (pollIntervalRef.current) {
@@ -131,10 +127,8 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        const interval = activeTask.isStopping ? 1000 : 2000;
-
         const initialTimer = setTimeout(pollStatus, 500);
-        pollIntervalRef.current = setInterval(pollStatus, interval);
+        pollIntervalRef.current = setInterval(pollStatus, 2000);
 
         return () => {
             clearTimeout(initialTimer);
@@ -143,7 +137,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 pollIntervalRef.current = null;
             }
         };
-    }, [activeTask?.taskId, activeTask?.isFinished, activeTask?.isStopping, pollStatus]);
+    }, [activeTask?.taskId, activeTask?.isFinished, pollStatus]);
 
     const startTracking = useCallback((taskId: string, platform?: string) => {
         taskIdRef.current = taskId;
@@ -152,7 +146,6 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             platform,
             status: null,
             isFinished: false,
-            isStopping: false,
         });
         setIsPanelVisible(true);
     }, []);
@@ -164,16 +157,6 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(TASK_STORAGE_KEY);
     }, []);
 
-    const requestStop = useCallback(async () => {
-        if (!activeTask) return;
-        setActiveTask(prev => prev ? { ...prev, isStopping: true } : null);
-        try {
-            await stopTask(activeTask.taskId);
-        } catch (error) {
-            console.error('Durdurma isteği başarısız', error);
-        }
-    }, [activeTask]);
-
     const togglePanel = useCallback(() => setIsPanelVisible(v => !v), []);
     const showPanel = useCallback(() => setIsPanelVisible(true), []);
     const hidePanel = useCallback(() => setIsPanelVisible(false), []);
@@ -184,7 +167,6 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             isPanelVisible,
             startTracking,
             stopTracking,
-            requestStop,
             togglePanel,
             showPanel,
             hidePanel,
@@ -197,7 +179,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
 export function useScraping() {
     const context = useContext(ScrapingContext);
     if (context === undefined) {
-        throw new Error('useScraping ScrapingProvider içinde kullanılmalıdır');
+        throw new Error('useScraping, ScrapingProvider icinde kullanilmalidir');
     }
     return context;
 }

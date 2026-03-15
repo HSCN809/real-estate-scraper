@@ -186,11 +186,6 @@ class HepsiemlakScraplingScraper:
     def _is_stop_requested(self) -> bool:
         if self._stop_checker and self._stop_checker():
             return True
-        try:
-            from api.status import task_status
-
-            return task_status.is_stop_requested()
-        except Exception:
             return False
 
     def _raise_if_stop_requested(self, progress_callback=None, message: str = "Durdurma istegi alindi.") -> bool:

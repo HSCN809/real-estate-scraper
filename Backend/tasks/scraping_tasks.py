@@ -69,8 +69,6 @@ class TaskProgressManager:
                 "total": 0,
                 "details": "",
                 "started_at": datetime.now().isoformat(),
-                "should_stop": False,
-                "stopped_early": False,
             }
 
         # Sağlanan alanları güncelle
@@ -102,24 +100,6 @@ class TaskProgressManager:
                 "total": data["total"],
             }
         )
-
-    def is_stop_requested(self) -> bool:
-        """Durdurma isteği yapılıp yapılmadığını kontrol et"""
-        key = f"scrape_task:{self.task_id}"
-        data = self.redis_client.get(key)
-        if data:
-            return json.loads(data).get("should_stop", False)
-        return False
-
-    def set_stopped_early(self):
-        """Görevi erken durdurulmuş olarak işaretle"""
-        key = f"scrape_task:{self.task_id}"
-        data = self.redis_client.get(key)
-        if data:
-            data = json.loads(data)
-            data["stopped_early"] = True
-            data["status"] = "stopped"
-            self.redis_client.setex(key, 86400, json.dumps(data))
 
     def complete(self, message: str = "Tamamlandı", success: bool = True):
         """Görevi tamamlanmış olarak işaretle"""
@@ -219,13 +199,8 @@ def scrape_hepsiemlak_task(
                 progress=progress
             )
             # Durdurma isteğini kontrol et
-            if progress_manager.is_stop_requested():
-                logger.info(f"[Task {task_id}] Stop requested, raising exception")
-                raise StopRequested("User requested stop")
 
         # Kazıyıcı için durdurma kontrol fonksiyonu
-        def stop_checker():
-            return progress_manager.is_stop_requested()
 
         # Kazıyıcıyı oluştur
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
@@ -270,7 +245,6 @@ def scrape_hepsiemlak_task(
         scraper.start_scraping_api(
             max_pages=max_pages,
             progress_callback=progress_callback,
-            stop_checker=stop_checker
         )
 
         _final_status = "completed"
@@ -285,17 +259,6 @@ def scrape_hepsiemlak_task(
             "total_listings": getattr(scraper, 'total_scraped_count', 0),
             "new_listings": getattr(scraper, 'new_listings_count', 0),
             "duplicates": getattr(scraper, 'duplicate_count', 0)
-        }
-
-    except StopRequested:
-        logger.info(f"[Task {task_id}] Task stopped by user request")
-        progress_manager.set_stopped_early()
-        _final_status = "stopped"
-
-        return {
-            "status": "stopped",
-            "task_id": task_id,
-            "message": "Kullanıcı tarafından durduruldu"
         }
 
     except SoftTimeLimitExceeded:
@@ -428,12 +391,8 @@ def scrape_emlakjet_task(
                 total=total,
                 progress=progress
             )
-            if progress_manager.is_stop_requested():
-                raise StopRequested("User requested stop")
 
         # Kazıyıcı için durdurma kontrol fonksiyonu
-        def stop_checker():
-            return progress_manager.is_stop_requested()
 
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
@@ -473,7 +432,6 @@ def scrape_emlakjet_task(
             max_listings=max_listings,
             max_pages=max_pages,
             progress_callback=progress_callback,
-            stop_checker=stop_checker,
         )
 
         _final_status = "completed"
@@ -488,17 +446,6 @@ def scrape_emlakjet_task(
             "status": "completed",
             "task_id": task_id,
             "total_listings": total_listings,
-        }
-
-    except StopRequested:
-        logger.info(f"[Task {task_id}] Task stopped by user")
-        progress_manager.set_stopped_early()
-        _final_status = "stopped"
-
-        return {
-            "status": "stopped",
-            "task_id": task_id,
-            "message": "Kullanıcı tarafından durduruldu"
         }
 
     except SoftTimeLimitExceeded:
@@ -543,6 +490,3 @@ def scrape_emlakjet_task(
                 manager.stop()
 
 
-class StopRequested(Exception):
-    """Kullanıcı görev durdurma isteğinde bulunduğunda fırlatılan istisna"""
-    pass

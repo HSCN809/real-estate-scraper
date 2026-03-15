@@ -8,7 +8,6 @@ import {
     getListings,
     getTaskStatus,
     getActiveTasks,
-    stopTask,
     startScrape,
     getCities,
     getDistricts,
@@ -107,17 +106,6 @@ export function useScrapeMutation() {
     });
 }
 
-export function useStopTaskMutation() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: stopTask,
-        onSuccess: () => {
-            // Invalidate active tasks query when task is stopped
-            queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
-        },
-    });
-}
 
 // ==================== Listings & Location Hooks ====================
 

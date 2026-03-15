@@ -233,16 +233,16 @@ def save_listings_to_db(
 
 
 class EmlakJetScraper(BaseScraper):
-    """EmlakJet platformu ana scraper sÄ±nÄ±fÄ±"""
+    """EmlakJet platformu ana scraper sınıfı"""
     
     CATEGORY_PARSERS = {
         'konut': KonutParser,
         'arsa': ArsaParser,
         'isyeri': IsyeriParser,
         'turistik_tesis': TuristikTesisParser,
-        'kat_karsiligi_arsa': ArsaParser,  # Arsa parser'Ä± kullanÄ±r
-        'devren_isyeri': IsyeriParser,     # Ä°ÅŸyeri parser'Ä± kullanÄ±r
-        'gunluk_kiralik': KonutParser,     # Konut parser'Ä± kullanÄ±r
+        'kat_karsiligi_arsa': ArsaParser,  # Arsa parser'ı kullanır
+        'devren_isyeri': IsyeriParser,     # İşyeri parser'ı kullanır
+        'gunluk_kiralik': KonutParser,     # Konut parser'ı kullanır
     }
     
     def __init__(
@@ -252,29 +252,29 @@ class EmlakJetScraper(BaseScraper):
         category: str = "konut",
         selected_locations: Optional[Dict] = None,
         listing_type: Optional[str] = None,  # satilik/kiralik
-        subtype_path: Optional[str] = None  # Alt kategori URL path'i (Ã¶rn: /satilik-daire)
+        subtype_path: Optional[str] = None  # Alt kategori URL path'i (örn: /satilik-daire)
     ):
         super().__init__(driver, base_url, "emlakjet", category, selected_locations)
 
         self.emlakjet_config = get_emlakjet_config()
         self.listing_type = listing_type
         self.subtype_path = subtype_path
-        self.total_new_listings = 0  # Global kÃ¼mÃ¼latif yeni ilan sayacÄ±
-        # Uygun parser'Ä± baÅŸlat
+        self.total_new_listings = 0  # Global kümülatif yeni ilan sayacı
+        # Uygun parser'ı başlat
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
     
     def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
-        """Kategori parser'Ä± ile ilan verisini Ã§Ä±kar"""
+        """Kategori parser'ı ile ilan verisini çıkar"""
         return self.parser.extract_listing_data(container)
     
     def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
-        """Kategori parser'Ä± ile detaylarÄ± parse et"""
+        """Kategori parser'ı ile detayları parse et"""
         return self.parser.parse_category_details(quick_info, title)
     
     @property
     def subtype_name(self) -> Optional[str]:
-        """Dosya adlandÄ±rma iÃ§in subtype_path'inden alt kategori adÄ±nÄ± Ã§Ä±kar"""
+        """Dosya adlandırma için subtype_path'inden alt kategori adını çıkar"""
         if self.subtype_path:
             # /satilik-daire -> daire
             path_part = self.subtype_path.strip('/').split('-')
@@ -283,40 +283,40 @@ class EmlakJetScraper(BaseScraper):
         return None
     def _log_location_start(self, location_name: str, location_url: str) -> None:
         task_log.section(
-            f"ğŸ“ TaranÄ±yor: {location_name}",
-            f"ğŸŒ {location_url}",
-            "ğŸ§­ YÃ¶ntem: selenium",
+            f"📍 Taranıyor: {location_name}",
+            f"🌐 {location_url}",
+            "🧭 Yöntem: selenium",
         )
 
     def _log_location_plan(self, location_name: str, pages_to_scrape: int) -> None:
         task_log.line(f"{location_name}: scraping {pages_to_scrape} pages via selenium")
-        task_log.line(f"ğŸ“„ {pages_to_scrape} sayfa taranacak")
+        task_log.line(f"📄 {pages_to_scrape} sayfa taranacak")
 
     def _log_page_start(self, location_name: str, page_num: int, total_pages: int) -> None:
-        task_log.line(f"ğŸ” [{page_num}/{total_pages}] {location_name} - Sayfa {page_num} taranÄ±yor...")
+        task_log.line(f"🔍 [{page_num}/{total_pages}] {location_name} - Sayfa {page_num} taranıyor...")
 
     def _log_page_result(self, page_num: int, extracted_count: int, new_count: int, updated_count: int, unchanged_count: int) -> None:
-        task_log.line(f"   âœ… Sayfa {page_num}: {extracted_count} ilan Ã§Ä±karÄ±ldÄ±")
-        task_log.line(f"   ğŸ’¾ Sayfa {page_num}: {new_count} yeni, {updated_count} gÃ¼ncellendi, {unchanged_count} deÄŸiÅŸmedi")
+        task_log.line(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
+        task_log.line(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
 
     def _log_location_complete(self, location_name: str, listing_count: int) -> None:
-        task_log.line(f"âœ… {location_name} tamamlandÄ± - {listing_count} ilan iÅŸlendi")
+        task_log.line(f"✅ {location_name} tamamlandı - {listing_count} ilan işlendi")
 
     def _log_retry_round(self, retry_round: int, max_retries: int, failed_count: int) -> None:
         task_log.section(
-            f"ğŸ”„ YENÄ°DEN DENEME #{retry_round}/{max_retries}",
-            f"ğŸ“Š {failed_count} baÅŸarÄ±sÄ±z sayfa tekrar taranacak",
+            f"🔄 YENİDEN DENEME #{retry_round}/{max_retries}",
+            f"📊 {failed_count} başarısız sayfa tekrar taranacak",
         )
 
     def _log_retry_summary(self, successful_retries: int, failed_count: int) -> None:
         task_log.section(
-            "ğŸ“Š RETRY Ã–ZETÄ°",
-            f"   âœ… BaÅŸarÄ±lÄ± retry: {successful_retries}",
-            f"   âŒ Kalan baÅŸarÄ±sÄ±z: {failed_count}",
+            "📊 RETRY ÖZETİ",
+            f"   ✅ Başarılı retry: {successful_retries}",
+            f"   ❌ Kalan başarısız: {failed_count}",
         )
 
     def scrape_current_page(self) -> List[Dict[str, Any]]:
-        """Mevcut sayfadaki tÃ¼m ilanlarÄ± tara"""
+        """Mevcut sayfadaki tüm ilanları tara"""
         from datetime import datetime
         print = logger.debug
 
@@ -329,7 +329,7 @@ class EmlakJetScraper(BaseScraper):
 
             containers = self.find_elements_safe(container_selector)
 
-            # EmlakJet: "Benzer Ä°lanlar" bÃ¶lÃ¼mÃ¼ndeki kartlarÄ± hariÃ§ tut
+            # EmlakJet: "Benzer İlanlar" bölümündeki kartları hariç tut
             if containers:
                 filtered = []
                 for c in containers:
@@ -342,7 +342,7 @@ class EmlakJetScraper(BaseScraper):
                     except Exception:
                         filtered.append(c)
                 if len(filtered) < len(containers):
-                    logger.debug(f"Filtered out {len(containers) - len(filtered)} 'Benzer Ä°lanlar' listings")
+                    logger.debug(f"Filtered out {len(containers) - len(filtered)} 'Benzer İlanlar' listings")
                 containers = filtered
 
             for container in containers:
@@ -352,23 +352,23 @@ class EmlakJetScraper(BaseScraper):
                         data['tarih'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         listings.append(data)
                 except Exception as e:
-                    logger.debug(f"Ä°lan Ã§Ä±karma hatasÄ±: {e}")
+                    logger.debug(f"İlan çıkarma hatası: {e}")
                     continue
 
         except Exception as e:
-            task_log.line(f"Sayfa tarama hatasÄ±: {e}", level="error")
+            task_log.line(f"Sayfa tarama hatası: {e}", level="error")
 
         return listings
 
     def get_location_options(self, location_type: str, current_url: str) -> tuple:
-        """Mevcut sayfadan lokasyon seÃ§eneklerini ve ilan sayÄ±sÄ±nÄ± al"""
+        """Mevcut sayfadan lokasyon seçeneklerini ve ilan sayısını al"""
         try:
             logger.info(f"Getting {location_type} options...")
 
             self.driver.get(current_url)
             self.random_long_wait()  # Gizli mod: lokasyon listesi
 
-            # Sayfa zaten yÃ¼klÃ¼ â€” ilan sayÄ±sÄ±nÄ± da aynÄ± anda al
+            # Sayfa zaten yüklü — ilan sayısını da aynı anda al
             listing_count = self._parse_listing_count()
 
             location_options = []
@@ -376,7 +376,7 @@ class EmlakJetScraper(BaseScraper):
 
             location_links = self.driver.find_elements(By.CSS_SELECTOR, location_selector)
 
-            # Duplicate kontrolÃ¼ iÃ§in seen set
+            # Duplicate kontrolü için seen set
             seen_names = set()
 
             for link in location_links:
@@ -385,7 +385,7 @@ class EmlakJetScraper(BaseScraper):
                     location_url = link.get_attribute("href")
 
                     if location_name and location_url:
-                        # Duplicate kontrolÃ¼
+                        # Duplicate kontrolü
                         if location_name not in seen_names:
                             seen_names.add(location_name)
                             location_options.append({
@@ -397,7 +397,7 @@ class EmlakJetScraper(BaseScraper):
                 except Exception:
                     continue
 
-            # LokasyonlarÄ± 4 sÃ¼tunda gÃ¶ster
+            # Lokasyonları 4 sütunda göster
             if location_options:
                 print(f"\n{'=' * 80}")
                 print(f"{location_type.upper()} (Toplam ilan: {listing_count})")
@@ -423,13 +423,13 @@ class EmlakJetScraper(BaseScraper):
             return [], 0
 
     def get_max_pages(self, target_url: Optional[str] = None) -> int:
-        """URL iÃ§in binary search ile maksimum sayfa sayÄ±sÄ±nÄ± al"""
+        """URL için binary search ile maksimum sayfa sayısını al"""
         try:
             if target_url:
                 self.driver.get(target_url)
                 self.random_medium_wait()  # Gizli mod
 
-            # JavaScript ile yÃ¼kleme beklemesi iÃ§in explicit wait
+            # JavaScript ile yükleme beklemesi için explicit wait
             try:
                 WebDriverWait(self.driver, 15).until(
                     lambda d: d.execute_script("return document.readyState") == "complete"
@@ -438,25 +438,25 @@ class EmlakJetScraper(BaseScraper):
             except Exception as e:
                 logger.debug(f"Timeout waiting for document ready: {e}")
 
-            # Ekstra bekleme - pagination elementleri yÃ¼klenmesi iÃ§in
+            # Ekstra bekleme - pagination elementleri yüklenmesi için
             time.sleep(2)
 
-            # Sonraki ok (right arrow) var mÄ± kontrol et - eÄŸer yoksa son sayfadayÄ±z
-            # EÄŸer varsa, son sayfaya git ve oradaki pagination'dan max page bul
+            # Sonraki ok (right arrow) var mı kontrol et - eğer yoksa son sayfadayız
+            # Eğer varsa, son sayfaya git ve oradaki pagination'dan max page bul
             right_arrow = self.driver.find_elements(By.CSS_SELECTOR, "li.styles_rightArrow__Kn4kW a")
             pagination_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'sayfa=')]")
 
             if not right_arrow or not pagination_links:
-                # Pagination yok veya son sayfadayÄ±z
+                # Pagination yok veya son sayfadayız
                 return 1
 
             # Sonraki ok var - son sayfaya git
-            # Son sayfaya gitmek iÃ§in bÃ¼yÃ¼k bir sayfa numarasÄ± dene (Ã¶rn: 1000)
-            # Emlakjet otomatik olarak son sayfaya yÃ¶nlendirecek
+            # Son sayfaya gitmek için büyük bir sayfa numarası dene (örn: 1000)
+            # Emlakjet otomatik olarak son sayfaya yönlendirecek
             separator = '&' if '?' in target_url else '?'
             last_page_url = f"{target_url}{separator}sayfa=9999"
 
-            print(f"ğŸ” Son sayfa aranÄ±yor...")
+            print(f"🔍 Son sayfa aranıyor...")
             self.driver.get(last_page_url)
             time.sleep(2)
 
@@ -464,10 +464,10 @@ class EmlakJetScraper(BaseScraper):
             last_page_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'sayfa=')]")
 
             if not last_page_links:
-                # HÃ¢lÃ¢ pagination yok, 1 varsay
+                # Hâlâ pagination yok, 1 varsay
                 return 1
 
-            # Son sayfadan maksimum sayfa numarasÄ±nÄ± Ã§Ä±kar
+            # Son sayfadan maksimum sayfa numarasını çıkar
             page_numbers = []
             for link in last_page_links:
                 try:
@@ -480,7 +480,7 @@ class EmlakJetScraper(BaseScraper):
 
             max_page = max(page_numbers) if page_numbers else 1
 
-            # SeÃ§ili sayfa (active page) daha bÃ¼yÃ¼kse onu kullan
+            # Seçili sayfa (active page) daha büyükse onu kullan
             try:
                 selected_page = self.driver.find_element(By.CSS_SELECTOR, "span.styles_selected__hilA_")
                 selected_num = int(selected_page.text)
@@ -500,17 +500,17 @@ class EmlakJetScraper(BaseScraper):
     PAGINATION_LIMIT = 1500
 
     def _parse_listing_count(self) -> int:
-        """Zaten yÃ¼klenmiÅŸ sayfadan ilan sayÄ±sÄ±nÄ± parse et"""
+        """Zaten yüklenmiş sayfadan ilan sayısını parse et"""
         try:
-            # "uygun ilan bulunamadÄ±" kontrolÃ¼
+            # "uygun ilan bulunamadı" kontrolü
             no_results = self.driver.find_elements(
                 By.CSS_SELECTOR, "span.styles_adsCount__A1YW5"
             )
             for el in no_results:
-                if "bulunamadÄ±" in el.text.lower():
+                if "bulunamadı" in el.text.lower():
                     return 0
 
-            # Ä°lan sayÄ±sÄ±nÄ± Ã§ek
+            # İlan sayısını çek
             count_element = self.driver.find_elements(
                 By.CSS_SELECTOR, "span.styles_adsCount__A1YW5 strong.styles_strong__cw1jn"
             )
@@ -518,7 +518,7 @@ class EmlakJetScraper(BaseScraper):
                 text = count_element[0].text.strip().replace('.', '').replace(',', '')
                 return int(text) if text.isdigit() else 0
 
-            # Alternatif seÃ§ici
+            # Alternatif seçici
             count_element = self.driver.find_elements(
                 By.CSS_SELECTOR, "strong.styles_strong__cw1jn"
             )
@@ -531,7 +531,7 @@ class EmlakJetScraper(BaseScraper):
             return 0
 
     def get_listing_count(self, url: str) -> int:
-        """URL'ye giderek toplam ilan sayÄ±sÄ±nÄ± al"""
+        """URL'ye giderek toplam ilan sayısını al"""
         try:
             self.driver.get(url)
             self.random_medium_wait()
@@ -540,52 +540,52 @@ class EmlakJetScraper(BaseScraper):
             return 0
     
     def select_provinces(self, api_indices: Optional[List[int]] = None, provinces: Optional[List[Dict]] = None) -> List[Dict]:
-        """Taranacak illeri seÃ§"""
-        print(f"\nğŸ™ï¸  Ä°L SEÃ‡Ä°MÄ°")
+        """Taranacak illeri seç"""
+        print(f"\n🏙️  İL SEÇİMİ")
         if provinces is None:
-            provinces, _ = self.get_location_options("Ä°ller", self.base_url)
+            provinces, _ = self.get_location_options("İller", self.base_url)
         if not provinces:
-            print("âŒ Ä°l bulunamadÄ±!")
+            print("❌ İl bulunamadı!")
             return []
 
         if api_indices:
              selected = [provinces[i - 1] for i in api_indices if 0 < i <= len(provinces)]
              if selected:
-                 print(f"\nâœ… API: {len(selected)} il seÃ§ildi")
+                 print(f"\n✅ API: {len(selected)} il seçildi")
                  return selected
-             # GeÃ§ersiz indeksler iÃ§in yedek
+             # Geçersiz indeksler için yedek
              return []
 
-        print("\nğŸ¯ Ã‡OKLU Ä°L SEÃ‡Ä°MÄ°")
-        print("Birden fazla seÃ§im iÃ§in: 1,3,5 veya 1-5")
+        print("\n🎯 ÇOKLU İL SEÇİMİ")
+        print("Birden fazla seçim için: 1,3,5 veya 1-5")
 
         while True:
-            user_input = input(f"\nÄ°l numaralarÄ±nÄ± girin (1-{len(provinces)}): ").strip()
+            user_input = input(f"\nİl numaralarını girin (1-{len(provinces)}): ").strip()
             if not user_input:
-                print("âŒ BoÅŸ giriÅŸ!")
+                print("❌ Boş giriş!")
                 continue
 
             selections = self._parse_selection_input(user_input, len(provinces))
             if selections:
                 selected = [provinces[i - 1] for i in selections]
-                print(f"\nâœ… {len(selected)} il seÃ§ildi:")
+                print(f"\n✅ {len(selected)} il seçildi:")
                 for p in selected:
                     print(f"   - {p['name']}")
                 return selected
             else:
-                print("âŒ GeÃ§ersiz seÃ§im!")
+                print("❌ Geçersiz seçim!")
     
     def select_districts_for_province(self, province: Dict, api_mode: bool = False, api_districts: Optional[List[str]] = None) -> tuple:
-        """Belirli bir il iÃ§in ilÃ§eleri seÃ§"""
-        print(f"\nğŸ˜ï¸  {province['name']} Ä°LÃ‡ELERÄ°")
-        districts, _ = self.get_location_options("Ä°lÃ§eler", province['url'])
+        """Belirli bir il için ilçeleri seç"""
+        print(f"\n🏘️  {province['name']} İLÇELERİ")
+        districts, _ = self.get_location_options("İlçeler", province['url'])
 
         if not districts:
-            print(f"âŒ {province['name']} iÃ§in ilÃ§e bulunamadÄ±!")
-            return ([province], False)  # Ä°lÃ§e yoksa ilin kendisini dÃ¶ndÃ¼r
+            print(f"❌ {province['name']} için ilçe bulunamadı!")
+            return ([province], False)  # İlçe yoksa ilin kendisini döndür
 
         if api_mode:
-            # API modunda, isimle belirtilen ilÃ§eler varsa eÅŸleÅŸtir
+            # API modunda, isimle belirtilen ilçeler varsa eşleştir
             if api_districts:
                 selected = [d for d in districts if d['name'] in api_districts]
                 if selected:
@@ -594,14 +594,14 @@ class EmlakJetScraper(BaseScraper):
                     return (selected, True)
                 return ([], False)
 
-            # API modunda ilÃ§e belirtilmemiÅŸse tÃ¼mÃ¼nÃ¼ tara
+            # API modunda ilçe belirtilmemişse tümünü tara
             for d in districts:
                 d['il'] = province['name']
             return (districts, True)
 
-        print("\n1. TÃ¼m ilÃ§eleri tara (her ilÃ§e iÃ§in mahalle seÃ§)")
-        print("2. TÃ¼m ili direkt tara (ilÃ§e/mahalle seÃ§imi yapma)")
-        print("3. Belirli ilÃ§eleri seÃ§")
+        print("\n1. Tüm ilçeleri tara (her ilçe için mahalle seç)")
+        print("2. Tüm ili direkt tara (ilçe/mahalle seçimi yapma)")
+        print("3. Belirli ilçeleri seç")
         print("4. Bu ili atla")
 
         choice = self.get_user_choice(4)
@@ -615,30 +615,30 @@ class EmlakJetScraper(BaseScraper):
         elif choice == 4:
             return ([], False)
 
-        # Belirli ilÃ§eleri seÃ§
-        print("\nğŸ¯ Ä°LÃ‡E SEÃ‡Ä°MÄ° (Ã¶rn: 1,3,5 veya 1-5)")
-        user_input = input(f"Ä°lÃ§e numaralarÄ±nÄ± girin (1-{len(districts)}): ").strip()
+        # Belirli ilçeleri seç
+        print("\n🎯 İLÇE SEÇİMİ (örn: 1,3,5 veya 1-5)")
+        user_input = input(f"İlçe numaralarını girin (1-{len(districts)}): ").strip()
 
         selections = self._parse_selection_input(user_input, len(districts))
         if selections:
             selected = [districts[i - 1] for i in selections]
             for d in selected:
                 d['il'] = province['name']
-            print(f"âœ… {len(selected)} ilÃ§e seÃ§ildi")
+            print(f"✅ {len(selected)} ilçe seçildi")
             return (selected, True)
         else:
             return ([province], False)
     
     def select_neighborhoods_for_district(self, district: Dict, api_mode: bool = False) -> List[Dict]:
-        """Belirli bir ilÃ§e iÃ§in mahalleleri seÃ§"""
+        """Belirli bir ilçe için mahalleleri seç"""
         province_name = district.get('il', '')
         district_name = district['name']
 
-        print(f"\nğŸ¡ {province_name} / {district_name} MAHALLELERÄ°")
+        print(f"\n🏡 {province_name} / {district_name} MAHALLELERİ")
         neighborhoods, _ = self.get_location_options("Mahalleler", district['url'])
 
         if not neighborhoods:
-            return [district]  # Mahalle yoksa ilÃ§enin kendisini dÃ¶ndÃ¼r
+            return [district]  # Mahalle yoksa ilçenin kendisini döndür
 
         if api_mode:
             for n in neighborhoods:
@@ -646,9 +646,9 @@ class EmlakJetScraper(BaseScraper):
                 n['ilce'] = district_name
             return neighborhoods
 
-        print("\n1. TÃ¼m mahalleleri tara")
-        print("2. Mahalle seÃ§")
-        print("3. Bu ilÃ§eyi atla")
+        print("\n1. Tüm mahalleleri tara")
+        print("2. Mahalle seç")
+        print("3. Bu ilçeyi atla")
 
         choice = self.get_user_choice(3)
 
@@ -657,9 +657,9 @@ class EmlakJetScraper(BaseScraper):
         elif choice == 3:
             return []
 
-        # Belirli mahalleleri seÃ§
-        print("\nğŸ¯ MAHALLE SEÃ‡Ä°MÄ° (Ã¶rn: 1,3,5 veya 1-5)")
-        user_input = input(f"Mahalle numaralarÄ±nÄ± girin (1-{len(neighborhoods)}): ").strip()
+        # Belirli mahalleleri seç
+        print("\n🎯 MAHALLE SEÇİMİ (örn: 1,3,5 veya 1-5)")
+        user_input = input(f"Mahalle numaralarını girin (1-{len(neighborhoods)}): ").strip()
 
         selections = self._parse_selection_input(user_input, len(neighborhoods))
         if selections:
@@ -667,21 +667,21 @@ class EmlakJetScraper(BaseScraper):
             for n in selected:
                 n['il'] = province_name
                 n['ilce'] = district_name
-            print(f"âœ… {len(selected)} mahalle seÃ§ildi")
+            print(f"✅ {len(selected)} mahalle seçildi")
             return selected
         else:
             return [district]
     
     def _is_stop_requested(self) -> bool:
-        """Durdurma isteÄŸi olup olmadÄ±ÄŸÄ±nÄ± kontrol et"""
+        """Durdurma isteği olup olmadığını kontrol et"""
         return self._stop_checker is not None and self._stop_checker()
 
     def _is_listing_limit_reached(self) -> bool:
-        """Maksimum ilan limitine ulaÅŸÄ±lÄ±p ulaÅŸÄ±lmadÄ±ÄŸÄ±nÄ± kontrol et"""
+        """Maksimum ilan limitine ulaşılıp ulaşılmadığını kontrol et"""
         return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
 
     def _make_page_callback(self, prov_name: str, dist_name: str, tgt: Dict, page_num_ref: List[int], new_listings_count_ref: List[int]):
-        """Her sayfa sonrasÄ± ilanlarÄ± DB'ye kaydetmek iÃ§in callback oluÅŸtur"""
+        """Her sayfa sonrası ilanları DB'ye kaydetmek için callback oluştur"""
         def _on_page_scraped(page_listings):
             for listing in page_listings:
                 listing['il'] = prov_name
@@ -709,17 +709,17 @@ class EmlakJetScraper(BaseScraper):
 
     def scrape_pages(self, target_url: str, max_pages: int, on_page_scraped=None,
                      location_label: str = "", province: str = "", district: str = "", new_listings_count_ref: List[int] = None) -> bool:
-        """BaÅŸarÄ±sÄ±z sayfa takibi ile sayfa tarama"""
+        """Başarısız sayfa takibi ile sayfa tarama"""
         print = task_log.line
         first_page_count = 0
 
         for current_page in range(1, max_pages + 1):
             if hasattr(self, '_stop_checker') and self._stop_checker and self._stop_checker():
-                task_log.line("Durdurma isteÄŸi alÄ±ndÄ±, sayfa tarama sonlandÄ±rÄ±lÄ±yor", level="warning")
+                task_log.line("Durdurma isteği alındı, sayfa tarama sonlandırılıyor", level="warning")
                 break
 
             if hasattr(self, '_max_listings') and self._max_listings > 0 and len(self.all_listings) >= self._max_listings:
-                task_log.line(f"Ä°lan limitine ulaÅŸÄ±ldÄ± ({self._max_listings}), sayfa tarama sonlandÄ±rÄ±lÄ±yor", level="warning")
+                task_log.line(f"İlan limitine ulaşıldı ({self._max_listings}), sayfa tarama sonlandırılıyor", level="warning")
                 break
 
             self._log_page_start(location_label or province or district or "Lokasyon", current_page, max_pages)
@@ -734,24 +734,24 @@ class EmlakJetScraper(BaseScraper):
                 self.driver.get(page_url)
                 time.sleep(self.config.wait_between_pages)
 
-                # SÄ±fÄ±r ilan kontrolÃ¼ (ilk sayfa)
+                # Sıfır ilan kontrolü (ilk sayfa)
                 if current_page == 1:
                     try:
                         no_results = self.driver.find_elements(
                             By.CSS_SELECTOR, "span.styles_title__e_y3h"
                         )
                         for element in no_results:
-                            if "ilan bulunamadÄ±" in element.text.lower():
-                                task_log.line("âš ï¸ Bu lokasyonda ilan bulunamadÄ±, atlanÄ±yor...", level="warning")
+                            if "ilan bulunamadı" in element.text.lower():
+                                task_log.line("⚠️ Bu lokasyonda ilan bulunamadı, atlanıyor...", level="warning")
                                 return True
                     except:
                         pass
 
                 listings = self.scrape_current_page()
 
-                # 0 ilan bulunduysa ve ilk sayfa deÄŸilse â†’ failed page olarak kaydet
+                # 0 ilan bulunduysa ve ilk sayfa değilse → failed page olarak kaydet
                 if len(listings) == 0 and current_page > 1:
-                    task_log.line(f"   âš ï¸ Sayfa {current_page}'de 0 ilan - retry listesine eklendi", level="warning")
+                    task_log.line(f"   ⚠️ Sayfa {current_page}'de 0 ilan - retry listesine eklendi", level="warning")
                     failed_pages_tracker.add_failed_page(FailedPageInfo(
                         url=page_url,
                         page_number=current_page,
@@ -766,7 +766,7 @@ class EmlakJetScraper(BaseScraper):
                 else:
                     self.all_listings.extend(listings)
 
-                    # Sadece yeni eklenenleri saymak iÃ§in
+                    # Sadece yeni eklenenleri saymak için
                     if on_page_scraped and listings:
                         on_page_scraped(listings)
                     elif listings:
@@ -777,8 +777,8 @@ class EmlakJetScraper(BaseScraper):
 
             except Exception as e:
                 task_log.line(f"Error scraping page {current_page}: {e}", level="error")
-                task_log.line(f"   âš ï¸ Sayfa {current_page} yÃ¼klenemedi - retry listesine eklendi", level="warning")
-                # Sayfa yÃ¼kleme hatasÄ± â†’ baÅŸarÄ±sÄ±z sayfa
+                task_log.line(f"   ⚠️ Sayfa {current_page} yüklenemedi - retry listesine eklendi", level="warning")
+                # Sayfa yükleme hatası → başarısız sayfa
                 page_url = target_url if current_page == 1 else f"{target_url}{'&' if '?' in target_url else '?'}sayfa={current_page}"
                 failed_pages_tracker.add_failed_page(FailedPageInfo(
                     url=page_url,
@@ -796,15 +796,15 @@ class EmlakJetScraper(BaseScraper):
         return first_page_count == 0 and max_pages == 1
 
     def _scrape_target(self, target: Dict, province_name: str, district_name: str) -> bool:
-        """Tek bir hedefi (il/ilÃ§e/mahalle) tara"""
+        """Tek bir hedefi (il/ilçe/mahalle) tara"""
         print = task_log.line
         url_max_pages = self.get_max_pages(target['url'])
         self._log_location_start(target['label'], target['url'])
         self._log_location_plan(target['label'], url_max_pages)
-        print(f"ğŸ“Š {url_max_pages} sayfa mevcut, tamamÄ± taranacak.")
+        print(f"📊 {url_max_pages} sayfa mevcut, tamamı taranacak.")
 
-        page_num_ref = [0]  # Callback iÃ§inde sayfa sayacÄ± iÃ§in deÄŸiÅŸtirilebilir referans
-        new_listings_count_ref = [0]  # Yeni eklenen ilan sayacÄ±
+        page_num_ref = [0]  # Callback içinde sayfa sayacı için değiştirilebilir referans
+        new_listings_count_ref = [0]  # Yeni eklenen ilan sayacı
         page_callback = self._make_page_callback(province_name, district_name, target, page_num_ref, new_listings_count_ref)
         should_skip = self.scrape_pages(
             target['url'], url_max_pages,
@@ -814,37 +814,37 @@ class EmlakJetScraper(BaseScraper):
             district=district_name,
             new_listings_count_ref=new_listings_count_ref
         )
-        # Global kÃ¼mÃ¼latif sayaÃ§a ekle
+        # Global kümülatif sayaça ekle
         self.total_new_listings += new_listings_count_ref[0]
-        logger.warning(f"ğŸ“Š EmlakJet KÃ¼mÃ¼latif Toplam: {self.total_new_listings} ilan")
+        logger.warning(f"📊 EmlakJet Kümülatif Toplam: {self.total_new_listings} ilan")
         if not should_skip:
             self._log_location_complete(target['label'], new_listings_count_ref[0])
         return should_skip, new_listings_count_ref[0]
 
     def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None, stop_checker=None):
-        """Ä°ki katmanlÄ± optimizasyonla API tarama giriÅŸ noktasÄ±"""
+        """İki katmanlı optimizasyonla API tarama giriş noktası"""
         print = task_log.line
         self._stop_checker = stop_checker
         self._max_listings = max_listings
 
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
         limit_info = f" (limit: {max_listings} ilan)" if max_listings > 0 else " (limitsiz)"
-        print(f"\nğŸš€ API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper baÅŸlatÄ±lÄ±yor{limit_info}")
+        print(f"\n🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper başlatılıyor{limit_info}")
 
         if progress_callback:
-            progress_callback(f"{self.category.capitalize()}{subtype_info} taramasÄ± baÅŸlatÄ±lÄ±yor...", 0, 100, 0)
+            progress_callback(f"{self.category.capitalize()}{subtype_info} taraması başlatılıyor...", 0, 100, 0)
 
         try:
             # subtype_path varsa onu kullan, yoksa base_url
             start_url = self.base_url
             if self.subtype_path:
                 start_url = f"https://www.emlakjet.com{self.subtype_path}"
-                print(f"ğŸ“‹ Alt kategori kullanÄ±lÄ±yor: {self.subtype_path}")
+                print(f"📋 Alt kategori kullanılıyor: {self.subtype_path}")
 
-            print("Ä°l listesi alÄ±nÄ±yor...")
-            all_provinces, _ = self.get_location_options("Ä°ller", start_url)
+            print("İl listesi alınıyor...")
+            all_provinces, _ = self.get_location_options("İller", start_url)
 
-            # AdÄ±m 1: Ä°lleri seÃ§
+            # Adım 1: İlleri seç
             if cities:
                 api_indices = []
                 cities_lower = [c.lower() for c in cities]
@@ -853,54 +853,54 @@ class EmlakJetScraper(BaseScraper):
                         api_indices.append(idx)
 
                 if not api_indices:
-                    logger.error(f"Åehirler iÃ§in eÅŸleÅŸen il bulunamadÄ±: {cities}")
+                    logger.error(f"Şehirler için eşleşen il bulunamadı: {cities}")
                     logger.info(f"Mevcut iller: {[p['name'] for p in all_provinces[:5]]}...")
                     return
 
                 provinces = self.select_provinces(api_indices=api_indices, provinces=all_provinces)
             else:
-                logger.error("API taramasÄ± iÃ§in ÅŸehir belirtilmedi")
+                logger.error("API taraması için şehir belirtilmedi")
                 return
 
-            # AdÄ±m 2: Her ili optimizasyonla iÅŸle
+            # Adım 2: Her ili optimizasyonla işle
             stopped = False
-            scrape_stats = {}  # {il_adÄ±: {ilÃ§e_adÄ±: ilan_sayÄ±sÄ±}} â€” Ã¶zet rapor iÃ§in
+            scrape_stats = {}  # {il_adı: {ilçe_adı: ilan_sayısı}} — özet rapor için
             for prov_idx, province in enumerate(provinces, 1):
                 if self._is_stop_requested():
-                    print(f"\nâš ï¸ Durdurma isteÄŸi alÄ±ndÄ±! {len(self.all_listings)} ilan toplandÄ±.")
-                    logger.warning(f"âš ï¸ Tarama erken durduruldu: {len(self.all_listings)} ilan")
+                    print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
+                    logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
                     stopped = True
                     break
                 if self._is_listing_limit_reached():
                     stopped = True
                     break
 
-                # Ä°l sayfasÄ±na git ve ilan sayÄ±sÄ±nÄ± al (get_listing_count sayfayÄ± yÃ¼kler)
+                # İl sayfasına git ve ilan sayısını al (get_listing_count sayfayı yükler)
                 province_count = self.get_listing_count(province['url'])
 
                 print("\n" + "=" * 70)
-                print(f"ğŸ™ï¸  Ä°L {prov_idx}/{len(provinces)}: {province['name']} (Toplam Ä°lan: {province_count})")
+                print(f"🏙️  İL {prov_idx}/{len(provinces)}: {province['name']} (Toplam İlan: {province_count})")
                 print("=" * 70)
 
                 if progress_callback:
                     base_progress = ((prov_idx - 1) / len(provinces)) * 100
-                    progress_callback(f"Ä°ÅŸleniyor: {province['name']}...", prov_idx, len(provinces), base_progress)
+                    progress_callback(f"İşleniyor: {province['name']}...", prov_idx, len(provinces), base_progress)
 
-                # â”€â”€ OPTÄ°MÄ°ZASYON: Ä°l seviyesi kontrol â”€â”€
+                # ── OPTİMİZASYON: İl seviyesi kontrol ──
                 if province_count == 0:
-                    print(f"â­ï¸  {province['name']} â†’ 0 ilan, il atlanÄ±yor.")
+                    print(f"⏭️  {province['name']} → 0 ilan, il atlanıyor.")
                     continue
 
                 if province_count <= self.PAGINATION_LIMIT:
-                    # Ä°l genelinde â‰¤1500 ilan â€” ilÃ§e/mahalleye inmeye gerek yok
-                    print(f"âš¡ {province['name']} â†’ {province_count} ilan (â‰¤{self.PAGINATION_LIMIT}), il seviyesinden taranÄ±yor.")
+                    # İl genelinde ≤1500 ilan — ilçe/mahalleye inmeye gerek yok
+                    print(f"⚡ {province['name']} → {province_count} ilan (≤{self.PAGINATION_LIMIT}), il seviyesinden taranıyor.")
                     target = {'url': province['url'], 'label': province['name'], 'type': 'il'}
-                    print(f"\nğŸ“ TaranÄ±yor: {target['label']}")
+                    print(f"\n📍 Taranıyor: {target['label']}")
                     should_skip, new_count = self._scrape_target(target, province['name'], province['name'])
                     if should_skip:
-                        print("â­ï¸  Bu lokasyon atlandÄ±.")
+                        print("⏭️  Bu lokasyon atlandı.")
                     else:
-                        print(f"   ğŸ“¦ Toplam: {new_count} yeni ilan toplandÄ±")
+                        print(f"   📦 Toplam: {new_count} yeni ilan toplandı")
                         scrape_stats[province['name']] = {'(il seviyesi)': new_count}
 
                     if progress_callback:
@@ -911,63 +911,63 @@ class EmlakJetScraper(BaseScraper):
                         )
                     continue
 
-                # Ä°l > 1500 ilan â€” ilÃ§elere iniyoruz
-                print(f"ğŸ“Š {province['name']} â†’ {province_count} ilan (>{self.PAGINATION_LIMIT}), ilÃ§e seviyesine iniliyor...")
+                # İl > 1500 ilan — ilçelere iniyoruz
+                print(f"📊 {province['name']} → {province_count} ilan (>{self.PAGINATION_LIMIT}), ilçe seviyesine iniliyor...")
 
-                # Ä°lÃ§e filtreleme var mÄ± kontrol et
+                # İlçe filtreleme var mı kontrol et
                 province_name = province['name']
                 api_districts_for_province = None
                 if districts and province_name in districts:
                     api_districts_for_province = districts[province_name]
-                    logger.info(f"{province_name} iÃ§in ilÃ§e filtresi aktif: {api_districts_for_province}")
+                    logger.info(f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}")
 
-                # Ä°lÃ§e listesini al
-                district_list, _ = self.get_location_options("Ä°lÃ§eler", province['url'])
+                # İlçe listesini al
+                district_list, _ = self.get_location_options("İlçeler", province['url'])
 
                 if not district_list:
-                    print(f"â­ï¸  {province['name']} ilÃ§e bulunamadÄ±, atlanÄ±yor.")
+                    print(f"⏭️  {province['name']} ilçe bulunamadı, atlanıyor.")
                     continue
 
-                # Ä°lÃ§e filtresi uygula
+                # İlçe filtresi uygula
                 if api_districts_for_province:
                     district_list = [d for d in district_list if d['name'] in api_districts_for_province]
                     if not district_list:
-                        print(f"â­ï¸  {province['name']} iÃ§in eÅŸleÅŸen ilÃ§e bulunamadÄ±.")
+                        print(f"⏭️  {province['name']} için eşleşen ilçe bulunamadı.")
                         continue
 
                 for d in district_list:
                     d['il'] = province_name
 
-                # Her ilÃ§eyi iÅŸle
+                # Her ilçeyi işle
                 for dist_idx, district in enumerate(district_list, 1):
                     if self._is_stop_requested():
-                        print(f"\nâš ï¸ Durdurma isteÄŸi alÄ±ndÄ±! {len(self.all_listings)} ilan toplandÄ±.")
-                        logger.warning(f"âš ï¸ Tarama erken durduruldu: {len(self.all_listings)} ilan")
+                        print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
+                        logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
                         stopped = True
                         break
                     if self._is_listing_limit_reached():
                         stopped = True
                         break
 
-                    # Ä°lÃ§e sayfasÄ±na git ve ilan sayÄ±sÄ±nÄ± al
+                    # İlçe sayfasına git ve ilan sayısını al
                     district_count = self.get_listing_count(district['url'])
 
-                    print(f"\nğŸ“ Ä°lÃ§e {dist_idx}/{len(district_list)}: {district['name']} (Ä°lan: {district_count})")
+                    print(f"\n📍 İlçe {dist_idx}/{len(district_list)}: {district['name']} (İlan: {district_count})")
 
-                    # â”€â”€ OPTÄ°MÄ°ZASYON: Ä°lÃ§e seviyesi kontrol â”€â”€
+                    # ── OPTİMİZASYON: İlçe seviyesi kontrol ──
                     if district_count == 0:
-                        print(f"â­ï¸  {district['name']} â†’ 0 ilan, ilÃ§e atlanÄ±yor.")
+                        print(f"⏭️  {district['name']} → 0 ilan, ilçe atlanıyor.")
                         continue
 
                     if district_count <= self.PAGINATION_LIMIT:
-                        # Ä°lÃ§ede â‰¤1500 ilan â€” mahalleye inmeye gerek yok
-                        print(f"âš¡ {district['name']} â†’ {district_count} ilan (â‰¤{self.PAGINATION_LIMIT}), ilÃ§e seviyesinden taranÄ±yor.")
+                        # İlçede ≤1500 ilan — mahalleye inmeye gerek yok
+                        print(f"⚡ {district['name']} → {district_count} ilan (≤{self.PAGINATION_LIMIT}), ilçe seviyesinden taranıyor.")
                         target = {
                             'url': district['url'],
                             'label': f"{province_name} / {district['name']}",
                             'type': 'ilce'
                         }
-                        print(f"\nğŸ“ TaranÄ±yor: {target['label']}")
+                        print(f"\n📍 Taranıyor: {target['label']}")
                         should_skip, new_count = self._scrape_target(target, province_name, district['name'])
 
                         if progress_callback:
@@ -981,30 +981,30 @@ class EmlakJetScraper(BaseScraper):
                             )
 
                         if should_skip:
-                            print("â­ï¸  Bu lokasyon atlandÄ±.")
+                            print("⏭️  Bu lokasyon atlandı.")
                         else:
-                            print(f"   ğŸ“¦ Toplam: {new_count} yeni ilan toplandÄ±")
+                            print(f"   📦 Toplam: {new_count} yeni ilan toplandı")
                             scrape_stats.setdefault(province_name, {})[district['name']] = new_count
                         continue
 
-                    # Ä°lÃ§e > 1500 ilan â€” mahallelere iniyoruz
-                    print(f"ğŸ“Š {district['name']} â†’ {district_count} ilan (>{self.PAGINATION_LIMIT}), mahalle seviyesine iniliyor...")
+                    # İlçe > 1500 ilan — mahallelere iniyoruz
+                    print(f"📊 {district['name']} → {district_count} ilan (>{self.PAGINATION_LIMIT}), mahalle seviyesine iniliyor...")
 
                     neighborhoods, _ = self.get_location_options("Mahalleler", district['url'])
 
                     if not neighborhoods:
-                        # Mahalle bulunamadÄ± â€” ilÃ§e seviyesinden tara
+                        # Mahalle bulunamadı — ilçe seviyesinden tara
                         target = {
                             'url': district['url'],
                             'label': f"{province_name} / {district['name']}",
                             'type': 'ilce'
                         }
-                        print(f"\nğŸ“ Mahalle bulunamadÄ±, ilÃ§e seviyesinden taranÄ±yor: {target['label']}")
+                        print(f"\n📍 Mahalle bulunamadı, ilçe seviyesinden taranıyor: {target['label']}")
                         should_skip, new_count = self._scrape_target(target, province_name, district['name'])
                         if should_skip:
-                            print("â­ï¸  Bu lokasyon atlandÄ±.")
+                            print("⏭️  Bu lokasyon atlandı.")
                         else:
-                            print(f"   ğŸ“¦ Toplam: {new_count} yeni ilan toplandÄ±")
+                            print(f"   📦 Toplam: {new_count} yeni ilan toplandı")
                         continue
 
                     for n in neighborhoods:
@@ -1023,18 +1023,18 @@ class EmlakJetScraper(BaseScraper):
                     total_targets = len(targets)
                     for target_idx, target in enumerate(targets, 1):
                         if self._is_stop_requested():
-                            print(f"\nâš ï¸ Durdurma isteÄŸi alÄ±ndÄ±! {len(self.all_listings)} ilan toplandÄ±.")
-                            logger.warning(f"âš ï¸ Tarama erken durduruldu: {len(self.all_listings)} ilan")
+                            print(f"\n⚠️ Durdurma isteği alındı! {len(self.all_listings)} ilan toplandı.")
+                            logger.warning(f"⚠️ Tarama erken durduruldu: {len(self.all_listings)} ilan")
                             stopped = True
                             break
                         if self._is_listing_limit_reached():
                             stopped = True
                             break
 
-                        print(f"\nğŸ“ TaranÄ±yor: {target['label']} ({target_idx}/{total_targets})")
+                        print(f"\n📍 Taranıyor: {target['label']} ({target_idx}/{total_targets})")
                         should_skip, new_count = self._scrape_target(target, province_name, district['name'])
 
-                        # Mahalle bazlÄ± istatistikler â€” ilÃ§e altÄ±nda topla
+                        # Mahalle bazlı istatistikler — ilçe altında topla
                         if new_count > 0:
                             scrape_stats.setdefault(province_name, {})
                             scrape_stats[province_name][district['name']] = scrape_stats[province_name].get(district['name'], 0) + new_count
@@ -1051,9 +1051,9 @@ class EmlakJetScraper(BaseScraper):
                             )
 
                         if should_skip:
-                            print("â­ï¸  Bu lokasyon atlandÄ±.")
+                            print("⏭️  Bu lokasyon atlandı.")
                         else:
-                            print(f"   ğŸ“¦ Toplam: {new_count} yeni ilan toplandÄ±")
+                            print(f"   📦 Toplam: {new_count} yeni ilan toplandı")
 
                     if stopped:
                         break
@@ -1061,38 +1061,38 @@ class EmlakJetScraper(BaseScraper):
                     break
 
             if self._is_listing_limit_reached():
-                print(f"\nğŸ¯ Ä°lan limitine ulaÅŸÄ±ldÄ±: {len(self.all_listings)} / {self._max_listings}")
+                print(f"\n🎯 İlan limitine ulaşıldı: {len(self.all_listings)} / {self._max_listings}")
 
-            # â”€â”€ HÄ°YERARÅÄ°K Ã–ZET RAPOR â”€â”€
+            # ── HİYERARŞİK ÖZET RAPOR ──
             print(f"\n{'=' * 70}")
             if stopped and self._is_stop_requested():
-                print("âš ï¸  ERKEN DURDURULDU")
-                logger.warning(f"âš ï¸ Tarama erken durduruldu: {self.total_new_listings} yeni ilan")
+                print("⚠️  ERKEN DURDURULDU")
+                logger.warning(f"⚠️ Tarama erken durduruldu: {self.total_new_listings} yeni ilan")
             elif self.all_listings:
-                print("âœ… TARAMA BAÅARIYLA TAMAMLANDI")
-                logger.info(f"âœ… Tarama tamamlandÄ±: {self.total_new_listings} yeni ilan")
+                print("✅ TARAMA BAŞARIYLA TAMAMLANDI")
+                logger.info(f"✅ Tarama tamamlandı: {self.total_new_listings} yeni ilan")
             else:
-                print("âŒ HÄ°Ã‡ Ä°LAN BULUNAMADI")
-                logger.warning("âš ï¸ HiÃ§ ilan bulunamadÄ±")
+                print("❌ HİÇ İLAN BULUNAMADI")
+                logger.warning("⚠️ Hiç ilan bulunamadı")
 
             if scrape_stats:
-                print(f"ğŸ“Š Taranan Ä°l SayÄ±sÄ±: {len(scrape_stats)}")
-                print(f"ğŸ“Š Toplam Yeni Ä°lan SayÄ±sÄ±: {self.total_new_listings}")
+                print(f"📊 Taranan İl Sayısı: {len(scrape_stats)}")
+                print(f"📊 Toplam Yeni İlan Sayısı: {self.total_new_listings}")
                 for city, districts_data in scrape_stats.items():
                     city_total = sum(districts_data.values())
-                    print(f"   â€¢ {city}: {city_total} ilan ({len(districts_data)} ilÃ§e/bÃ¶lge)")
+                    print(f"   • {city}: {city_total} ilan ({len(districts_data)} ilçe/bölge)")
                     for district_name, count in districts_data.items():
                         print(f"      - {district_name}: {count} ilan")
             print("=" * 70)
 
-            # â”€â”€ RETRY MEKANÄ°ZMASI â”€â”€
+            # ── RETRY MEKANİZMASI ──
             max_retries = 3
             retry_round = 0
             successful_retries = 0
 
             while failed_pages_tracker.has_failed_pages() and retry_round < max_retries:
                 if self._is_stop_requested():
-                    print(f"\nâš ï¸ Retry durduruldu!")
+                    print(f"\n⚠️ Retry durduruldu!")
                     break
 
                 retry_round += 1
@@ -1102,26 +1102,26 @@ class EmlakJetScraper(BaseScraper):
                     break
 
                 print(f"\n{'=' * 70}")
-                print(f"ğŸ”„ YENÄ°DEN DENEME #{retry_round}/{max_retries}")
-                print(f"ğŸ“Š {len(failed_pages)} baÅŸarÄ±sÄ±z sayfa tekrar taranacak")
+                print(f"🔄 YENİDEN DENEME #{retry_round}/{max_retries}")
+                print(f"📊 {len(failed_pages)} başarısız sayfa tekrar taranacak")
                 print("=" * 70)
 
                 if progress_callback:
                     progress_callback(
-                        f"ğŸ”„ Retry #{retry_round} - {len(failed_pages)} sayfa",
+                        f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
                         0, len(failed_pages), 0
                     )
 
                 for idx, page_info in enumerate(failed_pages, 1):
                     if self._is_stop_requested():
-                        print(f"\nâš ï¸ Retry durduruldu!")
+                        print(f"\n⚠️ Retry durduruldu!")
                         break
 
-                    print(f"\nğŸ”„ [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tÃ¼m'} - Sayfa {page_info.page_number}")
+                    print(f"\n🔄 [{idx}/{len(failed_pages)}] {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}")
 
                     if progress_callback:
                         progress_callback(
-                            f"ğŸ”„ Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
+                            f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
                             idx, len(failed_pages), int((idx / len(failed_pages)) * 100)
                         )
 
@@ -1130,11 +1130,11 @@ class EmlakJetScraper(BaseScraper):
                         retry_driver = retry_manager.start()
 
                         try:
-                            print(f"   ğŸŒ {page_info.url}")
+                            print(f"   🌐 {page_info.url}")
                             retry_driver.get(page_info.url)
                             time.sleep(self.config.wait_between_pages + 1)
 
-                            # Ä°lanlarÄ± tara
+                            # İlanları tara
                             container_selector = self.common_selectors.get("listing_container")
                             containers = retry_driver.find_elements(By.CSS_SELECTOR, container_selector)
 
@@ -1149,7 +1149,7 @@ class EmlakJetScraper(BaseScraper):
                                         continue
 
                                 if listings:
-                                    print(f"   âœ… {len(listings)} ilan bulundu!")
+                                    print(f"   ✅ {len(listings)} ilan bulundu!")
                                     self.all_listings.extend(listings)
 
                                     # DB'ye kaydet
@@ -1170,12 +1170,12 @@ class EmlakJetScraper(BaseScraper):
                                     )
                                     successful_retries += 1
                                 else:
-                                    print(f"   âš ï¸ 0 ilan - devam ediliyor")
+                                    print(f"   ⚠️ 0 ilan - devam ediliyor")
                                     failed_pages_tracker.increment_retry_count(
                                         page_info.city, page_info.district, page_info.page_number
                                     )
                             else:
-                                print(f"   âš ï¸ Element bulunamadÄ±")
+                                print(f"   ⚠️ Element bulunamadı")
                                 failed_pages_tracker.increment_retry_count(
                                     page_info.city, page_info.district, page_info.page_number
                                 )
@@ -1183,29 +1183,28 @@ class EmlakJetScraper(BaseScraper):
                             retry_manager.stop()
 
                     except Exception as e:
-                        logger.error(f"Retry hatasÄ±: {e}")
+                        logger.error(f"Retry hatası: {e}")
                         failed_pages_tracker.increment_retry_count(
                             page_info.city, page_info.district, page_info.page_number
                         )
 
                     time.sleep(random.uniform(1, 2))
 
-            # Yeniden deneme Ã¶zeti
+            # Yeniden deneme özeti
             summary = failed_pages_tracker.get_summary()
             if summary["failed_count"] > 0 or successful_retries > 0:
                 print(f"\n{'=' * 70}")
-                print("ğŸ“Š RETRY Ã–ZETÄ°")
-                print(f"   âœ… BaÅŸarÄ±lÄ± retry: {successful_retries}")
-                print(f"   âŒ Kalan baÅŸarÄ±sÄ±z: {summary['failed_count']}")
+                print("📊 RETRY ÖZETİ")
+                print(f"   ✅ Başarılı retry: {successful_retries}")
+                print(f"   ❌ Kalan başarısız: {summary['failed_count']}")
                 print("=" * 70)
 
                 if summary["failed_count"] > 0:
-                    logger.warning(f"âš ï¸ {summary['failed_count']} sayfa retry sonrasÄ± hala baÅŸarÄ±sÄ±z")
+                    logger.warning(f"⚠️ {summary['failed_count']} sayfa retry sonrası hala başarısız")
                     for fp in summary["failed_pages"]:
-                        logger.warning(f"   - {fp['city']}/{fp['district'] or 'tÃ¼m'} Sayfa {fp['page_number']}: {fp['error']}")
+                        logger.warning(f"   - {fp['city']}/{fp['district'] or 'tüm'} Sayfa {fp['page_number']}: {fp['error']}")
 
         except Exception as e:
-            logger.error(f"API tarama hatasÄ±: {e}")
+            logger.error(f"API tarama hatası: {e}")
             raise e
-
 

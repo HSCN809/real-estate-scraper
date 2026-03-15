@@ -363,8 +363,6 @@ async def scrape_emlakjet(request: ScrapeRequest):
             "total": 0,
             "details": "",
             "started_at": datetime.now().isoformat(),
-            "should_stop": False,
-            "stopped_early": False,
         }
         r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
 
@@ -425,8 +423,6 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
             "total": 0,
             "details": "",
             "started_at": datetime.now().isoformat(),
-            "should_stop": False,
-            "stopped_early": False,
         }
         r.setex(f"scrape_task:{task.id}", 86400, json.dumps(initial_status))
 
@@ -442,87 +438,6 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
         data_count=0,
         output_files=[]
     )
-
-@router.post("/stop")
-async def stop_scraping(task_id: Optional[str] = None):
-    """Aktif tarama işlemini anında durdur (terminate) ve orphan verileri temizle"""
-    r = get_redis_client()
-
-    # task_id yoksa aktif task'ı bul
-    if not task_id and r:
-        for key in r.scan_iter("scrape_task:*"):
-            data = r.get(key)
-            if data:
-                d = json.loads(data)
-                if d.get("status") in ("running", "pending"):
-                    task_id = d.get("task_id")
-                    break
-
-    if not task_id:
-        # Bellek içi duruma geri dön
-        if task_status.is_running:
-            task_status.request_stop()
-            return {"status": "stopped", "message": "Durdurma isteği gönderildi."}
-        return {"status": "idle", "message": "Aktif bir tarama işlemi yok."}
-
-    # 1) Redis'te status'ü direkt "stopped" yap
-    key = f"scrape_task:{task_id}"
-    if r:
-        data = r.get(key)
-        if data:
-            data = json.loads(data)
-            data["should_stop"] = True
-            data["message"] = "Task sonlandırıldı."
-            data["status"] = "stopped"
-            data["stopped_early"] = True
-            r.setex(key, 86400, json.dumps(data))
-
-    # 2) Celery task'ı terminate et (SIGTERM — finally blokları çalışsın)
-    try:
-        celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
-        logging.info(f"Task {task_id} revoked with SIGTERM")
-    except Exception as e:
-        logging.error(f"Failed to revoke task {task_id}: {e}")
-
-    # 3) Orphan ScrapeSession temizliği
-    _cleanup_orphan_sessions()
-
-    # In-memory status'ü de temizle
-    if task_status.is_running:
-        task_status.request_stop()
-
-    return {
-        "status": "stopped",
-        "message": "Task sonlandırıldı.",
-        "task_id": task_id
-    }
-
-
-def _cleanup_orphan_sessions():
-    """Terminate edilen task'ların orphan session'larını temizle"""
-    from database.connection import get_db_session
-
-    db = get_db_session()
-    try:
-        running_sessions = db.query(ScrapeSession).filter(
-            ScrapeSession.status == "running"
-        ).all()
-
-        for session in running_sessions:
-            crud.complete_scrape_session(
-                db, session.id,
-                status="terminated",
-                error_message="Task zorla sonlandırıldı"
-            )
-
-        if running_sessions:
-            db.commit()
-            logging.info(f"Cleaned up {len(running_sessions)} orphan session(s)")
-    except Exception as e:
-        db.rollback()
-        logging.error(f"Orphan session cleanup failed: {e}")
-    finally:
-        db.close()
 
 @router.get("/analytics/prices")
 async def get_price_analytics(
@@ -859,9 +774,9 @@ async def get_status(task_id: Optional[str] = None):
             # "pending" olarak dön, başka task'ın status'unu dönme!
             return {
                 "task_id": task_id,
-                "status": "pending",
-                "is_running": True,
-                "message": "Task başlatılıyor...",
+                "status": "failed",
+                "is_running": False,
+                "message": "Task bulunamadi veya sona erdi.",
                 "progress": 0,
                 "current": 0,
                 "total": 0,
