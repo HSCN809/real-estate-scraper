@@ -168,6 +168,46 @@ class EmlakJetScraplingScraper:
         query["sayfa"] = [str(page_num)]
         return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
+    def _slugify_location(self, name: str) -> str:
+        normalized = unicodedata.normalize("NFKD", str(name or ""))
+        ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        ascii_only = ascii_only.translate(
+            str.maketrans(
+                {
+                    "ı": "i",
+                    "İ": "i",
+                    "ş": "s",
+                    "Ş": "s",
+                    "ğ": "g",
+                    "Ğ": "g",
+                    "ü": "u",
+                    "Ü": "u",
+                    "ö": "o",
+                    "Ö": "o",
+                    "ç": "c",
+                    "Ç": "c",
+                }
+            )
+        )
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+        return slug
+
+    def _build_city_url(self, city_name: str) -> str:
+        base_path = (self.subtype_path or self.base_url).strip()
+        if base_path.startswith("http://") or base_path.startswith("https://"):
+            parsed = urlparse(base_path)
+            path_part = parsed.path.strip("/")
+        else:
+            path_part = base_path.strip("/")
+
+        if not path_part:
+            return self.base_url
+
+        city_slug = self._slugify_location(city_name)
+        if not city_slug:
+            return f"{self.base_config.base_url.rstrip('/')}/{path_part}"
+        return f"{self.base_config.base_url.rstrip('/')}/{path_part}/{city_slug}"
+
     @staticmethod
     def _get_page_number(url: str) -> int:
         try:
@@ -1000,8 +1040,19 @@ class EmlakJetScraplingScraper:
             all_provinces, _ = self.get_location_options("Iller", self.base_url)
             provinces = self._match_requested_locations(all_provinces, self.selected_cities)
             if not provinces:
-                task_log.line(f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}", level="error")
-                return {}
+                if self.proxy_enabled and self.selected_cities:
+                    task_log.line(
+                        "Iller listesi alinamadi/eslesmedi (proxy/challenge). "
+                        "Secili sehirler icin dogrudan URL fallback uygulanacak.",
+                        level="warning",
+                    )
+                    provinces = [
+                        {"name": city_name, "url": self._build_city_url(city_name)}
+                        for city_name in self.selected_cities
+                    ]
+                else:
+                    task_log.line(f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}", level="error")
+                    return {}
 
             for prov_idx, province in enumerate(provinces, 1):
                 province_name = province["name"]

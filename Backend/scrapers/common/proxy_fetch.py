@@ -2,6 +2,7 @@
 """Shared proxy-backed fetch helpers for scrapling scrapers."""
 
 import os
+import time
 from typing import Optional
 
 from scrapling.parser import Selector
@@ -66,44 +67,39 @@ class ProxyFetchClient:
         if not self.enabled or self.client is None:
             raise RuntimeError("ProxyFetchClient is not enabled")
 
-        response = self.client.fetch_with_retry(
-            url=url,
-            max_retries=self.max_retries,
-            initial_delay=self.initial_delay,
-        )
+        max_attempts = max(1, self.max_retries)
+        last_error = "Proxy fetch failed"
 
-        if response.error:
-            self._log(
-                task_log,
-                f"Proxy fetch failed ({response.status}): {response.error}",
-                level="warning",
+        for attempt in range(max_attempts):
+            response = self.client.fetch_with_retry(
+                url=url,
+                max_retries=1,
+                initial_delay=self.initial_delay,
             )
-            return None
 
-        if response.status >= 400:
-            self._log(
-                task_log,
-                f"Proxy returned status {response.status} for {url}",
-                level="warning",
-            )
-            return None
+            if response.error:
+                last_error = f"Proxy fetch failed ({response.status}): {response.error}"
+            elif response.status >= 400:
+                last_error = f"Proxy returned status {response.status} for {url}"
+            else:
+                body = response.body or b""
+                if len(body) <= 100:
+                    last_error = f"Proxy response too short ({len(body)} bytes) for {url}"
+                else:
+                    decoded = body.decode("utf-8", errors="ignore")
+                    if self._is_cloudflare_challenge(decoded):
+                        last_error = f"Cloudflare challenge still detected for {url}"
+                    else:
+                        return Selector(content=body, url=url)
 
-        body = response.body or b""
-        if len(body) <= 100:
-            self._log(
-                task_log,
-                f"Proxy response too short ({len(body)} bytes) for {url}",
-                level="warning",
-            )
-            return None
+            if attempt < max_attempts - 1:
+                delay = self.initial_delay * (2 ** attempt)
+                self._log(
+                    task_log,
+                    f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",
+                    level="warning",
+                )
+                time.sleep(delay)
 
-        decoded = body.decode("utf-8", errors="ignore")
-        if self._is_cloudflare_challenge(decoded):
-            self._log(
-                task_log,
-                f"Cloudflare challenge still detected for {url}",
-                level="warning",
-            )
-            return None
-
-        return Selector(content=body, url=url)
+        self._log(task_log, last_error, level="warning")
+        return None
