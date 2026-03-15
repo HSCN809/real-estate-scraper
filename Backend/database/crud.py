@@ -761,9 +761,41 @@ def get_results_for_frontend(db: Session) -> List[Dict[str, Any]]:
         Listing.alt_kategori
     ).order_by(func.max(Listing.created_at).desc()).all()
 
+    def _normalize_display_location(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        if text == "-":
+            return None
+
+        normalized = text.casefold().translate(
+            str.maketrans(
+                {
+                    "ı": "i",
+                    "İ": "i",
+                    "ş": "s",
+                    "Ş": "s",
+                    "ğ": "g",
+                    "Ğ": "g",
+                    "ü": "u",
+                    "Ü": "u",
+                    "ö": "o",
+                    "Ö": "o",
+                    "ç": "c",
+                    "Ç": "c",
+                }
+            )
+        )
+        compact = re.sub(r"[\s\-_]+", "", normalized)
+        if compact in {"belirtilmemis", "bilinmiyor", "unknown", "none", "null", "yok"}:
+            return None
+        return text
+
     for idx, row in enumerate(combinations):
-        city = row.il or "Bilinmiyor"
-        district = row.ilce
+        city = _normalize_display_location(row.il) or "Bilinmiyor"
+        district = _normalize_display_location(row.ilce)
 
         # Görüntüleme adlarını biçimlendir
         platform_display = platform_map.get(row.platform, row.platform)
