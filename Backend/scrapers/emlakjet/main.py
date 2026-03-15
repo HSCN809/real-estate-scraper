@@ -28,6 +28,7 @@ from .parsers import KonutParser, ArsaParser, IsyeriParser, TuristikTesisParser
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
+_URL_FILTER_FALLBACK_LOGGED: Set[tuple] = set()
 
 
 def _normalize_emlakjet_slug(value: Optional[str]) -> str:
@@ -48,8 +49,41 @@ def _normalize_emlakjet_slug(value: Optional[str]) -> str:
     return ascii_only
 
 
+def _normalize_location_token(value: Optional[str]) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_only = "".join(ch for ch in text if not unicodedata.combining(ch))
+    ascii_only = ascii_only.translate(
+        str.maketrans(
+            {
+                "ı": "i",
+                "İ": "i",
+                "ş": "s",
+                "Ş": "s",
+                "ğ": "g",
+                "Ğ": "g",
+                "ü": "u",
+                "Ü": "u",
+                "ö": "o",
+                "Ö": "o",
+                "ç": "c",
+                "Ç": "c",
+            }
+        )
+    )
+    return re.sub(r"\s+", " ", ascii_only).strip().casefold()
+
+
+def _extract_location_name(raw_text: str) -> str:
+    compact = " ".join(str(raw_text or "").split())
+    compact = re.sub(r"\s+\(?[\d\.\,]+\)?$", "", compact).strip()
+    compact = re.sub(r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE).strip()
+    compact = re.sub(r"\s+(satılık|satilik|kiralık|kiralik)\b.*$", "", compact, flags=re.IGNORECASE).strip()
+    compact = re.sub(r"\s*[-–|•]+\s*$", "", compact).strip()
+    return compact
+
+
 def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> Optional[str]:
-    """Extract first URL path segment used by Emlakjet for category/subtype."""
+    """Extract listing type/category slug from Emlakjet URL."""
     if not listing_url:
         return None
 
@@ -59,10 +93,21 @@ def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> Optional[str]:
         if host and "emlakjet.com" not in host:
             return None
 
-        parts = [part for part in parsed.path.split("/") if part]
+        parts = [_normalize_emlakjet_slug(part) for part in parsed.path.split("/") if part]
         if not parts:
             return None
-        return _normalize_emlakjet_slug(parts[0])
+
+        # Listing URLs are often /ilan/... and category slug may appear in later segments.
+        for part in parts:
+            if re.match(r"^(satilik|kiralik)-[a-z0-9-]+$", part):
+                return part
+
+        path_slug = _normalize_emlakjet_slug(parsed.path)
+        embedded_match = re.search(r"(satilik|kiralik)-[a-z0-9-]+", path_slug)
+        if embedded_match:
+            return embedded_match.group(0)
+
+        return parts[0]
     except Exception:
         return None
 
@@ -188,17 +233,33 @@ def save_listings_to_db(
                 else:
                     filtered_out += 1
 
-            if filtered_out > 0:
-                logger.warning(
-                    "Filtered %s listings due to mismatched listing_type/category/subtype "
+            if filtered_out > 0 and filtered_records:
+                logger.info(
+                    "URL filter skipped %s/%s listings (kept=%s) "
                     "(listing_type=%s, kategori=%s, alt_kategori=%s)",
                     filtered_out,
+                    len(listings),
+                    len(filtered_records),
                     ilan_tipi,
                     kategori,
                     alt_kategori,
                 )
 
-            records_to_save = filtered_records
+            if listings and not filtered_records:
+                fallback_log_key = (scrape_session_id, ilan_tipi, kategori, alt_kategori)
+                if fallback_log_key not in _URL_FILTER_FALLBACK_LOGGED:
+                    logger.info(
+                        "URL filter matched none; using unfiltered fallback save "
+                        "(listings=%s, listing_type=%s, kategori=%s, alt_kategori=%s)",
+                        len(listings),
+                        ilan_tipi,
+                        kategori,
+                        alt_kategori,
+                    )
+                    _URL_FILTER_FALLBACK_LOGGED.add(fallback_log_key)
+                records_to_save = listings
+            else:
+                records_to_save = filtered_records
 
         for data in records_to_save:
             _, status = crud.upsert_listing(
@@ -381,13 +442,14 @@ class EmlakJetScraper(BaseScraper):
 
             for link in location_links:
                 try:
-                    location_name = link.text.strip().split()[0]
+                    location_name = _extract_location_name(link.text)
                     location_url = link.get_attribute("href")
 
                     if location_name and location_url:
                         # Duplicate kontrolü
-                        if location_name not in seen_names:
-                            seen_names.add(location_name)
+                        normalized_name = _normalize_location_token(location_name)
+                        if normalized_name not in seen_names:
+                            seen_names.add(normalized_name)
                             location_options.append({
                                 'name': location_name,
                                 'url': location_url
@@ -587,7 +649,8 @@ class EmlakJetScraper(BaseScraper):
         if api_mode:
             # API modunda, isimle belirtilen ilçeler varsa eşleştir
             if api_districts:
-                selected = [d for d in districts if d['name'] in api_districts]
+                normalized_districts = {_normalize_location_token(name) for name in api_districts}
+                selected = [d for d in districts if _normalize_location_token(d['name']) in normalized_districts]
                 if selected:
                     for d in selected:
                         d['il'] = province['name']
@@ -813,7 +876,14 @@ class EmlakJetScraper(BaseScraper):
             self._log_location_complete(target['label'], new_listings_count_ref[0])
         return should_skip, new_listings_count_ref[0]
 
-    def start_scraping_api(self, cities: Optional[List[str]] = None, districts: Optional[Dict[str, List[str]]] = None, max_listings: int = 0, progress_callback=None):
+    def start_scraping_api(
+        self,
+        cities: Optional[List[str]] = None,
+        districts: Optional[Dict[str, List[str]]] = None,
+        max_listings: int = 0,
+        max_pages: Optional[int] = None,
+        progress_callback=None,
+    ):
         """İki katmanlı optimizasyonla API tarama giriş noktası"""
         print = task_log.line
         self._max_listings = max_listings
@@ -838,9 +908,9 @@ class EmlakJetScraper(BaseScraper):
             # Adım 1: İlleri seç
             if cities:
                 api_indices = []
-                cities_lower = [c.lower() for c in cities]
+                normalized_cities = {_normalize_location_token(c) for c in cities}
                 for idx, p in enumerate(all_provinces, 1):
-                    if p['name'].lower() in cities_lower:
+                    if _normalize_location_token(p['name']) in normalized_cities:
                         api_indices.append(idx)
 
                 if not api_indices:
@@ -903,9 +973,13 @@ class EmlakJetScraper(BaseScraper):
                 # İlçe filtreleme var mı kontrol et
                 province_name = province['name']
                 api_districts_for_province = None
-                if districts and province_name in districts:
-                    api_districts_for_province = districts[province_name]
-                    logger.info(f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}")
+                if districts:
+                    normalized_province_name = _normalize_location_token(province_name)
+                    for city_name, district_names in districts.items():
+                        if _normalize_location_token(city_name) == normalized_province_name:
+                            api_districts_for_province = district_names
+                            logger.info(f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}")
+                            break
 
                 # İlçe listesini al
                 district_list, _ = self.get_location_options("İlçeler", province['url'])
@@ -916,7 +990,8 @@ class EmlakJetScraper(BaseScraper):
 
                 # İlçe filtresi uygula
                 if api_districts_for_province:
-                    district_list = [d for d in district_list if d['name'] in api_districts_for_province]
+                    normalized_districts = {_normalize_location_token(name) for name in api_districts_for_province}
+                    district_list = [d for d in district_list if _normalize_location_token(d['name']) in normalized_districts]
                     if not district_list:
                         print(f"⏭️  {province['name']} için eşleşen ilçe bulunamadı.")
                         continue

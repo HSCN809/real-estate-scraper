@@ -492,6 +492,8 @@ class EmlakJetScraplingScraper:
         compact = " ".join(str(text).split())
         compact = re.sub(r"\s+\(?[\d\.\,]+\)?$", "", compact).strip()
         compact = re.sub(r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE).strip()
+        compact = re.sub(r"\s+(satılık|satilik|kiralık|kiralik)\b.*$", "", compact, flags=re.IGNORECASE).strip()
+        compact = re.sub(r"\s*[-–|•]+\s*$", "", compact).strip()
         return compact
 
     def get_location_options(self, location_type: str, current_url: str) -> Tuple[List[Dict[str, str]], Optional[int]]:
