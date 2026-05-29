@@ -4,10 +4,15 @@ Advanced proxy server with uTLS fingerprint spoofing for bypassing Cloudflare pr
 
 ## 🎯 Features
 
-- **TLS Fingerprint Spoofing**: Uses uTLS library to mimic Chrome 120 browser fingerprints
+- **TLS Fingerprint Spoofing**: Uses uTLS library to mimic Chrome/Firefox/Edge browser fingerprints
+- **TLS Fingerprint Rotation**: Automatic rotation between multiple fingerprints to avoid detection
+- **API Key Authentication**: Secure proxy access with API key validation
+- **Rate Limiting**: Token bucket rate limiting to prevent abuse
+- **CORS Protection**: Configurable allowed origins for cross-origin requests
 - **Mobile Proxy Support**: Optional mobile/residential proxy integration
-- **Connection Pooling**: Reusable HTTP connections for better performance
+- **Connection Pooling**: Reusable HTTP connections with proper client return
 - **Intelligent Retry Logic**: Exponential backoff for Cloudflare challenges
+- **Structured Logging**: JSON logging for production, console for development
 - **Health Monitoring**: Built-in health checks and logging
 - **Python Integration**: Easy-to-use Python client for scraping scripts
 
@@ -150,7 +155,17 @@ USE_MOBILE_PROXY=true
 
 # TLS Fingerprint
 TLS_CLIENT_ID=HelloChrome_120           # Chrome version to mimic
+TLS_ROTATE=true                         # Enable fingerprint rotation
+TLS_ROTATE_LIST=HelloChrome_120,HelloChrome_119,HelloFirefox_120  # Fingerprints to rotate
 USER_AGENT=Mozilla/5.0...             # Custom user agent
+
+# Security
+PROXY_API_KEY=your-secret-api-key      # API key for authentication (empty = no auth)
+ALLOWED_ORIGINS=http://localhost:3000   # Comma-separated allowed CORS origins
+
+# Rate Limiting
+RATE_LIMIT=10                          # Requests per second per IP
+RATE_LIMIT_BURST=20                    # Max burst size
 
 # Connection Pool
 MAX_IDLE_CONNS=100                     # Max idle connections
@@ -188,13 +203,21 @@ Response: `{"status":"ok","service":"invisible-proxy"}`
 
 ### GET `/proxy` - Simple Proxy Request
 ```bash
+# Without API key (if PROXY_API_KEY is empty)
 curl "http://127.0.0.1:8080/proxy?url=https://example.com"
+
+# With API key
+curl "http://127.0.0.1:8080/proxy?url=https://example.com&api_key=your-secret-key"
+
+# Or via header
+curl -H "X-API-Key: your-secret-key" "http://127.0.0.1:8080/proxy?url=https://example.com"
 ```
 
 ### POST `/proxy` - Advanced Proxy Request
 ```bash
 curl -X POST http://127.0.0.1:8080/proxy \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-key" \
   -d '{
     "url": "https://example.com",
     "method": "POST",
@@ -267,11 +290,21 @@ print(f'Body length: {len(response.body)} bytes')
 
 ## 🛡️ Security & Best Practices
 
-1. **Mobile Proxy Usage**: Always use residential/mobile proxies for production scraping
-2. **Rate Limiting**: Implement delays between requests to avoid detection
-3. **Cookie Persistence**: Maintain session cookies for authentication
-4. **User Agent Rotation**: Periodically change user agents if needed
-5. **Monitoring**: Keep logs of Cloudflare challenges and success rates
+1. **API Key Authentication**: Set `PROXY_API_KEY` environment variable to secure proxy access
+2. **CORS Protection**: Configure `ALLOWED_ORIGINS` to limit cross-origin requests
+3. **Rate Limiting**: Built-in token bucket rate limiting (default: 10 req/s, burst 20)
+4. **TLS Fingerprint Rotation**: Enable `TLS_ROTATE=true` to rotate between multiple fingerprints
+5. **Mobile Proxy Usage**: Always use residential/mobile proxies for production scraping
+6. **Cookie Persistence**: Maintain session cookies for authentication
+7. **Monitoring**: Keep logs of Cloudflare challenges and success rates
+
+### Production Security Checklist
+- [ ] Set `PROXY_API_KEY` to a strong random key
+- [ ] Configure `ALLOWED_ORIGINS` to your frontend domains only
+- [ ] Enable `TLS_ROTATE=true` for fingerprint rotation
+- [ ] Use mobile/residential proxies for production
+- [ ] Monitor rate limit logs for abuse detection
+- [ ] Set `DEBUG=false` in production
 
 ## 🐛 Troubleshooting
 

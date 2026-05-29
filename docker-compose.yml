@@ -20,6 +20,8 @@ services:
 
       # TLS Fingerprint Configuration
       - TLS_CLIENT_ID=HelloChrome_120
+      - TLS_ROTATE=true
+      - TLS_ROTATE_LIST=HelloChrome_120,HelloChrome_119,HelloChrome_118,HelloFirefox_120,HelloEdge_120
       - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 
       # Connection Pool Configuration
@@ -31,10 +33,19 @@ services:
       - MAX_RETRIES=3
       - RETRY_DELAY=1000
 
+      # Security Configuration
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
+      - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://real-estate-frontend:3000,http://localhost:8000,http://real-estate-api:8000
+
+      # Rate Limiting
+      - RATE_LIMIT=10
+      - RATE_LIMIT_BURST=20
+
       # Debug mode
       - DEBUG=false
       - GOSUMDB=off
       - GOPROXY=direct
+      - GONOSUMDB=*
 
     volumes:
       - ./Backend/go/logs:/app/logs
@@ -44,9 +55,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+      timeout: 15s
+      retries: 5
+      start_period: 10s
     logging:
       driver: "json-file"
       options:
@@ -149,7 +160,7 @@ services:
       - CHROME_HEADLESS=${CHROME_HEADLESS}
       - LOG_LEVEL=${LOG_LEVEL}
       - GO_PROXY_URL=http://invisible-proxy:8080
-      - USE_GO_PROXY=false
+      - USE_GO_PROXY=true
       - LOG_FILE=/tmp/scraper-logs/scraper.log
       - LOG_FALLBACK_DIR=/tmp/scraper-logs
     depends_on:

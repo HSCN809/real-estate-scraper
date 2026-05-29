@@ -2,23 +2,41 @@ package main
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
+	"github.com/rs/zerolog/log"
 )
 
 // TLSFingerprintManager manages TLS fingerprint spoofing
 type TLSFingerprintManager struct {
-	config *Config
+	config       *Config
+	rotateIndex  atomic.Int64
 }
 
 // NewTLSFingerprintManager creates a new TLS fingerprint manager
 func NewTLSFingerprintManager(cfg *Config) *TLSFingerprintManager {
-	return &TLSFingerprintManager{
+	mgr := &TLSFingerprintManager{
 		config: cfg,
 	}
+
+	// Log fingerprint rotation status
+	if cfg.TLSRotate && len(cfg.TLSRotateList) > 0 {
+		log.Info().
+			Int("count", len(cfg.TLSRotateList)).
+			Strs("fingerprints", cfg.TLSRotateList).
+			Msg("TLS fingerprint rotation enabled")
+	} else {
+		log.Info().
+			Str("fingerprint", cfg.TLSClientID).
+			Msg("TLS fingerprint rotation disabled, using fixed fingerprint")
+	}
+
+	return mgr
 }
 
 // CreateDialTLSContextFunc creates a TLS dialer that uses utls fingerprinting.
@@ -43,6 +61,9 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 		serverName = host
 	}
 
+	// Get TLS client ID (with rotation if enabled)
+	clientID := tfm.getNextClientHelloID()
+
 	tlsConfig := &utls.Config{
 		ServerName:         serverName,
 		MinVersion:         utls.VersionTLS12,
@@ -51,7 +72,7 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 		NextProtos:         []string{"http/1.1"},
 	}
 
-	clientHelloID := tfm.resolveClientHelloID(tfm.config.TLSClientID)
+	clientHelloID := tfm.resolveClientHelloID(clientID)
 	uConn := utls.UClient(rawConn, tlsConfig, utls.HelloCustom)
 	if err := tfm.applyClientHelloPreset(uConn, clientHelloID); err != nil {
 		_ = rawConn.Close()
@@ -63,6 +84,24 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 	}
 
 	return uConn, nil
+}
+
+// getNextClientHelloID returns the next TLS client ID for rotation
+func (tfm *TLSFingerprintManager) getNextClientHelloID() string {
+	if !tfm.config.TLSRotate || len(tfm.config.TLSRotateList) == 0 {
+		return tfm.config.TLSClientID
+	}
+
+	// Get next index atomically
+	idx := tfm.rotateIndex.Add(1) - 1
+	fingerprint := tfm.config.TLSRotateList[idx%int64(len(tfm.config.TLSRotateList))]
+
+	log.Debug().
+		Str("fingerprint", fingerprint).
+		Int64("index", idx%int64(len(tfm.config.TLSRotateList))).
+		Msg("Using rotated TLS fingerprint")
+
+	return fingerprint
 }
 
 func (tfm *TLSFingerprintManager) applyClientHelloPreset(uConn *utls.UConn, clientHelloID utls.ClientHelloID) error {
@@ -92,7 +131,25 @@ func (tfm *TLSFingerprintManager) resolveClientHelloID(clientID string) utls.Cli
 		return utls.HelloRandomized
 	case "hellorandomizedalpn", "randomizedalpn":
 		return utls.HelloRandomizedALPN
+	case "hellochrome_119", "chrome_119":
+		return utls.HelloChrome_119
+	case "hellochrome_118", "chrome_118":
+		return utls.HelloChrome_118
+	case "hellochrome_117", "chrome_117":
+		return utls.HelloChrome_117
+	case "hellochrome_116", "chrome_116":
+		return utls.HelloChrome_116
+	case "hellofirefox_117", "firefox_117":
+		return utls.HelloFirefox_117
 	default:
 		return utls.HelloChrome_Auto
 	}
+}
+
+// GetRandomFingerprint returns a random fingerprint from the rotation list
+func GetRandomFingerprint(fingerprints []string) string {
+	if len(fingerprints) == 0 {
+		return "HelloChrome_120"
+	}
+	return fingerprints[rand.Intn(len(fingerprints))]
 }

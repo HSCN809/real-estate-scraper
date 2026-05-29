@@ -18,12 +18,26 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	if os.Getenv("DEBUG") == "true" {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	// JSON structured logging for production
+	if os.Getenv("ENVIRONMENT") == "production" {
+		log.Logger = zerolog.New(os.Stdout).With().
+			Timestamp().
+			Str("service", "invisible-proxy").
+			Logger()
+	} else {
+		// Console writer for development
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
-	log.Info().Msg("🚀 Invisible Go Proxy Server Starting...")
+	// Enable debug mode if specified
+	if os.Getenv("DEBUG") == "true" {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		log.Debug().Msg("Debug logging enabled")
+	}
+
+	log.Info().
+		Str("version", "1.0.0").
+		Msg("Invisible Go Proxy Server Starting...")
 
 	// Load configuration
 	config := LoadConfigFromEnv()
@@ -31,6 +45,11 @@ func main() {
 		Str("host", config.Host).
 		Int("port", config.Port).
 		Bool("mobile_proxy", config.UseMobileProxy).
+		Bool("tls_rotate", config.TLSRotate).
+		Int("tls_fingerprints", len(config.TLSRotateList)).
+		Bool("api_key_set", config.APIKey != "").
+		Int("rate_limit", config.RateLimit).
+		Int("rate_burst", config.RateLimitBurst).
 		Msg("Configuration loaded")
 
 	// Initialize components
@@ -54,7 +73,9 @@ func main() {
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Info().Msgf("🎯 Server listening on %s:%d", config.Host, config.Port)
+		log.Info().
+			Str("address", fmt.Sprintf("%s:%d", config.Host, config.Port)).
+			Msg("Server listening")
 		serverErrors <- server.ListenAndServe()
 	}()
 
@@ -70,15 +91,16 @@ func main() {
 		log.Info().Msgf("Received signal %v, shutting down gracefully...", sig)
 	}
 
-	// Graceful shutdown
+	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Shutdown server
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("Server shutdown error")
 	}
 
-	log.Info().Msg("👋 Server stopped gracefully")
+	log.Info().Msg("Server stopped gracefully")
 }
 
 // Health check endpoint (can be called from handler.go)

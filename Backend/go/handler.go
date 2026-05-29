@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -18,14 +19,108 @@ type ProxyHandler struct {
 	config     *Config
 	clientPool *ClientPool
 	tlsManager *TLSFingerprintManager
+
+	// Rate limiting
+	rateLimiter *RateLimiter
+
+	// Allowed origins for CORS
+	allowedOrigins []string
+}
+
+// RateLimiter implements token bucket rate limiting
+type RateLimiter struct {
+	mu       sync.Mutex
+	tokens   map[string]*tokenBucket
+	rate     int           // requests per second
+	burst    int           // max burst size
+	cleanup  time.Duration // cleanup interval
+}
+
+type tokenBucket struct {
+	tokens    float64
+	lastTime  time.Time
+	maxTokens float64
+}
+
+// NewRateLimiter creates a new rate limiter
+func NewRateLimiter(rate int, burst int) *RateLimiter {
+	rl := &RateLimiter{
+		tokens:   make(map[string]*tokenBucket),
+		rate:     rate,
+		burst:    burst,
+		cleanup:  5 * time.Minute,
+	}
+
+	// Start cleanup goroutine
+	go rl.cleanupExpired()
+
+	return rl
+}
+
+// Allow checks if a request from the given IP is allowed
+func (rl *RateLimiter) Allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	bucket, exists := rl.tokens[ip]
+	if !exists {
+		bucket = &tokenBucket{
+			tokens:    float64(rl.burst),
+			lastTime:  time.Now(),
+			maxTokens: float64(rl.burst),
+		}
+		rl.tokens[ip] = bucket
+	}
+
+	// Add tokens based on elapsed time
+	now := time.Now()
+	elapsed := now.Sub(bucket.lastTime).Seconds()
+	bucket.tokens += elapsed * float64(rl.rate)
+	if bucket.tokens > bucket.maxTokens {
+		bucket.tokens = bucket.maxTokens
+	}
+	bucket.lastTime = now
+
+	// Check if request is allowed
+	if bucket.tokens >= 1 {
+		bucket.tokens--
+		return true
+	}
+
+	return false
+}
+
+// cleanupExpired removes expired entries
+func (rl *RateLimiter) cleanupExpired() {
+	ticker := time.NewTicker(rl.cleanup)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for ip, bucket := range rl.tokens {
+			if now.Sub(bucket.lastTime) > 10*time.Minute {
+				delete(rl.tokens, ip)
+			}
+		}
+		rl.mu.Unlock()
+	}
 }
 
 // NewProxyHandler creates a new proxy handler
 func NewProxyHandler(cfg *Config, pool *ClientPool, tlsManager *TLSFingerprintManager) *ProxyHandler {
 	return &ProxyHandler{
-		config:     cfg,
-		clientPool: pool,
-		tlsManager: tlsManager,
+		config:      cfg,
+		clientPool:  pool,
+		tlsManager:  tlsManager,
+		rateLimiter: NewRateLimiter(10, 20), // 10 requests/second, burst of 20
+		allowedOrigins: []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://real-estate-frontend:3000",
+			"http://localhost:8000",
+			"http://real-estate-api:8000",
+		},
 	}
 }
 
@@ -50,10 +145,25 @@ type ProxyResponse struct {
 
 // ServeHTTP handles incoming HTTP requests
 func (ph *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Add CORS headers for cross-origin requests
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// Get client IP for rate limiting
+	clientIP := getClientIP(r)
+
+	// Rate limiting check
+	if !ph.rateLimiter.Allow(clientIP) {
+		log.Warn().Str("ip", clientIP).Msg("Rate limit exceeded")
+		ph.sendErrorResponse(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
+	// CORS: Check origin and set appropriate headers
+	origin := r.Header.Get("Origin")
+	if origin != "" && ph.isOriginAllowed(origin) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+	}
 
 	// Handle OPTIONS preflight
 	if r.Method == "OPTIONS" {
@@ -61,12 +171,21 @@ func (ph *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Health endpoint for Docker healthcheck
+	// Health endpoint for Docker healthcheck (no auth required)
 	if r.URL.Path == "/" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","service":"invisible-proxy"}`))
 		return
+	}
+
+	// API key authentication for proxy endpoint
+	if r.URL.Path == "/proxy" {
+		if !ph.authenticateRequest(r) {
+			log.Warn().Str("ip", clientIP).Msg("Unauthorized proxy request")
+			ph.sendErrorResponse(w, "Unauthorized. Valid API key required.", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Proxy endpoint guard
@@ -84,6 +203,61 @@ func (ph *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// isOriginAllowed checks if the origin is in the allowed list
+func (ph *ProxyHandler) isOriginAllowed(origin string) bool {
+	for _, allowed := range ph.allowedOrigins {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// authenticateRequest validates the API key
+func (ph *ProxyHandler) authenticateRequest(r *http.Request) bool {
+	// If no API key is configured, allow all requests
+	if ph.config.APIKey == "" {
+		return true
+	}
+
+	// Check X-API-Key header
+	apiKey := r.Header.Get("X-API-Key")
+	if apiKey != "" {
+		return apiKey == ph.config.APIKey
+	}
+
+	// Check query parameter
+	apiKey = r.URL.Query().Get("api_key")
+	if apiKey != "" {
+		return apiKey == ph.config.APIKey
+	}
+
+	return false
+}
+
+// getClientIP extracts the client IP from the request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+
+	// Check X-Real-IP header
+	xri := r.Header.Get("X-Real-IP")
+	if xri != "" {
+		return xri
+	}
+
+	// Fall back to RemoteAddr
+	parts := strings.Split(r.RemoteAddr, ":")
+	if len(parts) > 1 {
+		return strings.Join(parts[:len(parts)-1], ":")
+	}
+	return r.RemoteAddr
 }
 
 // handleGetProxy handles GET requests with URL query parameter
@@ -147,6 +321,7 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		httpReq, err := ph.createHTTPRequest(&req)
 		if err != nil {
 			lastError = err
+			ph.clientPool.ReturnClient(client)
 			continue
 		}
 
@@ -156,6 +331,7 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 
 		if err != nil {
 			lastError = err
+			ph.clientPool.ReturnClient(client)
 			if ph.shouldRetry(err) && attempt < ph.config.MaxRetries {
 				log.Warn().Err(err).Msgf("Request failed, retrying (attempt %d/%d)", attempt+1, ph.config.MaxRetries)
 				continue
@@ -168,6 +344,9 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		// Read response body
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		// Return client to pool after use
+		ph.clientPool.ReturnClient(client)
 
 		if err != nil {
 			lastError = err
