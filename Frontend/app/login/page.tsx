@@ -116,7 +116,7 @@ export default function LoginPage() {
                                     type="text"
                                     value={formData.username}
                                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                    placeholder="kullanici_adi"
+                                    placeholder="kullanıcı_adı"
                                     required
                                     className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                                 />

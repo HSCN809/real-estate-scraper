@@ -33,6 +33,14 @@ body {
   overflow-x: hidden;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Corporate Gradients - Clean & Subtle */
 .gradient-art-pink {
   /* Remapped to Blue/Sky for consistency without changing all class names yet */

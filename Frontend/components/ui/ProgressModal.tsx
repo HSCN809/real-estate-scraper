@@ -51,10 +51,10 @@ export function ProgressPanel() {
 
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-sm font-semibold text-white truncate">
-                                    {isFinished ? 'Tamamlandi' : 'Tarama Devam Ediyor'}
+                                    {isFinished ? 'Tamamlandı' : 'Tarama Devam Ediyor'}
                                 </h3>
                                 <p className="text-xs text-slate-400 truncate">
-                                    {status?.message || 'Baslatiliyor...'}
+                                    {status?.message || 'Başlatılıyor...'}
                                 </p>
                             </div>
 
@@ -68,7 +68,7 @@ export function ProgressPanel() {
                                 <button
                                     onClick={hidePanel}
                                     className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                                    title="Kucult"
+                                    title="Küçült"
                                 >
                                     <Minus className="w-4 h-4" />
                                 </button>
@@ -79,7 +79,7 @@ export function ProgressPanel() {
                     <div className="p-4 space-y-3">
                         <div className="space-y-1.5">
                             <div className="flex justify-between text-xs font-medium text-slate-400">
-                                <span>Ilerleme</span>
+                                <span>İlerleme</span>
                                 <span>%{Math.round(status?.progress || 0)}</span>
                             </div>
                             <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -100,7 +100,7 @@ export function ProgressPanel() {
                                 <span>{status.current} / {status.total}</span>
                                 {status.started_at && (
                                     <span>
-                                        Baslangic: {new Date(status.started_at).toLocaleTimeString('tr-TR')}
+                                        Başlangıç: {new Date(status.started_at).toLocaleTimeString('tr-TR')}
                                     </span>
                                 )}
                             </div>
@@ -137,7 +137,7 @@ export function ProgressPanel() {
 
                         {!isFinished && (
                             <p className="text-[10px] text-center text-slate-500">
-                                Diger sayfalara gecebilirsiniz, tarama arka planda devam edecek
+                                Diğer sayfalara geçebilirsiniz, tarama arka planda devam edecek
                             </p>
                         )}
                     </div>
