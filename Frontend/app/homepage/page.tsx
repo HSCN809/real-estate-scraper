@@ -130,8 +130,8 @@ export default function LandingPage() {
                                 Emlak Verilerini Hızla Toplayın
                             </h1>
                             <p className="text-lg sm:text-xl text-gray-400 mb-6 max-w-2xl mx-auto leading-relaxed">
-                                Türkiye'nin en büyük emlak platformlarından veri toplayın,
-                                analiz edin ve Excel'e aktarın. Profesyonel emlak araştırması için tek adres.
+                                Türkiye&apos;nin en büyük emlak platformlarından veri toplayın,
+                                analiz edin ve Excel&apos;e aktarın. Profesyonel emlak araştırması için tek adres.
                             </p>
                         </motion.div>
 

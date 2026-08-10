@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
 import { BarChart3 } from 'lucide-react';
+import type { ScrapeResult } from '@/types';
 
 // Loading component
 function ChartLoadingSpinner() {
@@ -33,7 +34,7 @@ interface PriceData {
 }
 
 interface ResultsChartsProps {
-    results: any[];
+    results: ScrapeResult[];
     priceData: PriceData[];
     categoryFilter: string;
     listingTypeFilter: string;

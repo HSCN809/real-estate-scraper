@@ -61,8 +61,8 @@ export default function RegisterPage() {
                 password: formData.password,
             });
             toast.success('Hesap başarıyla oluşturuldu!');
-        } catch (err: any) {
-            toast.error(err.message || 'Kayıt başarısız');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Kayıt başarısız');
         } finally {
             setIsLoading(false);
         }
@@ -136,7 +136,7 @@ export default function RegisterPage() {
                                 Hesap Oluştur
                             </h1>
                             <p className="text-gray-400">
-                                Emlak Scraper'a katılın
+                                Emlak Scraper&apos;a katılın
                             </p>
                         </div>
 

@@ -42,8 +42,8 @@ export default function ProfilePage() {
 
             updateUser(updatedUser);
             toast.success('Profil başarıyla güncellendi');
-        } catch (err: any) {
-            toast.error(err.message || 'Profil güncellenirken hata oluştu');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Profil güncellenirken hata oluştu');
         } finally {
             setIsUpdatingProfile(false);
         }
@@ -85,8 +85,8 @@ export default function ProfilePage() {
 
             toast.success('Şifre başarıyla değiştirildi');
             setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
-        } catch (err: any) {
-            toast.error(err.message || 'Şifre değiştirilirken hata oluştu');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Şifre değiştirilirken hata oluştu');
         } finally {
             setIsChangingPassword(false);
         }

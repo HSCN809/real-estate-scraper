@@ -87,7 +87,7 @@ export default function PlatformScraperPage() {
         };
 
         fetchCategories();
-    }, [platform, listingType]);
+    }, [platform, listingType, category]);
 
     // Kategori değiştiğinde alt kategorileri çek
     useEffect(() => {
@@ -177,7 +177,8 @@ export default function PlatformScraperPage() {
     const removeCity = (city: string) => {
         setSelectedCities(selectedCities.filter((c) => c !== city));
         // İlgili ilçeleri de temizle
-        const { [city]: _, ...restDistricts } = selectedDistricts;
+        const restDistricts = { ...selectedDistricts };
+        delete restDistricts[city];
         setSelectedDistricts(restDistricts);
     };
 

@@ -14,6 +14,7 @@ import {
     exportToExcel,
     type TaskStatus
 } from './api';
+import type { Platform, ScrapeRequest } from '@/types';
 
 // ==================== Statistics & Data Hooks ====================
 
@@ -95,8 +96,8 @@ export function useScrapeMutation() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ platform, data }: { platform: string; data: any }) => {
-            const result = await startScrape(platform as any, data);
+        mutationFn: async ({ platform, data }: { platform: Platform; data: ScrapeRequest }) => {
+            const result = await startScrape(platform, data);
             return result;
         },
         onSuccess: () => {

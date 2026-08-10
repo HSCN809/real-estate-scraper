@@ -154,9 +154,6 @@ export function DistrictMap({
         );
     }
 
-    const allSelected = districtList.length > 0 && districtList.every(d => selectedDistricts.includes(d));
-    const someSelected = selectedDistricts.length > 0 && !allSelected;
-
     return (
         <div className="flex flex-col lg:flex-row gap-4">
             {/* Harita */}

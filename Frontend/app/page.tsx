@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState, useMemo } from 'react';
 import type { ScrapeResult } from '@/types';
+import type { TaskStatus } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
@@ -119,7 +120,7 @@ export default function Dashboard() {
     this_week: 0, this_month: 0, last_scrape: '-',
   });
   const [results, setResults] = useState<ScrapeResult[]>([]);
-  const [activeTasks, setActiveTasks] = useState<any[]>([]);
+  const [activeTasks, setActiveTasks] = useState<TaskStatus[]>([]);
   const [recentScrollTop, setRecentScrollTop] = useState(0);
 
   useEffect(() => {

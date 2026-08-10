@@ -29,8 +29,8 @@ export default function LoginPage() {
         try {
             await login(formData);
             toast.success('Giriş başarılı!');
-        } catch (err: any) {
-            toast.error(err.message || 'Giriş başarısız');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Giriş başarısız');
         } finally {
             setIsLoading(false);
         }
@@ -104,7 +104,7 @@ export default function LoginPage() {
                                 Hoş Geldiniz
                             </h1>
                             <p className="text-gray-400">
-                                Emlak Scraper'a giriş yapın
+                                Emlak Scraper&apos;a giriş yapın
                             </p>
                         </div>
 

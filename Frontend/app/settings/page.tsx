@@ -2,7 +2,7 @@
 
 import { ArtCard } from '@/components/ui/ArtCard';
 import { motion } from 'framer-motion';
-import { Settings, Server, Database, Save, RotateCcw, Volume2, Moon } from 'lucide-react';
+import { Settings, Server, Database, Save, RotateCcw, Volume2 } from 'lucide-react';
 import { useState, useEffect, useId } from 'react';
 import { healthCheck } from '@/lib/api';
 
@@ -151,7 +151,7 @@ export default function SettingsPage() {
                                     </div>
                                     <label htmlFor={downloadToggleId} className="cursor-pointer">
                                         <span className="font-bold text-white block">Otomatik İndirme</span>
-                                        <span className="text-sm text-gray-400">Tarama bitince Excel'i indir</span>
+                                        <span className="text-sm text-gray-400">Tarama bitince Excel&apos;i indir</span>
                                     </label>
                                 </div>
                                 <button

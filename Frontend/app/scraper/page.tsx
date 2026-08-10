@@ -1,6 +1,5 @@
 'use client';
 
-import { ArtCard } from '@/components/ui/ArtCard';
 import { motion } from 'framer-motion';
 import { Sparkles, Zap } from 'lucide-react';
 import Link from 'next/link';

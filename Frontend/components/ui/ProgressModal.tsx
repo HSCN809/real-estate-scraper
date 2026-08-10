@@ -1,25 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, ExternalLink, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useScraping } from '@/contexts/ScrapingContext';
 
+const subscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function ProgressPanel() {
-    const [mounted, setMounted] = useState(false);
+    const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
     const {
         activeTask,
         isPanelVisible,
         stopTracking,
         hidePanel,
     } = useScraping();
-
-    useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
-    }, []);
 
     if (!mounted || !activeTask || !isPanelVisible) return null;
 

@@ -1,7 +1,7 @@
 import { HTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface CardProps extends HTMLAttributes<HTMLDivElement> { }
+type CardProps = HTMLAttributes<HTMLDivElement>;
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
     ({ className, children, ...props }, ref) => {
@@ -23,7 +23,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
 
 Card.displayName = 'Card';
 
-interface CardHeaderProps extends HTMLAttributes<HTMLElement> { }
+type CardHeaderProps = HTMLAttributes<HTMLElement>;
 
 const CardHeader = forwardRef<HTMLElement, CardHeaderProps>(
     ({ className, children, ...props }, ref) => {
@@ -41,7 +41,7 @@ const CardHeader = forwardRef<HTMLElement, CardHeaderProps>(
 
 CardHeader.displayName = 'CardHeader';
 
-interface CardContentProps extends HTMLAttributes<HTMLDivElement> { }
+type CardContentProps = HTMLAttributes<HTMLDivElement>;
 
 const CardContent = forwardRef<HTMLDivElement, CardContentProps>(
     ({ className, children, ...props }, ref) => {

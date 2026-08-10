@@ -27,7 +27,7 @@ import {
     ChevronsLeft,
     ChevronsRight
 } from 'lucide-react';
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getResults, exportToExcel } from '@/lib/api';
 import { ScrapeResult } from '@/types';
@@ -53,6 +53,26 @@ interface RichResult extends ScrapeResult {
     city?: string;
     listing_type?: string;
     file_size_mb?: number;
+}
+
+interface PriceData {
+    city: string;
+    platform: string;
+    category: string;
+    listing_type: string;
+    price: number;
+}
+
+interface PreviewData {
+    data: Array<Record<string, unknown>>;
+    showing: number;
+    total: number;
+}
+
+interface ClearResultsResponse {
+    status?: string;
+    detail?: string;
+    message?: string;
 }
 
 export default function ResultsPage() {
@@ -100,13 +120,13 @@ export default function ResultsPage() {
     const [districtSearch, setDistrictSearch] = useState('');
 
     // Önizleme Modalı
-    const [previewData, setPreviewData] = useState<any>(null);
+    const [previewData, setPreviewData] = useState<PreviewData | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewFile, setPreviewFile] = useState<string | null>(null);
 
     // Grafik fiyat verileri - eski veri render'ını önlemek için filtre takibi
     const [priceData, setPriceData] = useState<{
-        prices: any[];
+        prices: PriceData[];
         filters: { platform: string; category: string; listingType: string };
     }>({ prices: [], filters: { platform: 'all', category: 'all', listingType: 'all' } });
     const [priceDataLoading, setPriceDataLoading] = useState(false);
@@ -121,7 +141,7 @@ export default function ResultsPage() {
         priceData.filters.listingType === listingTypeFilter;
 
     // Filtrelerle fiyat verisi çek
-    const fetchPriceData = async () => {
+    const fetchPriceData = useCallback(async () => {
         const currentFilters = {
             platform: platformFilter,
             category: categoryFilter,
@@ -150,15 +170,14 @@ export default function ResultsPage() {
         } finally {
             setPriceDataLoading(false);
         }
-    };
+    }, [platformFilter, categoryFilter, listingTypeFilter]);
 
     // Filtreler değiştiğinde ve grafik görünümünde fiyat verisini yeniden çek
     useEffect(() => {
         if (viewMode === 'charts') {
-            setPriceDataLoading(true); // Show loading spinner immediately
             fetchPriceData();
         }
-    }, [platformFilter, categoryFilter, listingTypeFilter, viewMode]);
+    }, [fetchPriceData, viewMode]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -170,7 +189,7 @@ export default function ResultsPage() {
             const data = await getResults();
             setResults(Array.isArray(data) ? data : []);
             setError(null);
-        } catch (err) {
+        } catch {
             setError('Veriler alınırken bir hata oluştu');
         } finally {
             setLoading(false);
@@ -184,7 +203,7 @@ export default function ResultsPage() {
                 method: 'DELETE',
                 credentials: 'include',
             });
-            const payload = await res.json().catch(() => ({} as any));
+            const payload = await res.json().catch(() => ({} as ClearResultsResponse));
             if (!res.ok || payload?.status === 'error') {
                 throw new Error(payload?.detail || payload?.message || 'Toplu temizleme başarısız');
             }
@@ -484,8 +503,8 @@ export default function ResultsPage() {
                                 a.click();
                                 window.URL.revokeObjectURL(url);
                                 document.body.removeChild(a);
-                            } catch (err: any) {
-                                alert(err.message || 'Excel export başarısız');
+                            } catch (err) {
+                                alert(err instanceof Error ? err.message : 'Excel export başarısız');
                             } finally {
                                 setExporting(false);
                             }
@@ -1197,7 +1216,7 @@ export default function ResultsPage() {
                                         <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" aria-hidden="true"></div>
                                         <span className="sr-only">Yükleniyor...</span>
                                     </div>
-                                ) : previewData?.data?.length > 0 ? (
+                                ) : previewData !== null && previewData.data.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-sm" aria-label="Önizleme verileri">
                                             <thead>
@@ -1210,9 +1229,9 @@ export default function ResultsPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {previewData.data.map((row: any, idx: number) => (
-                                                    <tr key={idx} className="border-b border-slate-800">
-                                                        {Object.values(row).slice(0, 8).map((val: any, cidx: number) => (
+                                                 {previewData.data.map((row, idx) => (
+                                                     <tr key={idx} className="border-b border-slate-800">
+                                                         {Object.values(row).slice(0, 8).map((val, cidx) => (
                                                             <td key={cidx} className="py-2 px-3 text-gray-300 max-w-[200px] truncate">
                                                                 {String(val || '-')}
                                                             </td>

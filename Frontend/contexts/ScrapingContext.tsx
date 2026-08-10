@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { createContext, startTransition, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { getTaskStatus, getActiveTasks, type TaskStatus } from '@/lib/api';
 
 interface ScrapingTask {
@@ -38,13 +38,15 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 const parsed = JSON.parse(stored);
                 if (parsed.taskId) {
                     taskIdRef.current = parsed.taskId;
-                    setActiveTask({
-                        taskId: parsed.taskId,
-                        platform: parsed.platform,
-                        status: null,
-                        isFinished: false,
+                    startTransition(() => {
+                        setActiveTask({
+                            taskId: parsed.taskId,
+                            platform: parsed.platform,
+                            status: null,
+                            isFinished: false,
+                        });
+                        setIsPanelVisible(true);
                     });
-                    setIsPanelVisible(true);
                 }
             } catch {
                 sessionStorage.removeItem(TASK_STORAGE_KEY);
@@ -57,12 +59,14 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                         const task = response.active_tasks[0];
                         if (task.task_id) {
                             taskIdRef.current = task.task_id;
-                            setActiveTask({
-                                taskId: task.task_id,
-                                status: task,
-                                isFinished: false,
+                            startTransition(() => {
+                                setActiveTask({
+                                    taskId: task.task_id,
+                                    status: task,
+                                    isFinished: false,
+                                });
+                                setIsPanelVisible(true);
                             });
-                            setIsPanelVisible(true);
                         }
                     }
                 })
@@ -117,9 +121,12 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    const activeTaskId = activeTask?.taskId;
+    const activeTaskFinished = activeTask?.isFinished ?? false;
+
     // Polling araligini yonet
     useEffect(() => {
-        if (!activeTask || activeTask.isFinished) {
+        if (!activeTaskId || activeTaskFinished) {
             if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
@@ -137,7 +144,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 pollIntervalRef.current = null;
             }
         };
-    }, [activeTask?.taskId, activeTask?.isFinished, pollStatus]);
+    }, [activeTaskFinished, activeTaskId, pollStatus]);
 
     const startTracking = useCallback((taskId: string, platform?: string) => {
         taskIdRef.current = taskId;

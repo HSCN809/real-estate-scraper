@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { startTransition, useState, useMemo, useCallback, useEffect } from 'react';
 import { X, Building2, BarChart3, TrendingUp, MapPin, Database, Sparkles, TrendingUp as TrendIcon } from 'lucide-react';
 import { ScrapeResult } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
@@ -57,7 +57,7 @@ const getColorByCount = (count: number): string => {
 interface GeoFeature {
     type: string;
     properties: { name: string; number: number };
-    geometry: { type: string; coordinates: number[][][] | number[][][][] };
+    geometry: GeoJSON.Geometry;
 }
 
 interface FileStats {
@@ -116,8 +116,10 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
     // Şehir seçildiğinde o şehrin tüm ilçe verilerini aggregated olarak yükle
     useEffect(() => {
         if (selectedCityName) {
-            setStatsLoading(true);
-            setCityStats(null);
+            startTransition(() => {
+                setStatsLoading(true);
+                setCityStats(null);
+            });
 
             const cityNameNormalized = normalizeTurkish(selectedCityName);
             console.log('Fetching city analytics for:', selectedCityName, '-> normalized:', cityNameNormalized);
@@ -198,7 +200,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                         const dataName = CITY_NAME_MAP[geoName] || geoName;
                         const result = cityDataMap.get(normalizeCity(dataName));
                         const fillColor = result ? getColorByCount(result.count || 0) : '#334155';
-                        const d = pathGenerator(feature.geometry as any) || '';
+                        const d = pathGenerator(feature.geometry) || '';
 
                         return (
                             <motion.path

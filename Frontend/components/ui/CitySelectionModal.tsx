@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { startTransition, useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import TurkeyMap from 'turkey-map-react';
@@ -12,6 +12,9 @@ import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
 // GeoJSON cache - Component dışında tutulur, sayfa yenilenene kadar kalır
 const geoJsonCache: Record<string, FeatureCollection<Geometry, DistrictProperties>> = {};
+const subscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 interface DistrictProperties {
     feature_name: string;
@@ -73,7 +76,7 @@ export function CitySelectionModal({
     selectedDistricts = {},
     onDistrictsChange,
 }: CitySelectionModalProps) {
-    const [mounted, setMounted] = useState(false);
+    const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
     const [districtIndex, setDistrictIndex] = useState<DistrictIndex | null>(null);
     const [activeProvince, setActiveProvince] = useState<string | null>(null);
     const [districtGeoData, setDistrictGeoData] = useState<FeatureCollection<Geometry, DistrictProperties> | null>(null);
@@ -90,17 +93,14 @@ export function CitySelectionModal({
     const [tempSelectedCities, setTempSelectedCities] = useState<string[]>([]);
     const [tempSelectedDistricts, setTempSelectedDistricts] = useState<Record<string, string[]>>({});
 
-    useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
-    }, []);
-
     // Modal açıldığında mevcut seçimleri kopyala
     useEffect(() => {
         if (isOpen) {
-            setTempSelectedCities([...selectedCities]);
-            setTempSelectedDistricts({ ...selectedDistricts });
-            setActiveProvince(null);
+            startTransition(() => {
+                setTempSelectedCities([...selectedCities]);
+                setTempSelectedDistricts({ ...selectedDistricts });
+                setActiveProvince(null);
+            });
         }
     }, [isOpen, selectedCities, selectedDistricts]);
 
@@ -147,13 +147,15 @@ export function CitySelectionModal({
     // Load district GeoJSON when province selected (with cache, from backend API)
     useEffect(() => {
         if (!activeProvince || !districtIndex) {
-            setDistrictGeoData(null);
+            startTransition(() => setDistrictGeoData(null));
             return;
         }
 
         // Hemen loading state'ini set et
-        setLoadingDistricts(true);
-        setDistrictGeoData(null);
+        startTransition(() => {
+            setLoadingDistricts(true);
+            setDistrictGeoData(null);
+        });
 
         const MIN_LOADING_TIME = 2000; // Minimum 2 saniye animasyon
 
@@ -209,7 +211,8 @@ export function CitySelectionModal({
                 setTempSelectedCities(tempSelectedCities.filter(c => c !== turkishName));
                 // İlgili ilçeleri de temizle
                 if (tempSelectedDistricts[turkishName]) {
-                    const { [turkishName]: _, ...restDistricts } = tempSelectedDistricts;
+                    const restDistricts = { ...tempSelectedDistricts };
+                    delete restDistricts[turkishName];
                     setTempSelectedDistricts(restDistricts);
                 }
             } else {
@@ -281,14 +284,14 @@ export function CitySelectionModal({
     const isRegionFullySelected = (region: string) => (REGIONS[region] || []).every(city => tempSelectedCities.includes(city));
     const isRegionPartiallySelected = (region: string) => (REGIONS[region] || []).some(city => tempSelectedCities.includes(city)) && !isRegionFullySelected(region);
 
-    const cityWrapper = (cityComponent: React.ReactElement, cityData: { name: string }) => {
+    const cityWrapper = (cityComponent: React.ReactElement<unknown>, cityData: { name: string }) => {
         const turkishName = CITY_NAMES[cityData.name] || cityData.name;
         const isSelected = tempSelectedCities.includes(turkishName);
         const districtsSelected = (tempSelectedDistricts[turkishName] || []).length;
         if (isSelected) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const props = cityComponent.props as any;
-            return React.cloneElement(cityComponent as React.ReactElement<any>, {
+            const svgCityComponent = cityComponent as unknown as React.ReactElement<React.SVGProps<SVGPathElement>>;
+            const props = svgCityComponent.props;
+            return React.cloneElement(svgCityComponent, {
                 style: { ...props.style, fill: districtsSelected > 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)', stroke: '#10b981', strokeWidth: '2px' }
             });
         }

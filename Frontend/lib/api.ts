@@ -110,7 +110,7 @@ export interface ListingsResponse {
     page: number;
     limit: number;
     pages: number;
-    items: any[];
+    items: Array<Record<string, unknown>>;
 }
 
 export async function getListings(params: {

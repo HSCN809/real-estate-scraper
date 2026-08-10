@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
 import { Map, Loader2 } from 'lucide-react';
+import type { ScrapeResult } from '@/types';
 
 // Loading component
 function MapLoadingSkeleton() {
@@ -22,7 +23,7 @@ const ResultsMapInner = dynamic(() => import('./ResultsMapInner'), {
 });
 
 interface ResultsMapProps {
-    results: any[];
+    results: ScrapeResult[];
 }
 
 export function ResultsMap({ results }: ResultsMapProps) {

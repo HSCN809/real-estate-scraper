@@ -18,8 +18,18 @@ class AuthError extends Error {
     }
 }
 
-function extractErrorMessage(error: any, fallback: string): string {
-    const detail = error?.detail;
+interface ApiErrorDetail {
+    msg?: string;
+    message?: string;
+}
+
+interface ApiErrorPayload {
+    detail?: string | ApiErrorDetail[];
+}
+
+function extractErrorMessage(error: unknown, fallback: string): string {
+    const payload = typeof error === 'object' && error !== null ? error as ApiErrorPayload : {};
+    const detail = payload.detail;
     if (typeof detail === 'string') return detail;
     // FastAPI 422 doğrulama hataları detail'i dizi olarak döner
     if (Array.isArray(detail) && detail.length > 0) {
