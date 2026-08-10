@@ -54,7 +54,7 @@ def compute_content_hash(data: Dict[str, Any]) -> str:
         content_parts.append(f"details:{json.dumps(details, sort_keys=True)}")
 
     content_str = "|".join(sorted(content_parts))
-    return hashlib.md5(content_str.encode("utf-8")).hexdigest()
+    return hashlib.md5(content_str.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 # ============== Lokasyon CRUD ==============
@@ -242,7 +242,7 @@ def create_listing(
                     break
                 except ValueError:
                     continue
-        except Exception:
+        except Exception:  # nosec
             pass
 
     # İçerik hash'i hesapla

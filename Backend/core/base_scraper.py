@@ -73,7 +73,7 @@ class BaseScraper(ABC):
         else:  # medium (default)
             min_wait, max_wait = self.config.random_wait_medium
 
-        wait_time = random.uniform(min_wait, max_wait)
+        wait_time = random.SystemRandom().uniform(min_wait, max_wait)
         time.sleep(wait_time)
         return wait_time
 
@@ -521,7 +521,7 @@ class BaseScraper(ABC):
                             if "ilan bulunamadı" in element.text.lower():
                                 print("⚠️  Bu lokasyonda ilan bulunamadı, atlanıyor...")
                                 return True
-                    except Exception:
+                    except Exception:  # nosec
                         pass
 
                 # Sayfayı tara

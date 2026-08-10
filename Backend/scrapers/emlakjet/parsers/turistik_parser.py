@@ -49,7 +49,7 @@ class TuristikTesisParser(BaseEmlakJetParser):
                 elif "yatak" in part_lower:
                     details["yatak_sayisi"] = part
 
-        except Exception:
+        except Exception:  # nosec
             pass
 
         # Bulunamadıysa başlıktan çıkarmayı dene

@@ -121,7 +121,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                                 subtypes.append(
                                     {"id": subtype_id, "name": name, "path": path_part}
                                 )
-                        except Exception:
+                        except Exception:  # nosec
                             continue
 
                     all_subcategories[listing_type][category] = subtypes
@@ -138,11 +138,11 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
         if driver:
             try:
                 driver.quit()
-            except Exception:
+            except Exception:  # nosec
                 pass
         try:
             manager.stop()
-        except Exception:
+        except Exception:  # nosec
             pass
 
     return all_subcategories

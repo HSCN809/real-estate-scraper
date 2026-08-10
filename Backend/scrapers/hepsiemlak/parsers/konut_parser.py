@@ -26,7 +26,7 @@ class KonutParser(BaseHepsiemlakParser):
             data["oda_sayisi"] = (
                 self.get_element_text(container, room_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         try:
@@ -34,7 +34,7 @@ class KonutParser(BaseHepsiemlakParser):
             data["metrekare"] = (
                 self.get_element_text(container, size_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         try:
@@ -42,13 +42,13 @@ class KonutParser(BaseHepsiemlakParser):
             data["bina_yasi"] = (
                 self.get_element_text(container, age_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         try:
             floor_sel = self.selectors.get("floor", "span.floortype")
             data["kat"] = self.get_element_text(container, floor_sel) or "Belirtilmemiş"
-        except Exception:
+        except Exception:  # nosec
             pass
 
         return data

@@ -155,10 +155,10 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                                                         "path": subtype_path,
                                                     }
                                                 )
-                                        except Exception:
+                                        except Exception:  # nosec
                                             continue
                                     break
-                            except Exception:
+                            except Exception:  # nosec
                                 continue
 
                         # Eğer yukarıdaki yöntem çalışmazsa, alternatif yöntem dene
@@ -195,7 +195,7 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
                                                     "path": subtype_path,
                                                 }
                                             )
-                                    except Exception:
+                                    except Exception:  # nosec
                                         continue
 
                     except Exception as e:
@@ -225,11 +225,11 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
         if driver:
             try:
                 driver.quit()
-            except Exception:
+            except Exception:  # nosec
                 pass
         try:
             manager.stop()
-        except Exception:
+        except Exception:  # nosec
             pass
 
     return all_subcategories

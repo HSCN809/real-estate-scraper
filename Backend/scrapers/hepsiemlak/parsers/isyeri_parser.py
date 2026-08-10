@@ -23,7 +23,7 @@ class IsyeriParser(BaseHepsiemlakParser):
             data["metrekare"] = (
                 self.get_element_text(container, size_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         return data

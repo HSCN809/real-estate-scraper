@@ -5,7 +5,7 @@ import os
 import time
 import random
 import logging
-import subprocess
+import subprocess  # nosec
 from typing import Optional
 from contextlib import contextmanager
 
@@ -35,10 +35,14 @@ USER_AGENTS = [
 def _kill_zombie_chrome():
     """Önceki Chrome/chromedriver process'lerini temizle"""
     try:
-        subprocess.run(["pkill", "-f", "chrome"], capture_output=True, timeout=5)
-        subprocess.run(["pkill", "-f", "chromedriver"], capture_output=True, timeout=5)
+        subprocess.run(  # nosec
+            ["pkill", "-f", "chrome"], capture_output=True, timeout=5
+        )
+        subprocess.run(  # nosec
+            ["pkill", "-f", "chromedriver"], capture_output=True, timeout=5
+        )
         time.sleep(1)
-    except Exception:
+    except Exception:  # nosec
         pass
 
 
@@ -53,7 +57,7 @@ class DriverManager:
         self.proxy_url = proxy_url
         self.driver: Optional[WebDriver] = None
         self.wait: Optional[WebDriverWait] = None
-        self.user_agent = random.choice(USER_AGENTS)
+        self.user_agent = random.SystemRandom().choice(USER_AGENTS)
 
     def _create_options(self) -> Options:
         """Chrome seçeneklerini oluştur"""

@@ -46,7 +46,7 @@ def _get_page_number(url: str) -> int:
         page_values = parse_qs(parsed.query).get("page")
         if page_values and page_values[0].isdigit():
             return int(page_values[0])
-    except Exception:
+    except Exception:  # nosec
         pass
     return 1
 

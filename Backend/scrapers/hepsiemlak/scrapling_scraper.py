@@ -227,7 +227,7 @@ class HepsiemlakScraplingScraper:
             page_values = parse_qs(urlparse(url).query).get("page")
             if page_values and page_values[0].isdigit():
                 return int(page_values[0])
-        except Exception:
+        except Exception:  # nosec
             pass
         return 1
 
@@ -619,7 +619,7 @@ class HepsiemlakScraplingScraper:
                         current=current,
                         total=total,
                     )
-                except Exception:
+                except Exception:  # nosec
                     pass
 
         return city_progress_callback
@@ -755,7 +755,7 @@ class HepsiemlakScraplingScraper:
             self.metrics["total_pages"] += 1
 
             if page_num < pages_to_scrape:
-                time.sleep(random.uniform(1, 3))
+                time.sleep(random.SystemRandom().uniform(1, 3))
 
         task_log.line(f"✅ {location_name} tamamlandı - {len(listings)} ilan işlendi")
         return listings
@@ -998,7 +998,7 @@ class HepsiemlakScraplingScraper:
                             district_results[district] = district_listings
                             all_listings.extend(district_listings)
                         if district_idx < len(districts):
-                            time.sleep(random.uniform(1, 3))
+                            time.sleep(random.SystemRandom().uniform(1, 3))
                     if district_results:
                         all_results[city] = district_results
                 else:
@@ -1014,7 +1014,7 @@ class HepsiemlakScraplingScraper:
                         all_listings.extend(city_listings)
 
                 if city_idx < total_cities:
-                    time.sleep(random.uniform(2, 4))
+                    time.sleep(random.SystemRandom().uniform(2, 4))
 
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = (

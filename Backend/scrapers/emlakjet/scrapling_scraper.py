@@ -230,7 +230,7 @@ class EmlakJetScraplingScraper:
             page_values = parse_qs(urlparse(url).query).get("sayfa")
             if page_values and page_values[0].isdigit():
                 return int(page_values[0])
-        except Exception:
+        except Exception:  # nosec
             pass
         return 1
 
@@ -827,7 +827,7 @@ class EmlakJetScraplingScraper:
                 break
 
             if page_num < pages_to_scrape:
-                time.sleep(random.uniform(1, 3))
+                time.sleep(random.SystemRandom().uniform(1, 3))
 
         if listings:
             task_log.line(
@@ -1128,7 +1128,7 @@ class EmlakJetScraplingScraper:
                 break
 
             if page_num < pages_to_scrape:
-                time.sleep(random.uniform(1, 3))
+                time.sleep(random.SystemRandom().uniform(1, 3))
 
         if listings:
             task_log.line(

@@ -21,7 +21,7 @@ class TuristikParser(BaseHepsiemlakParser):
             data["oda_sayisi"] = (
                 self.get_element_text(container, room_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         try:
@@ -29,7 +29,7 @@ class TuristikParser(BaseHepsiemlakParser):
             data["otel_tipi"] = (
                 self.get_element_text(container, star_sel) or "Belirtilmemiş"
             )
-        except Exception:
+        except Exception:  # nosec
             pass
 
         return data

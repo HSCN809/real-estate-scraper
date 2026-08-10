@@ -5,6 +5,7 @@ import os
 import sys
 import logging
 import json
+import tempfile
 from datetime import datetime
 from typing import Optional
 from logging.handlers import RotatingFileHandler
@@ -19,7 +20,9 @@ from core.config import get_config
 
 def resolve_writable_log_file(log_file: str) -> Optional[str]:
     """Yazilabilir bir log dosyasi yolu dondurur, gerekirse fallback kullanir."""
-    fallback_dir = os.getenv("LOG_FALLBACK_DIR", "/tmp/scraper-logs")
+    fallback_dir = os.getenv(
+        "LOG_FALLBACK_DIR", os.path.join(tempfile.gettempdir(), "scraper-logs")
+    )
     candidates = [log_file]
 
     log_basename = os.path.basename(log_file) if log_file else "scraper.log"

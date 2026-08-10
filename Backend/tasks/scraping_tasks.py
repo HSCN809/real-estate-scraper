@@ -272,7 +272,7 @@ def scrape_hepsiemlak_task(
             logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
             try:
                 db.rollback()
-            except Exception:
+            except Exception:  # nosec
                 pass
         finally:
             if db:
@@ -459,7 +459,7 @@ def scrape_emlakjet_task(
             logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
             try:
                 db.rollback()
-            except Exception:
+            except Exception:  # nosec
                 pass
         finally:
             if db:

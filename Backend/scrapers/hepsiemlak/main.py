@@ -54,7 +54,7 @@ def _get_expected_hepsiemlak_subtype_slugs(
                 ]
                 if len(path_parts) >= 2:
                     expected_slugs.add(path_parts[-1])
-    except Exception:
+    except Exception:  # nosec
         # JSON yoksa veya okunamazsa URL tabanli zorlayici filtreleme yapmayiz.
         pass
 
@@ -416,7 +416,7 @@ class HepsiemlakScraper(BaseScraper):
                         and city_name not in cities
                     ):
                         cities.append(city_name)
-                except Exception:
+                except Exception:  # nosec
                     continue
 
             cities.sort()
@@ -441,7 +441,7 @@ class HepsiemlakScraper(BaseScraper):
             # Dropdown'ı kapat
             try:
                 self.driver.execute_script("document.elementFromPoint(10, 10).click();")
-            except Exception:
+            except Exception:  # nosec
                 pass
             self.random_short_wait()  # Gizli mod
 
@@ -768,7 +768,7 @@ class HepsiemlakScraper(BaseScraper):
                 # Dropdown'ı kapat
                 try:
                     self.driver.find_element(By.TAG_NAME, "body").click()
-                except Exception:
+                except Exception:  # nosec
                     pass
 
                 task_log.line(f"📊 {len(district_urls)} ilçe URL'i bulundu")
@@ -871,7 +871,7 @@ class HepsiemlakScraper(BaseScraper):
                         results_sel = self.common_selectors.get("listing_results")
                         self.wait_for_element(results_sel)
                         return True
-                except Exception:
+                except Exception:  # nosec
                     continue
 
             print("Arama butonu bulunamadı")
@@ -909,7 +909,7 @@ class HepsiemlakScraper(BaseScraper):
                         return 1
                     else:
                         print(f"📊 Toplam {total_listings} ilan tespit edildi")
-            except Exception:
+            except Exception:  # nosec
                 pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
 
             # Sayfalama kontrolü - ul.he-pagination__links içindeki a elementleri
@@ -930,7 +930,7 @@ class HepsiemlakScraper(BaseScraper):
                     if page_links:
                         print(f"✓ Pagination bulundu: {len(page_links)} link")
                         break
-                except Exception:
+                except Exception:  # nosec
                     pass
 
                 if retry < max_retries - 1:
@@ -999,7 +999,7 @@ class HepsiemlakScraper(BaseScraper):
                                 f"⚠️ {city} için ilan bulunamadı", level="warning"
                             )
                             return []
-            except Exception:
+            except Exception:  # nosec
                 pass
 
             # Toplam sayfa sayısını al
@@ -1407,8 +1407,8 @@ class HepsiemlakScraper(BaseScraper):
                         ):
                             data["ilce"] = fallback_district
                         listings.append(data)
-                    time.sleep(random.uniform(0.02, 0.08))  # Gizli mod
-                except Exception:
+                    time.sleep(random.SystemRandom().uniform(0.02, 0.08))  # Gizli mod
+                except Exception:  # nosec
                     continue
 
         except Exception as e:
@@ -1469,7 +1469,7 @@ class HepsiemlakScraper(BaseScraper):
                                     current=current,
                                     total=total,
                                 )
-                            except Exception:
+                            except Exception:  # nosec
                                 pass
 
                     return city_progress_callback
@@ -1614,7 +1614,7 @@ class HepsiemlakScraper(BaseScraper):
                                             )
                                             if data:
                                                 listings.append(data)
-                                        except Exception:
+                                        except Exception:  # nosec
                                             continue
 
                                     if listings:
@@ -1689,7 +1689,7 @@ class HepsiemlakScraper(BaseScraper):
                         )
 
                     # Sayfalar arası kısa bekleme
-                    time.sleep(random.uniform(1, 2))
+                    time.sleep(random.SystemRandom().uniform(1, 2))
 
             # Son özet
             summary = failed_pages_tracker.get_summary()

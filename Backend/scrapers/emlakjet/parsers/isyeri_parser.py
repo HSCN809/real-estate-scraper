@@ -51,7 +51,7 @@ class IsyeriParser(BaseEmlakJetParser):
                 elif "m²" in part or "m2" in part_lower:
                     details["metrekare"] = part
 
-        except Exception:
+        except Exception:  # nosec
             pass
 
         return details

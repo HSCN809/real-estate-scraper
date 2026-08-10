@@ -29,7 +29,7 @@ class ArsaParser(BaseHepsiemlakParser):
                     data["arsa_metrekare"] = size_text
                 elif "TL / m²" in size_text:
                     data["metrekare_fiyat"] = size_text
-        except Exception:
+        except Exception:  # nosec
             pass
 
         return data

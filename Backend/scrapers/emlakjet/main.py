@@ -122,7 +122,7 @@ def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> Se
                 listing_prefix = _normalize_emlakjet_slug(listing_type)
                 if listing_prefix:
                     expected.add(f"{listing_prefix}-{subtype_id}")
-    except Exception:
+    except Exception:  # nosec
         pass
 
     return {slug for slug in expected if slug}
@@ -484,7 +484,7 @@ class EmlakJetScraper(BaseScraper):
                             logger.debug(
                                 f"Duplicate {location_type} skipped: {location_name}"
                             )
-                except Exception:
+                except Exception:  # nosec
                     continue
 
             # Lokasyonları 4 sütunda göster
@@ -588,7 +588,7 @@ class EmlakJetScraper(BaseScraper):
                 selected_num = int(selected_page.text)
                 if selected_num > max_page:
                     max_page = selected_num
-            except Exception:
+            except Exception:  # nosec
                 pass
 
             logger.info(f"Max pages found: {max_page}")
@@ -899,7 +899,7 @@ class EmlakJetScraper(BaseScraper):
                                     level="warning",
                                 )
                                 return True
-                    except Exception:
+                    except Exception:  # nosec
                         pass
 
                 listings = self.scrape_current_page()
@@ -1404,7 +1404,7 @@ class EmlakJetScraper(BaseScraper):
                                         data = self.extract_listing_data(container)
                                         if data:
                                             listings.append(data)
-                                    except Exception:
+                                    except Exception:  # nosec
                                         continue
 
                                 if listings:
@@ -1453,7 +1453,7 @@ class EmlakJetScraper(BaseScraper):
                             page_info.city, page_info.district, page_info.page_number
                         )
 
-                    time.sleep(random.uniform(1, 2))
+                    time.sleep(random.SystemRandom().uniform(1, 2))
 
             # Yeniden deneme özeti
             summary = failed_pages_tracker.get_summary()

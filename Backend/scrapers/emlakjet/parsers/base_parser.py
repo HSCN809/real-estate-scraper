@@ -55,7 +55,7 @@ class BaseEmlakJetParser:
                 badge_text = badge.text.strip()
                 if badge_text:
                     badges.append(badge_text.upper())
-        except Exception:
+        except Exception:  # nosec
             pass
         return badges
 

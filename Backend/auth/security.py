@@ -5,7 +5,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 # Şifre hashleme konfigürasyonu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -48,5 +49,5 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except InvalidTokenError:
         return None
