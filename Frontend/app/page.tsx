@@ -195,8 +195,8 @@ export default function Dashboard() {
             className="flex flex-col md:flex-row md:items-end md:justify-between gap-6"
           >
             <div>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
-                {user ? `${getGreeting()} (${user.username})` : getGreeting()}
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
+                {user ? `${getGreeting()} ${user.username}` : getGreeting()}
               </h1>
               <p className="text-gray-400 mt-2">Veri toplama sürecinizi takip edin ve analiz edin.</p>
             </div>

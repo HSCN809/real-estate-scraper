@@ -160,7 +160,7 @@ export default function RegisterPage() {
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        placeholder="ornek@email.com"
+                                        placeholder="ad.soyad@example.com"
                                         required
                                         className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                                     />

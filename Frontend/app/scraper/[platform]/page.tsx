@@ -208,7 +208,7 @@ export default function PlatformScraperPage() {
                         {/* Geri Dön Butonu - Sağ Üst Köşe */}
                         <div className="absolute top-6 right-6">
                             <Link href="/scraper">
-                                <div className="text-gray-400 hover:text-white inline-flex items-center gap-2 transition-colors">
+                                <div className="text-gray-400 hover:text-white inline-flex items-center gap-2 transition-colors cursor-pointer">
                                     ← Geri Dön
                                 </div>
                             </Link>
@@ -255,7 +255,7 @@ export default function PlatformScraperPage() {
                     <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
                         <div className="flex-1">
                             <Select
-                                label="Scraping Yontemi"
+                                label="Scraping Yöntemi"
                                 value={scrapingMethod}
                                 onChange={(e) => setScrapingMethod(e.target.value as HepsiemlakScrapingMethod)}
                                 options={scrapingMethodOptions}

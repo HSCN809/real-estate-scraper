@@ -329,7 +329,7 @@ export function CitySelectionModal({
         <AnimatePresence>
             {isOpen && (
                 <>
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 cursor-pointer" />
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
                         <div className="w-full max-w-6xl h-[90vh] bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
@@ -390,7 +390,7 @@ export function CitySelectionModal({
                                                 setCityMousePosition(null);
                                             }}
                                         >
-                                            <div className="w-full max-w-4xl">
+                                             <div className="w-full max-w-4xl cursor-pointer">
                                                 <TurkeyMap
                                                     hoverable
                                                     customStyle={{ idleColor: '#334155', hoverColor: '#0ea5e9' }}
@@ -549,7 +549,7 @@ export function CitySelectionModal({
                                                                             }
                                                                             stroke={isSelected ? '#10b981' : isHovered ? '#0ea5e9' : '#475569'}
                                                                             strokeWidth={isSelected || isHovered ? 2 / zoomLevel : 1 / zoomLevel}
-                                                                            className="cursor-pointer"
+                                                                             className={isExitingDistricts ? 'cursor-not-allowed' : 'cursor-pointer'}
                                                                             onClick={() => !isExitingDistricts && handleDistrictToggle(name)}
                                                                             onMouseEnter={() => !isExitingDistricts && setHoveredDistrict(name)}
                                                                             onMouseLeave={() => setHoveredDistrict(null)}

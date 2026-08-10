@@ -113,7 +113,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 };
             });
         } catch (error) {
-            console.error('Durum kontrolu basarisiz', error);
+            console.error('Durum kontrolü başarısız', error);
         }
     }, []);
 
@@ -179,7 +179,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
 export function useScraping() {
     const context = useContext(ScrapingContext);
     if (context === undefined) {
-        throw new Error('useScraping, ScrapingProvider icinde kullanilmalidir');
+        throw new Error('useScraping, ScrapingProvider içinde kullanılmalıdır');
     }
     return context;
 }

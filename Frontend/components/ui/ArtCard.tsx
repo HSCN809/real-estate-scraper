@@ -16,6 +16,7 @@ const ArtCard = forwardRef<HTMLDivElement, ArtCardProps>(
                 ref={ref}
                 className={cn(
                     'art-card p-6 hover-art',
+                    props.onClick && 'cursor-pointer',
                     className
                 )}
                 whileHover={{ scale: 1.02 }}

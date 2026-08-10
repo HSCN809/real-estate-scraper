@@ -207,7 +207,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                                 fill={fillColor}
                                 stroke="#1e293b"
                                 strokeWidth="0.5"
-                                className="cursor-pointer transition-opacity"
+                                 className={`${result ? 'cursor-pointer' : 'cursor-not-allowed'} transition-opacity`}
                                 initial={{ opacity: 0.8 }}
                                 whileHover={{ opacity: 0.6, scale: 1.02 }}
                                 transition={{ duration: 0.2 }}
@@ -264,7 +264,7 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-pointer"
                     onClick={() => setSelectedCityName(null)}
                 >
                     <motion.div

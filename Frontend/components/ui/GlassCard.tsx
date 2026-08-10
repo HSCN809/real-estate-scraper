@@ -41,7 +41,8 @@ export function GlassCard({
             className={cn(
                 'rounded-2xl p-6 transition-all duration-300',
                 variantClasses[variant],
-                hoverable && 'hover-lift cursor-pointer',
+                hoverable && 'hover-lift',
+                props.onClick && 'cursor-pointer',
                 neonClasses[neonBorder],
                 glow && 'glow-purple',
                 className
