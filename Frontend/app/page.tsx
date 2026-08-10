@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState, useMemo } from 'react';
 import type { ScrapeResult } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
 
@@ -108,6 +109,7 @@ function getChartData(results: ScrapeResult[]): ChartDay[] {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const RECENT_ROW_HEIGHT = 74;
   const RECENT_VIEWPORT_HEIGHT = 320;
   const RECENT_OVERSCAN = 4;
@@ -193,9 +195,8 @@ export default function Dashboard() {
             className="flex flex-col md:flex-row md:items-end md:justify-between gap-6"
           >
             <div>
-              <p className="text-sky-400 font-medium text-sm mb-1">{getGreeting()}</p>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
-                Dashboard
+                {user ? `${getGreeting()} (${user.username})` : getGreeting()}
               </h1>
               <p className="text-gray-400 mt-2">Veri toplama sürecinizi takip edin ve analiz edin.</p>
             </div>
