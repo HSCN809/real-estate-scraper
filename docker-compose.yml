@@ -21,7 +21,7 @@ services:
       # TLS Fingerprint Configuration
       - TLS_CLIENT_ID=HelloChrome_120
       - TLS_ROTATE=true
-      - TLS_ROTATE_LIST=HelloChrome_120,HelloChrome_119,HelloChrome_118,HelloFirefox_120,HelloEdge_120
+      - TLS_ROTATE_LIST=HelloChrome_133,HelloChrome_131,HelloChrome_120,HelloFirefox_120,HelloEdge_85
       - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 
       # Connection Pool Configuration

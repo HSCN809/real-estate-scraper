@@ -121,7 +121,7 @@ func (tfm *TLSFingerprintManager) applyClientHelloPreset(uConn *utls.UConn, clie
 
 func (tfm *TLSFingerprintManager) resolveClientHelloID(clientID string) utls.ClientHelloID {
 	switch strings.ToLower(strings.TrimSpace(clientID)) {
-	case "hellofirefox_120", "hellofirefox_auto", "firefox":
+	case "hellofirefox_120", "hellofirefox_auto", "firefox", "hellofirefox_117", "firefox_117":
 		return utls.HelloFirefox_Auto
 	case "helloedge_120", "helloedge_auto", "edge":
 		return utls.HelloEdge_Auto
@@ -131,16 +131,8 @@ func (tfm *TLSFingerprintManager) resolveClientHelloID(clientID string) utls.Cli
 		return utls.HelloRandomized
 	case "hellorandomizedalpn", "randomizedalpn":
 		return utls.HelloRandomizedALPN
-	case "hellochrome_119", "chrome_119":
-		return utls.HelloChrome_119
-	case "hellochrome_118", "chrome_118":
-		return utls.HelloChrome_118
-	case "hellochrome_117", "chrome_117":
-		return utls.HelloChrome_117
-	case "hellochrome_116", "chrome_116":
-		return utls.HelloChrome_116
-	case "hellofirefox_117", "firefox_117":
-		return utls.HelloFirefox_117
+	case "hellochrome_120", "chrome_120", "hellochrome_119", "chrome_119", "hellochrome_118", "chrome_118", "hellochrome_117", "chrome_117", "hellochrome_116", "chrome_116":
+		return utls.HelloChrome_120
 	default:
 		return utls.HelloChrome_Auto
 	}
