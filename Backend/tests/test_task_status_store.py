@@ -45,7 +45,9 @@ def test_task_status_store_lifecycle():
     assert queued["platform"] == "hepsiemlak"
     assert queued["finished_at"] is None
 
-    running = store.mark_running("task-1", message="Running", platform="hepsiemlak", progress=10)
+    running = store.mark_running(
+        "task-1", message="Running", platform="hepsiemlak", progress=10
+    )
     assert running["status"] == TASK_STATUS_RUNNING
     assert running["progress"] == 10
     assert running["finished_at"] is None

@@ -8,41 +8,49 @@ from .base_parser import BaseHepsiemlakParser
 
 class DevremulkParser(BaseHepsiemlakParser):
     """HepsiEmlak devremülk ilanları parser'ı"""
-    
+
     def __init__(self):
         super().__init__("devremulk")
-    
+
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
         """Devremülke özel verileri çıkar"""
         data = {
-            'oda_sayisi': 'Belirtilmemiş',
-            'metrekare': 'Belirtilmemiş',
-            'bina_yasi': 'Belirtilmemiş',
-            'kat': 'Belirtilmemiş'
+            "oda_sayisi": "Belirtilmemiş",
+            "metrekare": "Belirtilmemiş",
+            "bina_yasi": "Belirtilmemiş",
+            "kat": "Belirtilmemiş",
         }
-        
+
         try:
             room_sel = self.selectors.get("room_count", "span.houseRoomCount")
-            data['oda_sayisi'] = self.get_element_text(container, room_sel) or "Belirtilmemiş"
-        except:
+            data["oda_sayisi"] = (
+                self.get_element_text(container, room_sel) or "Belirtilmemiş"
+            )
+        except Exception:
             pass
-        
+
         try:
-            size_sel = self.selectors.get("size", "span.celly.squareMeter.list-view-size")
-            data['metrekare'] = self.get_element_text(container, size_sel) or "Belirtilmemiş"
-        except:
+            size_sel = self.selectors.get(
+                "size", "span.celly.squareMeter.list-view-size"
+            )
+            data["metrekare"] = (
+                self.get_element_text(container, size_sel) or "Belirtilmemiş"
+            )
+        except Exception:
             pass
-        
+
         try:
             age_sel = self.selectors.get("building_age", "span.buildingAge")
-            data['bina_yasi'] = self.get_element_text(container, age_sel) or "Belirtilmemiş"
-        except:
+            data["bina_yasi"] = (
+                self.get_element_text(container, age_sel) or "Belirtilmemiş"
+            )
+        except Exception:
             pass
-        
+
         try:
             floor_sel = self.selectors.get("floor", "span.floortype")
-            data['kat'] = self.get_element_text(container, floor_sel) or "Belirtilmemiş"
-        except:
+            data["kat"] = self.get_element_text(container, floor_sel) or "Belirtilmemiş"
+        except Exception:
             pass
-        
+
         return data

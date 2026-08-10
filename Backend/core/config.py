@@ -3,7 +3,6 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 def get_bool_env(key: str, default: bool) -> bool:
@@ -11,7 +10,7 @@ def get_bool_env(key: str, default: bool) -> bool:
     value = os.getenv(key)
     if value is None:
         return default
-    return value.lower() in ('true', '1', 'yes', 'on')
+    return value.lower() in ("true", "1", "yes", "on")
 
 
 def get_int_env(key: str, default: int) -> int:
@@ -41,16 +40,22 @@ class ScraperConfig:
     """Scraper ana konfigürasyon sınıfı"""
 
     # Zaman aşımı ayarları
-    page_load_timeout: int = field(default_factory=lambda: get_int_env('CHROME_TIMEOUT', 30))
+    page_load_timeout: int = field(
+        default_factory=lambda: get_int_env("CHROME_TIMEOUT", 30)
+    )
     element_wait_timeout: int = 10
 
     # Yeniden deneme ayarları
-    max_retries: int = field(default_factory=lambda: get_int_env('SCRAPER_MAX_RETRIES', 3))
+    max_retries: int = field(
+        default_factory=lambda: get_int_env("SCRAPER_MAX_RETRIES", 3)
+    )
     retry_delay: float = 2.0
     retry_multiplier: float = 2.0  # Üstel geri çekilme
 
     # Hız sınırlama - tespitten kaçınarak optimize edildi
-    wait_between_pages: float = field(default_factory=lambda: get_float_env('SCRAPER_PAGE_DELAY', 1.5))
+    wait_between_pages: float = field(
+        default_factory=lambda: get_float_env("SCRAPER_PAGE_DELAY", 1.5)
+    )
     wait_between_requests: float = 0.3
 
     # Rastgele bekleme aralıkları (min, max)
@@ -64,8 +69,12 @@ class ScraperConfig:
 
     # Tarayıcı ayarları - gizli mod
     # Docker'da CHROME_HEADLESS=false olmalı
-    headless: bool = field(default_factory=lambda: get_bool_env('CHROME_HEADLESS', False))
-    use_undetected_chromedriver: bool = field(default_factory=lambda: get_bool_env('CHROME_USE_UNDETECTED', False))
+    headless: bool = field(
+        default_factory=lambda: get_bool_env("CHROME_HEADLESS", False)
+    )
+    use_undetected_chromedriver: bool = field(
+        default_factory=lambda: get_bool_env("CHROME_USE_UNDETECTED", False)
+    )
     disable_images: bool = True
 
     # Kullanıcı ajanı
@@ -76,59 +85,67 @@ class ScraperConfig:
     )
 
     # Çıktı ayarları
-    output_dir: str = field(default_factory=lambda: os.getenv('OUTPUT_DIR', 'outputs'))
+    output_dir: str = field(default_factory=lambda: os.getenv("OUTPUT_DIR", "outputs"))
 
     # Loglama
-    log_level: str = field(default_factory=lambda: os.getenv('LOG_LEVEL', 'INFO'))
+    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
     log_to_file: bool = True
-    log_file: str = field(default_factory=lambda: os.getenv('LOG_FILE', 'logs/scraper.log'))
+    log_file: str = field(
+        default_factory=lambda: os.getenv("LOG_FILE", "logs/scraper.log")
+    )
 
 
 @dataclass
 class EmlakJetConfig:
     """EmlakJet konfigürasyonu"""
+
     base_url: str = "https://www.emlakjet.com"
-    
-    categories: dict = field(default_factory=lambda: {
-        "satilik": {
-            "konut": "/satilik-konut",
-            "arsa": "/satilik-arsa", 
-            "isyeri": "/satilik-isyeri",
-            "turistik_tesis": "/satilik-turistik-tesis",
-            "kat_karsiligi_arsa": "/satilik-kat-karsiligi-arsa",
-            "devren_isyeri": "/devren-isyeri"
-        },
-        "kiralik": {
-            "konut": "/kiralik-konut",
-            "gunluk_kiralik": "/gunluk-kiralik",
-            "arsa": "/kiralik-arsa",
-            "isyeri": "/kiralik-isyeri",
-            "turistik_tesis": "/kiralik-turistik-tesis"
+
+    categories: dict = field(
+        default_factory=lambda: {
+            "satilik": {
+                "konut": "/satilik-konut",
+                "arsa": "/satilik-arsa",
+                "isyeri": "/satilik-isyeri",
+                "turistik_tesis": "/satilik-turistik-tesis",
+                "kat_karsiligi_arsa": "/satilik-kat-karsiligi-arsa",
+                "devren_isyeri": "/devren-isyeri",
+            },
+            "kiralik": {
+                "konut": "/kiralik-konut",
+                "gunluk_kiralik": "/gunluk-kiralik",
+                "arsa": "/kiralik-arsa",
+                "isyeri": "/kiralik-isyeri",
+                "turistik_tesis": "/kiralik-turistik-tesis",
+            },
         }
-    })
+    )
 
 
 @dataclass
 class HepsiemlakConfig:
     """HepsiEmlak konfigürasyonu"""
+
     base_url: str = "https://www.hepsiemlak.com"
-    
-    categories: dict = field(default_factory=lambda: {
-        "satilik": {
-            "konut": "/satilik",
-            "arsa": "/satilik/arsa",
-            "isyeri": "/satilik/isyeri",
-            "devremulk": "/satilik/devremulk",
-            "turistik_isletme": "/satilik/turistik-isletme"
-        },
-        "kiralik": {
-            "konut": "/kiralik",
-            "arsa": "/kiralik/arsa",
-            "isyeri": "/kiralik/isyeri",
-            "devremulk": "/kiralik/devremulk",
-            "turistik_isletme": "/kiralik/turistik-isletme"
+
+    categories: dict = field(
+        default_factory=lambda: {
+            "satilik": {
+                "konut": "/satilik",
+                "arsa": "/satilik/arsa",
+                "isyeri": "/satilik/isyeri",
+                "devremulk": "/satilik/devremulk",
+                "turistik_isletme": "/satilik/turistik-isletme",
+            },
+            "kiralik": {
+                "konut": "/kiralik",
+                "arsa": "/kiralik/arsa",
+                "isyeri": "/kiralik/isyeri",
+                "devremulk": "/kiralik/devremulk",
+                "turistik_isletme": "/kiralik/turistik-isletme",
+            },
         }
-    })
+    )
     # Not: Subcategories artık dinamik olarak websiteden çekiliyor
     # Bkz: scrapers/hepsiemlak/subtype_fetcher.py
 

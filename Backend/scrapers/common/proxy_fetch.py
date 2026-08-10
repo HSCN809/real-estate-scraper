@@ -35,10 +35,14 @@ class ProxyFetchClient:
         self.proxy_url = resolve_go_proxy_url(proxy_url)
         self.max_retries = max_retries
         self.initial_delay = initial_delay
-        self.client = CloudflareBypassClient(
-            proxy_url=self.proxy_url,
-            user_agent=user_agent,
-        ) if enabled else None
+        self.client = (
+            CloudflareBypassClient(
+                proxy_url=self.proxy_url,
+                user_agent=user_agent,
+            )
+            if enabled
+            else None
+        )
 
     @staticmethod
     def _is_cloudflare_challenge(body_text: str) -> bool:
@@ -84,7 +88,9 @@ class ProxyFetchClient:
             else:
                 body = response.body or b""
                 if len(body) <= 100:
-                    last_error = f"Proxy response too short ({len(body)} bytes) for {url}"
+                    last_error = (
+                        f"Proxy response too short ({len(body)} bytes) for {url}"
+                    )
                 else:
                     decoded = body.decode("utf-8", errors="ignore")
                     if self._is_cloudflare_challenge(decoded):
@@ -93,7 +99,7 @@ class ProxyFetchClient:
                         return Selector(content=body, url=url)
 
             if attempt < max_attempts - 1:
-                delay = self.initial_delay * (2 ** attempt)
+                delay = self.initial_delay * (2**attempt)
                 self._log(
                     task_log,
                     f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",

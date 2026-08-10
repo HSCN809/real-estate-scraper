@@ -6,14 +6,14 @@ import os
 import pytest
 
 # Üst dizini import yoluna ekle
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.validators import (
     DataValidator,
     DataNormalizer,
     validate_listing,
     normalize_price,
-    normalize_area
+    normalize_area,
 )
 
 
@@ -27,11 +27,11 @@ class TestDataValidator:
         data = {
             "baslik": "3+1 Daire",
             "fiyat": "1.500.000 TL",
-            "lokasyon": "İstanbul / Kadıköy"
+            "lokasyon": "İstanbul / Kadıköy",
         }
 
         is_valid, errors = validator.validate_listing(data)
-        assert is_valid == True
+        assert is_valid
         assert len(errors) == 0
 
     def test_invalid_listing_missing_fields(self):
@@ -44,7 +44,7 @@ class TestDataValidator:
         }
 
         is_valid, errors = validator.validate_listing(data)
-        assert is_valid == False
+        assert not is_valid
         assert len(errors) >= 1
 
     def test_is_valid_shortcut(self):
@@ -54,8 +54,8 @@ class TestDataValidator:
         valid_data = {"baslik": "Test", "fiyat": "100 TL", "lokasyon": "İstanbul"}
         invalid_data = {"baslik": "Test"}
 
-        assert validator.is_valid(valid_data) == True
-        assert validator.is_valid(invalid_data) == False
+        assert validator.is_valid(valid_data)
+        assert not validator.is_valid(invalid_data)
 
 
 class TestDataNormalizer:
@@ -122,8 +122,8 @@ class TestConvenienceFunctions:
         valid = {"baslik": "Test", "fiyat": "100", "lokasyon": "İstanbul"}
         invalid = {"baslik": "Test"}
 
-        assert validate_listing(valid) == True
-        assert validate_listing(invalid) == False
+        assert validate_listing(valid)
+        assert not validate_listing(invalid)
 
     def test_normalize_price_function(self):
         """normalize_price fonksiyonunu test et"""

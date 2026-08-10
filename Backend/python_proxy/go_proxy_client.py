@@ -11,9 +11,11 @@ import time
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 
+
 @dataclass
 class ProxyRequest:
     """Request structure for Go proxy"""
+
     url: str
     method: str = "GET"
     headers: Optional[Dict[str, str]] = None
@@ -27,6 +29,7 @@ class ProxyRequest:
 @dataclass
 class ProxyResponse:
     """Response structure from Go proxy"""
+
     status: int
     headers: Dict[str, str]
     body: bytes
@@ -35,8 +38,8 @@ class ProxyResponse:
     error: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ProxyResponse':
-        raw_body = data.get('body', b'')
+    def from_dict(cls, data: Dict[str, Any]) -> "ProxyResponse":
+        raw_body = data.get("body", b"")
         if isinstance(raw_body, str):
             try:
                 body = base64.b64decode(raw_body, validate=True)
@@ -46,12 +49,12 @@ class ProxyResponse:
             body = raw_body
 
         return cls(
-            status=data.get('status'),
-            headers=data.get('headers', {}),
+            status=data.get("status"),
+            headers=data.get("headers", {}),
             body=body,
-            cookies=data.get('cookies'),
-            status_code=data.get('status_code'),
-            error=data.get('error')
+            cookies=data.get("cookies"),
+            status_code=data.get("status_code"),
+            error=data.get("error"),
         )
 
 
@@ -66,7 +69,7 @@ class GoProxyClient:
         proxy_url: str = "http://127.0.0.1:8080",
         timeout: int = 30,
         max_retries: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
     ):
         """
         Initialize the Go proxy client
@@ -77,7 +80,7 @@ class GoProxyClient:
             max_retries: Maximum number of retry attempts
             retry_delay: Delay between retries in seconds
         """
-        self.proxy_url = proxy_url.rstrip('/')
+        self.proxy_url = proxy_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -103,30 +106,21 @@ class GoProxyClient:
             ProxyResponse object
         """
         url = f"{self.proxy_url}/{endpoint}"
-        last_error = None
-
         for attempt in range(self.max_retries + 1):
             try:
                 if method == "GET":
                     response = requests.get(
-                        url,
-                        params=params,
-                        headers=headers,
-                        timeout=self.timeout
+                        url, params=params, headers=headers, timeout=self.timeout
                     )
                 else:  # POST
                     response = requests.post(
-                        url,
-                        json=data,
-                        headers=headers,
-                        timeout=self.timeout
+                        url, json=data, headers=headers, timeout=self.timeout
                     )
 
                 response_data = response.json()
                 return ProxyResponse.from_dict(response_data)
 
             except requests.exceptions.RequestException as e:
-                last_error = e
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
                     continue
@@ -135,17 +129,23 @@ class GoProxyClient:
                     return ProxyResponse(
                         status=500,
                         headers={},
-                        body=b'',
-                        error=f"Proxy connection failed: {str(e)}"
+                        body=b"",
+                        error=f"Proxy connection failed: {str(e)}",
                     )
             except json.JSONDecodeError as e:
-                last_error = e
                 return ProxyResponse(
                     status=500,
                     headers={},
-                    body=b'',
-                    error=f"Invalid proxy response: {str(e)}"
+                    body=b"",
+                    error=f"Invalid proxy response: {str(e)}",
                 )
+
+        return ProxyResponse(
+            status=500,
+            headers={},
+            body=b"",
+            error="Proxy request exhausted all retries",
+        )
 
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> ProxyResponse:
         """
@@ -169,7 +169,7 @@ class GoProxyClient:
         self,
         url: str,
         body: Optional[bytes] = None,
-        headers: Optional[Dict[str, str]] = None
+        headers: Optional[Dict[str, str]] = None,
     ) -> ProxyResponse:
         """
         Make a POST request through the Go proxy
@@ -182,16 +182,9 @@ class GoProxyClient:
         Returns:
             ProxyResponse object
         """
-        request = ProxyRequest(
-            url=url,
-            method="POST",
-            headers=headers,
-            body=body
-        )
+        request = ProxyRequest(url=url, method="POST", headers=headers, body=body)
         return self._make_proxy_request(
-            method="POST",
-            endpoint="proxy",
-            data=request.to_dict()
+            method="POST", endpoint="proxy", data=request.to_dict()
         )
 
     def fetch_page(
@@ -211,12 +204,7 @@ class GoProxyClient:
         Returns:
             ProxyResponse object
         """
-        request = ProxyRequest(
-            url=url,
-            method="GET",
-            headers=headers,
-            timeout=timeout
-        )
+        request = ProxyRequest(url=url, method="GET", headers=headers, timeout=timeout)
         return self._make_proxy_request(
             method="POST",
             endpoint="proxy",
@@ -254,9 +242,7 @@ class CloudflareBypassClient:
     """
 
     def __init__(
-        self,
-        proxy_url: str = "http://127.0.0.1:8080",
-        user_agent: Optional[str] = None
+        self, proxy_url: str = "http://127.0.0.1:8080", user_agent: Optional[str] = None
     ):
         """
         Initialize the Cloudflare bypass client
@@ -266,16 +252,16 @@ class CloudflareBypassClient:
             user_agent: Custom user agent string
         """
         self.proxy_client = GoProxyClient(proxy_url=proxy_url)
-        self.user_agent = user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        self.user_agent = (
+            user_agent
+            or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
 
         # Store cookies for session persistence
-        self.session_cookies = {}
+        self.session_cookies: Dict[str, str] = {}
 
     def fetch_with_retry(
-        self,
-        url: str,
-        max_retries: int = 5,
-        initial_delay: float = 2.0
+        self, url: str, max_retries: int = 5, initial_delay: float = 2.0
     ) -> ProxyResponse:
         """
         Fetch a URL with intelligent retry logic for Cloudflare challenges
@@ -293,7 +279,9 @@ class CloudflareBypassClient:
                 # Add session cookies if available
                 headers = {"User-Agent": self.user_agent}
                 if self.session_cookies:
-                    headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.session_cookies.items())
+                    headers["Cookie"] = "; ".join(
+                        f"{k}={v}" for k, v in self.session_cookies.items()
+                    )
 
                 response = self.proxy_client.fetch_page(url, headers=headers)
 
@@ -301,8 +289,8 @@ class CloudflareBypassClient:
                 if response.cookies:
                     for cookie in response.cookies:
                         if isinstance(cookie, dict):
-                            name = cookie.get('name') or cookie.get('Name') or ''
-                            value = cookie.get('value') or cookie.get('Value') or ''
+                            name = cookie.get("name") or cookie.get("Name") or ""
+                            value = cookie.get("value") or cookie.get("Value") or ""
                             if name:
                                 self.session_cookies[name] = value
 
@@ -313,8 +301,10 @@ class CloudflareBypassClient:
                 # Check for Cloudflare challenge (usually 403 or 503)
                 if response.status in [403, 503]:
                     if attempt < max_retries - 1:
-                        delay = initial_delay * (2 ** attempt)  # Exponential backoff
-                        print(f"Cloudflare challenge detected, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                        delay = initial_delay * (2**attempt)  # Exponential backoff
+                        print(
+                            f"Cloudflare challenge detected, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})"
+                        )
                         time.sleep(delay)
                         continue
 
@@ -323,8 +313,10 @@ class CloudflareBypassClient:
 
             except Exception as e:
                 if attempt < max_retries - 1:
-                    delay = initial_delay * (2 ** attempt)
-                    print(f"Request failed: {str(e)}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                    delay = initial_delay * (2**attempt)
+                    print(
+                        f"Request failed: {str(e)}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(delay)
                     continue
 
@@ -332,15 +324,12 @@ class CloudflareBypassClient:
                 return ProxyResponse(
                     status=500,
                     headers={},
-                    body=b'',
-                    error=f"All retries failed: {str(e)}"
+                    body=b"",
+                    error=f"All retries failed: {str(e)}",
                 )
 
         return ProxyResponse(
-            status=500,
-            headers={},
-            body=b'',
-            error="Maximum retries exceeded"
+            status=500, headers={}, body=b"", error="Maximum retries exceeded"
         )
 
 
@@ -350,6 +339,7 @@ def test_proxy_client():
 
     # Determine proxy URL based on environment
     import os
+
     proxy_url = os.getenv("GO_PROXY_URL", "http://127.0.0.1:8080")
 
     # In Docker, use the service name

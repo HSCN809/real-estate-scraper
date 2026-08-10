@@ -55,10 +55,31 @@ SPIDER_METHOD_TO_SESSION = {
     "scrapling_spider_stealth_session": "stealth",
 }
 
-SPIDER_SESSION_CONFIG = {
-    "fetcher": {"concurrent_requests": 3, "download_delay": 0.0, "timeout_ms": 30000, "retries": 3, "retry_delay": 1, "max_blocked_retries": 3},
-    "dynamic": {"concurrent_requests": 2, "download_delay": 0.0, "timeout_ms": 45000, "retries": 4, "retry_delay": 2, "max_blocked_retries": 4},
-    "stealth": {"concurrent_requests": 1, "download_delay": 0.4, "timeout_ms": 60000, "retries": 5, "retry_delay": 2, "max_blocked_retries": 5},
+SPIDER_SESSION_CONFIG: Dict[str, Dict[str, Any]] = {
+    "fetcher": {
+        "concurrent_requests": 3,
+        "download_delay": 0.0,
+        "timeout_ms": 30000,
+        "retries": 3,
+        "retry_delay": 1,
+        "max_blocked_retries": 3,
+    },
+    "dynamic": {
+        "concurrent_requests": 2,
+        "download_delay": 0.0,
+        "timeout_ms": 45000,
+        "retries": 4,
+        "retry_delay": 2,
+        "max_blocked_retries": 4,
+    },
+    "stealth": {
+        "concurrent_requests": 1,
+        "download_delay": 0.4,
+        "timeout_ms": 60000,
+        "retries": 5,
+        "retry_delay": 2,
+        "max_blocked_retries": 5,
+    },
 }
 
 
@@ -81,7 +102,9 @@ class EmlakJetScraplingScraper:
         proxy_url: Optional[str] = None,
     ):
         base_config = get_emlakjet_config()
-        category_path = subtype_path or base_config.categories.get(listing_type, {}).get(category, "")
+        category_path = subtype_path or base_config.categories.get(
+            listing_type, {}
+        ).get(category, "")
 
         self.base_config = base_config
         self.base_url = base_config.base_url + category_path
@@ -92,7 +115,9 @@ class EmlakJetScraplingScraper:
         self.selected_districts = selected_districts or {}
         self.headless = headless
         self.request_timeout_ms = 45000
-        self.scraping_method = self._resolve_scraping_method(scraping_method, use_stealth)
+        self.scraping_method = self._resolve_scraping_method(
+            scraping_method, use_stealth
+        )
         self.proxy_enabled = proxy_enabled
         self.proxy_fetcher = ProxyFetchClient(
             enabled=proxy_enabled,
@@ -103,7 +128,9 @@ class EmlakJetScraplingScraper:
 
         self.selectors = get_selectors("emlakjet", category)
         self.common_selectors = get_common_selectors("emlakjet")
-        parser_class = EmlakJetScraper.CATEGORY_PARSERS.get(category, EmlakJetScraper.CATEGORY_PARSERS["konut"])
+        parser_class = EmlakJetScraper.CATEGORY_PARSERS.get(
+            category, EmlakJetScraper.CATEGORY_PARSERS["konut"]
+        )
         self.parser = parser_class()
 
         self.session_context = None
@@ -117,7 +144,7 @@ class EmlakJetScraplingScraper:
         self.new_listings_count = 0
         self.duplicate_count = 0
         self.total_new_listings = 0
-        self.metrics = {
+        self.metrics: Dict[str, Any] = {
             "start_time": None,
             "end_time": None,
             "total_pages": 0,
@@ -128,9 +155,15 @@ class EmlakJetScraplingScraper:
         }
 
     @staticmethod
-    def _resolve_scraping_method(scraping_method: Optional[str], use_stealth: bool) -> str:
+    def _resolve_scraping_method(
+        scraping_method: Optional[str], use_stealth: bool
+    ) -> str:
         if scraping_method is None:
-            return "scrapling_stealth_session" if use_stealth else "scrapling_fetcher_session"
+            return (
+                "scrapling_stealth_session"
+                if use_stealth
+                else "scrapling_fetcher_session"
+            )
         if scraping_method not in SUPPORTED_SCRAPLING_METHODS:
             raise ValueError(f"Unsupported scraping_method: {scraping_method}")
         return scraping_method
@@ -156,7 +189,7 @@ class EmlakJetScraplingScraper:
     def _normalize_text(self, text: str) -> str:
         normalized = unicodedata.normalize("NFKD", text or "")
         ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-        replacements = str.maketrans({"ı": "i", "İ": "i", "ş": "s", "Ş": "s", "ğ": "g", "Ğ": "g", "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c"})
+        replacements = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc")
         return ascii_only.translate(replacements).casefold().strip()
 
     @staticmethod
@@ -171,24 +204,7 @@ class EmlakJetScraplingScraper:
     def _slugify_location(self, name: str) -> str:
         normalized = unicodedata.normalize("NFKD", str(name or ""))
         ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-        ascii_only = ascii_only.translate(
-            str.maketrans(
-                {
-                    "ı": "i",
-                    "İ": "i",
-                    "ş": "s",
-                    "Ş": "s",
-                    "ğ": "g",
-                    "Ğ": "g",
-                    "ü": "u",
-                    "Ü": "u",
-                    "ö": "o",
-                    "Ö": "o",
-                    "ç": "c",
-                    "Ç": "c",
-                }
-            )
-        )
+        ascii_only = ascii_only.translate(str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc"))
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
         return slug
 
@@ -236,7 +252,9 @@ class EmlakJetScraplingScraper:
 
         effective_method = self._effective_session_method()
         wait_selector = self.common_selectors.get("listing_container")
-        task_log.line(f"Creating Scrapling session via {self.scraping_method} (effective={effective_method}, headless={self.headless})")
+        task_log.line(
+            f"Creating Scrapling session via {self.scraping_method} (effective={effective_method}, headless={self.headless})"
+        )
 
         if effective_method == "scrapling_stealth_session":
             self.session_context = StealthySession(
@@ -263,7 +281,11 @@ class EmlakJetScraplingScraper:
                 retry_delay=1,
             )
 
-        self.session = self.session_context.__enter__() if hasattr(self.session_context, "__enter__") else self.session_context
+        self.session = (
+            self.session_context.__enter__()
+            if hasattr(self.session_context, "__enter__")
+            else self.session_context
+        )
         task_log.line(f"Scrapling session ready via {self.scraping_method}")
         return self.session
 
@@ -320,7 +342,7 @@ class EmlakJetScraplingScraper:
             disable_resources=True,
             wait_selector=wait_selector,
         ) as session:
-            fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+            fetch_kwargs = {"timeout": self.request_timeout_ms}
             if wait_selector:
                 fetch_kwargs["wait_selector"] = wait_selector
             return session.fetch(url, **fetch_kwargs)
@@ -355,19 +377,27 @@ class EmlakJetScraplingScraper:
 
             status = getattr(response, "status", 200)
             body = getattr(response, "body", b"")
-            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+            if (
+                (isinstance(status, int) and status >= 400)
+                or not body
+                or len(body) <= 100
+            ):
                 self.metrics["failed_requests"] += 1
                 return None
 
             self.metrics["successful_requests"] += 1
-            task_log.line(f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}")
+            task_log.line(
+                f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}"
+            )
             return response
         except Exception as exc:
             self.metrics["failed_requests"] += 1
             task_log.line(f"Error fetching {url}: {exc}", level="error")
             return None
 
-    def _extract_text(self, element: Selector, css_selector: str, default: str = "") -> str:
+    def _extract_text(
+        self, element: Selector, css_selector: str, default: str = ""
+    ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
             value = str(elements[0].text).strip() if elements else ""
@@ -375,26 +405,50 @@ class EmlakJetScraplingScraper:
         except Exception:
             return default
 
-    def _extract_attribute(self, element: Selector, css_selector: str, attribute: str, default: str = "") -> str:
+    def _extract_attribute(
+        self, element: Selector, css_selector: str, attribute: str, default: str = ""
+    ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
-            value = str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
+            value = (
+                str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
+            )
             return value or default
         except Exception:
             return default
 
-    def _extract_common_data(self, element: Selector, page_url: str = "") -> Dict[str, Any]:
-        title = self._extract_text(element, self.common_selectors.get("title", "h3.styles_title__aKEGQ"))
-        location = self._extract_text(element, self.common_selectors.get("location", "span.styles_location__OwJiQ"))
-        price = self._extract_text(element, self.common_selectors.get("price", "span.styles_price__F3pMQ"))
-        quick_info = self._extract_text(element, self.common_selectors.get("quick_info", "div.styles_quickinfoWrapper__Vsnk5"))
-        image_url = self._extract_attribute(element, self.common_selectors.get("image", "img.styles_imageClass___SLvt"), "src")
+    def _extract_common_data(
+        self, element: Selector, page_url: str = ""
+    ) -> Dict[str, Any]:
+        title = self._extract_text(
+            element, self.common_selectors.get("title", "h3.styles_title__aKEGQ")
+        )
+        location = self._extract_text(
+            element,
+            self.common_selectors.get("location", "span.styles_location__OwJiQ"),
+        )
+        price = self._extract_text(
+            element, self.common_selectors.get("price", "span.styles_price__F3pMQ")
+        )
+        quick_info = self._extract_text(
+            element,
+            self.common_selectors.get(
+                "quick_info", "div.styles_quickinfoWrapper__Vsnk5"
+            ),
+        )
+        image_url = self._extract_attribute(
+            element,
+            self.common_selectors.get("image", "img.styles_imageClass___SLvt"),
+            "src",
+        )
         listing_url = str(element.attrib.get("href", "")).strip()
         if listing_url and page_url:
             listing_url = urljoin(page_url, listing_url)
 
         badges = []
-        for badge in element.css(self.common_selectors.get("badge_wrapper", "div.styles_badgewrapper__pS0rt")):
+        for badge in element.css(
+            self.common_selectors.get("badge_wrapper", "div.styles_badgewrapper__pS0rt")
+        ):
             badge_text = str(badge.text).strip()
             if badge_text:
                 badges.append(self._normalize_text(badge_text))
@@ -406,7 +460,9 @@ class EmlakJetScraplingScraper:
             "ilan_url": listing_url,
             "resim_url": image_url,
             "one_cikan": any("one cikan" in badge for badge in badges),
-            "yeni": any(badge == "yeni" or badge.startswith("yeni ") for badge in badges),
+            "yeni": any(
+                badge == "yeni" or badge.startswith("yeni ") for badge in badges
+            ),
             "_quick_info": quick_info,
         }
 
@@ -420,13 +476,23 @@ class EmlakJetScraplingScraper:
     ) -> List[Dict[str, Any]]:
         listings: List[Dict[str, Any]] = []
         try:
-            listing_selector = self.common_selectors.get("listing_container", "a.styles_wrapper__587DT")
+            listing_selector = self.common_selectors.get(
+                "listing_container", "a.styles_wrapper__587DT"
+            )
             for element in selector.css(listing_selector):
-                data = self._extract_common_data(element, page_url=page_url or getattr(selector, "url", ""))
-                if not all([data.get("baslik"), data.get("lokasyon"), data.get("fiyat")]):
+                data = self._extract_common_data(
+                    element, page_url=page_url or getattr(selector, "url", "")
+                )
+                if not all(
+                    [data.get("baslik"), data.get("lokasyon"), data.get("fiyat")]
+                ):
                     continue
                 quick_info = data.pop("_quick_info", "")
-                data.update(self.parser.parse_category_details(quick_info, data.get("baslik", "")))
+                data.update(
+                    self.parser.parse_category_details(
+                        quick_info, data.get("baslik", "")
+                    )
+                )
                 data["tarih"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 data["scraping_method"] = self.scraping_method
                 if city:
@@ -461,9 +527,19 @@ class EmlakJetScraplingScraper:
         self.total_new_listings += new_count
         return new_count, updated_count, unchanged_count
 
-    def _report_page_persist_result(self, page_num: int, extracted_count: int, new_count: int, updated_count: int, unchanged_count: int, location_name: str) -> None:
+    def _report_page_persist_result(
+        self,
+        page_num: int,
+        extracted_count: int,
+        new_count: int,
+        updated_count: int,
+        unchanged_count: int,
+        location_name: str,
+    ) -> None:
         task_log.line(f"   ✅ Sayfa {page_num}: {extracted_count} ilan cikarildi")
-        task_log.line(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} guncellendi, {unchanged_count} degismedi")
+        task_log.line(
+            f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} guncellendi, {unchanged_count} degismedi"
+        )
 
     def _log_location_start(self, location_name: str, location_url: str) -> None:
         task_log.section(
@@ -473,7 +549,9 @@ class EmlakJetScraplingScraper:
         )
 
     def _log_location_plan(self, location_name: str, pages_to_scrape: int) -> None:
-        task_log.line(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
+        task_log.line(
+            f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}"
+        )
         task_log.line(f"📄 {pages_to_scrape} sayfa taranacak")
 
     def get_total_pages(self, selector: Selector) -> int:
@@ -488,7 +566,10 @@ class EmlakJetScraplingScraper:
                 if page_value and page_value[0].isdigit():
                     page_numbers.append(int(page_value[0]))
 
-            active_page = self._extract_text(selector, self.common_selectors.get("active_page", "span.styles_selected__hilA_"))
+            active_page = self._extract_text(
+                selector,
+                self.common_selectors.get("active_page", "span.styles_selected__hilA_"),
+            )
             if active_page.isdigit():
                 page_numbers.append(int(active_page))
             return max(page_numbers) if page_numbers else 1
@@ -500,7 +581,9 @@ class EmlakJetScraplingScraper:
         if not selector:
             return None
         try:
-            for element in selector.css("span.styles_adsCount__A1YW5, span.styles_title__e_y3h"):
+            for element in selector.css(
+                "span.styles_adsCount__A1YW5, span.styles_title__e_y3h"
+            ):
                 normalized_text = self._normalize_text(str(element.text))
                 if "bulunamadi" in normalized_text:
                     return 0
@@ -531,12 +614,21 @@ class EmlakJetScraplingScraper:
     def _clean_location_name(self, text: str) -> str:
         compact = " ".join(str(text).split())
         compact = re.sub(r"\s+\(?[\d\.\,]+\)?$", "", compact).strip()
-        compact = re.sub(r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE).strip()
-        compact = re.sub(r"\s+(satılık|satilik|kiralık|kiralik)\b.*$", "", compact, flags=re.IGNORECASE).strip()
+        compact = re.sub(
+            r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE
+        ).strip()
+        compact = re.sub(
+            r"\s+(satılık|satilik|kiralık|kiralik)\b.*$",
+            "",
+            compact,
+            flags=re.IGNORECASE,
+        ).strip()
         compact = re.sub(r"\s*[-–|•]+\s*$", "", compact).strip()
         return compact
 
-    def get_location_options(self, location_type: str, current_url: str) -> Tuple[List[Dict[str, str]], Optional[int]]:
+    def get_location_options(
+        self, location_type: str, current_url: str
+    ) -> Tuple[List[Dict[str, str]], Optional[int]]:
         task_log.line(f"Getting {location_type} options via {self.scraping_method}")
         selector = self.fetch_page(current_url)
         if not selector:
@@ -546,7 +638,11 @@ class EmlakJetScraplingScraper:
         location_options: List[Dict[str, str]] = []
         seen_names = set()
 
-        for link in selector.css(self.common_selectors.get("location_links", "section.styles_section__xzOd3 a.styles_link__7WOOd")):
+        for link in selector.css(
+            self.common_selectors.get(
+                "location_links", "section.styles_section__xzOd3 a.styles_link__7WOOd"
+            )
+        ):
             location_name = self._clean_location_name(str(link.text).strip())
             location_url = str(link.attrib.get("href", "")).strip()
             if location_url:
@@ -561,11 +657,19 @@ class EmlakJetScraplingScraper:
 
         return location_options, listing_count
 
-    def _match_requested_locations(self, options: List[Dict[str, str]], requested: List[str]) -> List[Dict[str, str]]:
+    def _match_requested_locations(
+        self, options: List[Dict[str, str]], requested: List[str]
+    ) -> List[Dict[str, str]]:
         requested_set = {self._normalize_text(name) for name in requested}
-        return [option for option in options if self._normalize_text(option["name"]) in requested_set]
+        return [
+            option
+            for option in options
+            if self._normalize_text(option["name"]) in requested_set
+        ]
 
-    def _trim_page_listings(self, page_listings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _trim_page_listings(
+        self, page_listings: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         if self._max_listings <= 0:
             return page_listings
         remaining = self._max_listings - len(self.all_listings)
@@ -573,14 +677,18 @@ class EmlakJetScraplingScraper:
             return []
         return page_listings[:remaining]
 
-    def _resolve_page_limit(self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]) -> int:
+    def _resolve_page_limit(
+        self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]
+    ) -> int:
         total_pages = max(1, detected_total_pages or 1)
         if requested_max_pages is None or requested_max_pages <= 0:
             return total_pages
         return min(requested_max_pages, total_pages)
 
-    def _fetch_spider_seed_page(self, url: str, session_mode: str) -> Optional[Selector]:
-        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+    def _fetch_spider_seed_page(
+        self, url: str, session_mode: str
+    ) -> Optional[Selector]:
+        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_selector = self.common_selectors.get("listing_container")
 
         try:
@@ -602,7 +710,7 @@ class EmlakJetScraplingScraper:
                     retry_delay=mode_settings["retry_delay"],
                     network_idle=False,
                 ) as session:
-                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    fetch_kwargs = {"timeout": mode_settings["timeout_ms"]}
                     if listing_selector:
                         fetch_kwargs["wait_selector"] = listing_selector
                     response = session.fetch(url, **fetch_kwargs)
@@ -615,7 +723,7 @@ class EmlakJetScraplingScraper:
                     network_idle=True,
                     disable_resources=True,
                 ) as session:
-                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    fetch_kwargs = {"timeout": mode_settings["timeout_ms"]}
                     if listing_selector:
                         fetch_kwargs["wait_selector"] = listing_selector
                     response = session.fetch(url, **fetch_kwargs)
@@ -625,11 +733,17 @@ class EmlakJetScraplingScraper:
 
             status = getattr(response, "status", 200)
             body = getattr(response, "body", b"")
-            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+            if (
+                (isinstance(status, int) and status >= 400)
+                or not body
+                or len(body) <= 100
+            ):
                 return None
             return response
         except Exception as exc:
-            task_log.line(f"Could not detect pagination seed for {url}: {exc}", level="warning")
+            task_log.line(
+                f"Could not detect pagination seed for {url}: {exc}", level="warning"
+            )
             return None
 
     def _scrape_location_with_session(
@@ -647,22 +761,32 @@ class EmlakJetScraplingScraper:
 
         first_page = self.fetch_page(location_url)
         if not first_page:
-            task_log.line(f"âš ï¸ Ilk sayfa alinamadi: {location_name}", level="warning")
+            task_log.line(
+                f"âš ï¸ Ilk sayfa alinamadi: {location_name}", level="warning"
+            )
             return listings
 
-        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(first_page), max_pages
+        )
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
             if self._is_listing_limit_reached():
-                task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                task_log.line(
+                    f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
                 break
 
             current_url = self._build_page_url(location_url, page_num)
-            task_log.line(f"ğŸ” [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor...")
+            task_log.line(
+                f"ğŸ” [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor..."
+            )
             selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
-                task_log.line(f"   âš ï¸ Sayfa {page_num} alinamadi, atlaniyor", level="warning")
+                task_log.line(
+                    f"   âš ï¸ Sayfa {page_num} alinamadi, atlaniyor", level="warning"
+                )
                 continue
 
             if progress_callback:
@@ -683,21 +807,36 @@ class EmlakJetScraplingScraper:
             page_listings = self._trim_page_listings(page_listings)
             self.all_listings.extend(page_listings)
             listings.extend(page_listings)
-            new_count, updated_count, unchanged_count = self._persist_listings(page_listings)
-            self._report_page_persist_result(page_num, len(page_listings), new_count, updated_count, unchanged_count, location_name)
+            new_count, updated_count, unchanged_count = self._persist_listings(
+                page_listings
+            )
+            self._report_page_persist_result(
+                page_num,
+                len(page_listings),
+                new_count,
+                updated_count,
+                unchanged_count,
+                location_name,
+            )
             self.metrics["total_pages"] += 1
 
             if self._is_listing_limit_reached():
-                task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                task_log.line(
+                    f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
                 break
 
             if page_num < pages_to_scrape:
                 time.sleep(random.uniform(1, 3))
 
         if listings:
-            task_log.line(f"âœ… {location_name} tamamlandi - {len(listings)} ilan islendi")
+            task_log.line(
+                f"âœ… {location_name} tamamlandi - {len(listings)} ilan islendi"
+            )
         else:
-            task_log.line(f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning")
+            task_log.line(
+                f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning"
+            )
         return listings
 
     def _scrape_location_with_spider(
@@ -711,7 +850,7 @@ class EmlakJetScraplingScraper:
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
         session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
-        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_selector = self.common_selectors.get("listing_container")
         spider_errors: List[Dict[str, str]] = []
         visited_pages: set[int] = set()
@@ -800,7 +939,9 @@ class EmlakJetScraplingScraper:
                 if outer._is_listing_limit_reached():
                     return
 
-                task_log.line(f"ğŸ” [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taraniyor...")
+                task_log.line(
+                    f"ğŸ” [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taraniyor..."
+                )
                 if progress_callback:
                     progress_callback(
                         f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
@@ -822,7 +963,9 @@ class EmlakJetScraplingScraper:
                     listing["scraping_method"] = outer.scraping_method
 
                 outer.all_listings.extend(page_listings)
-                new_count, updated_count, unchanged_count = outer._persist_listings(page_listings)
+                new_count, updated_count, unchanged_count = outer._persist_listings(
+                    page_listings
+                )
                 outer._report_page_persist_result(
                     page_num=current_page,
                     extracted_count=len(page_listings),
@@ -838,25 +981,33 @@ class EmlakJetScraplingScraper:
                     return
                 if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs = {"callback": self.parse}
+                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_selector:
                         follow_kwargs["wait_selector"] = listing_selector
                     yield response.follow(next_url, **follow_kwargs)
 
         EmlakjetSpider().start()
         method_items = list(collected_items)
-        method_items.sort(key=lambda item: (item.get("page", 1), item.get("ilan_url", "")))
+        method_items.sort(
+            key=lambda item: (item.get("page", 1), item.get("ilan_url", ""))
+        )
         self.metrics["total_pages"] += len(processed_pages)
         self.metrics["successful_requests"] += len(visited_pages)
         self.metrics["failed_requests"] += len(spider_errors)
 
         if self._is_listing_limit_reached():
-            task_log.line(f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+            task_log.line(
+                f"ğŸ¯ Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+            )
 
         if not method_items:
-            task_log.line(f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning")
+            task_log.line(
+                f"âš ï¸ {location_name} icin ilan bulunamadi", level="warning"
+            )
         else:
-            task_log.line(f"âœ… {location_name} tamamlandi - {len(method_items)} ilan islendi")
+            task_log.line(
+                f"âœ… {location_name} tamamlandi - {len(method_items)} ilan islendi"
+            )
         return method_items
 
     def _scrape_location(
@@ -916,19 +1067,27 @@ class EmlakJetScraplingScraper:
             task_log.line(f"⚠️ Ilk sayfa alinamadi: {location_name}", level="warning")
             return listings
 
-        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(first_page), max_pages
+        )
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
             if self._is_listing_limit_reached():
-                task_log.line(f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                task_log.line(
+                    f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
                 break
 
             current_url = self._build_page_url(location_url, page_num)
-            task_log.line(f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor...")
+            task_log.line(
+                f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor..."
+            )
             selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
-                task_log.line(f"   ⚠️ Sayfa {page_num} alinamadi, atlaniyor", level="warning")
+                task_log.line(
+                    f"   ⚠️ Sayfa {page_num} alinamadi, atlaniyor", level="warning"
+                )
                 continue
 
             if progress_callback:
@@ -949,19 +1108,32 @@ class EmlakJetScraplingScraper:
             page_listings = self._trim_page_listings(page_listings)
             self.all_listings.extend(page_listings)
             listings.extend(page_listings)
-            new_count, updated_count, unchanged_count = self._persist_listings(page_listings)
-            self._report_page_persist_result(page_num, len(page_listings), new_count, updated_count, unchanged_count, location_name)
+            new_count, updated_count, unchanged_count = self._persist_listings(
+                page_listings
+            )
+            self._report_page_persist_result(
+                page_num,
+                len(page_listings),
+                new_count,
+                updated_count,
+                unchanged_count,
+                location_name,
+            )
             self.metrics["total_pages"] += 1
 
             if self._is_listing_limit_reached():
-                task_log.line(f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}")
+                task_log.line(
+                    f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
                 break
 
             if page_num < pages_to_scrape:
                 time.sleep(random.uniform(1, 3))
 
         if listings:
-            task_log.line(f"✅ {location_name} tamamlandi - {len(listings)} ilan islendi")
+            task_log.line(
+                f"✅ {location_name} tamamlandi - {len(listings)} ilan islendi"
+            )
         else:
             task_log.line(f"⚠️ {location_name} icin ilan bulunamadi", level="warning")
         return listings
@@ -987,11 +1159,21 @@ class EmlakJetScraplingScraper:
         )
         return len(listings) == 0, self.total_new_listings - before_new
 
-    def _make_progress_callback(self, progress_callback, current_idx: int, total_count: int, name: str):
+    def _make_progress_callback(
+        self, progress_callback, current_idx: int, total_count: int, name: str
+    ):
         def callback(msg, current=0, total=0, progress=0):
-            overall = int(((current_idx - 1 + (progress or 0) / 100) / max(1, total_count)) * 100)
+            overall = int(
+                ((current_idx - 1 + (progress or 0) / 100) / max(1, total_count)) * 100
+            )
             if progress_callback:
-                progress_callback(f"[{current_idx}/{total_count}] {name}: {msg}", current=current, total=total, progress=overall)
+                progress_callback(
+                    f"[{current_idx}/{total_count}] {name}: {msg}",
+                    current=current,
+                    total=total,
+                    progress=overall,
+                )
+
         return callback
 
     def start_scraping_api(
@@ -1022,7 +1204,9 @@ class EmlakJetScraplingScraper:
             }
         )
 
-        task_log.line(f"🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()} Scrapling Scraper baslatiliyor")
+        task_log.line(
+            f"🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()} Scrapling Scraper baslatiliyor"
+        )
         task_log.line(f"🕸️ Yontem: {self.scraping_method}")
 
         if not self.selected_cities:
@@ -1038,7 +1222,9 @@ class EmlakJetScraplingScraper:
         try:
             task_log.line("Il listesi aliniyor...")
             all_provinces, _ = self.get_location_options("Iller", self.base_url)
-            provinces = self._match_requested_locations(all_provinces, self.selected_cities)
+            provinces = self._match_requested_locations(
+                all_provinces, self.selected_cities
+            )
             if not provinces:
                 if self.proxy_enabled and self.selected_cities:
                     task_log.line(
@@ -1051,12 +1237,17 @@ class EmlakJetScraplingScraper:
                         for city_name in self.selected_cities
                     ]
                 else:
-                    task_log.line(f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}", level="error")
+                    task_log.line(
+                        f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}",
+                        level="error",
+                    )
                     return {}
 
             for prov_idx, province in enumerate(provinces, 1):
                 province_name = province["name"]
-                province_callback = self._make_progress_callback(progress_callback, prov_idx, len(provinces), province_name)
+                province_callback = self._make_progress_callback(
+                    progress_callback, prov_idx, len(provinces), province_name
+                )
                 if self._is_listing_limit_reached():
                     stopped = True
                     break
@@ -1067,20 +1258,40 @@ class EmlakJetScraplingScraper:
                         f"{province_name} ilan sayisi parse edilemedi; il seviyesinde tarama yapilacak.",
                         level="warning",
                     )
-                    target = {"url": province["url"], "label": province_name, "type": "il"}
-                    should_skip, new_count = self._scrape_target(target, page_limit, city=province_name, progress_callback=province_callback)
+                    target = {
+                        "url": province["url"],
+                        "label": province_name,
+                        "type": "il",
+                    }
+                    should_skip, new_count = self._scrape_target(
+                        target,
+                        page_limit,
+                        city=province_name,
+                        progress_callback=province_callback,
+                    )
                     if not should_skip:
                         scrape_stats[province_name] = {"(il seviyesi)": new_count}
                     continue
-                task_log.section(f"🏙️ IL {prov_idx}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})")
+                task_log.section(
+                    f"🏙️ IL {prov_idx}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})"
+                )
 
                 if province_count == 0:
                     task_log.line(f"⏭️ {province_name} -> 0 ilan, il atlaniyor.")
                     continue
 
                 if province_count <= self.PAGINATION_LIMIT:
-                    target = {"url": province["url"], "label": province_name, "type": "il"}
-                    should_skip, new_count = self._scrape_target(target, page_limit, city=province_name, progress_callback=province_callback)
+                    target = {
+                        "url": province["url"],
+                        "label": province_name,
+                        "type": "il",
+                    }
+                    should_skip, new_count = self._scrape_target(
+                        target,
+                        page_limit,
+                        city=province_name,
+                        progress_callback=province_callback,
+                    )
                     if not should_skip:
                         scrape_stats[province_name] = {"(il seviyesi)": new_count}
                     continue
@@ -1092,14 +1303,20 @@ class EmlakJetScraplingScraper:
 
                 requested_districts = None
                 for city_name, district_names in self.selected_districts.items():
-                    if self._normalize_text(city_name) == self._normalize_text(province_name):
+                    if self._normalize_text(city_name) == self._normalize_text(
+                        province_name
+                    ):
                         requested_districts = district_names
                         break
 
                 if requested_districts:
-                    district_list = self._match_requested_locations(district_list, requested_districts)
+                    district_list = self._match_requested_locations(
+                        district_list, requested_districts
+                    )
                     if not district_list:
-                        task_log.line(f"⏭️ {province_name} icin eslesen ilce bulunamadi.")
+                        task_log.line(
+                            f"⏭️ {province_name} icin eslesen ilce bulunamadi."
+                        )
                         continue
 
                 for district_item in district_list:
@@ -1114,7 +1331,11 @@ class EmlakJetScraplingScraper:
                             f"{province_name}/{district_name} ilan sayisi parse edilemedi; ilce seviyesinde tarama yapilacak.",
                             level="warning",
                         )
-                        target = {"url": district_item["url"], "label": f"{province_name} / {district_name}", "type": "ilce"}
+                        target = {
+                            "url": district_item["url"],
+                            "label": f"{province_name} / {district_name}",
+                            "type": "ilce",
+                        }
                         should_skip, new_count = self._scrape_target(
                             target,
                             page_limit,
@@ -1123,13 +1344,19 @@ class EmlakJetScraplingScraper:
                             progress_callback=province_callback,
                         )
                         if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[district_name] = new_count
+                            scrape_stats.setdefault(province_name, {})[
+                                district_name
+                            ] = new_count
                         continue
                     if district_count == 0:
                         continue
 
                     if district_count <= self.PAGINATION_LIMIT:
-                        target = {"url": district_item["url"], "label": f"{province_name} / {district_name}", "type": "ilce"}
+                        target = {
+                            "url": district_item["url"],
+                            "label": f"{province_name} / {district_name}",
+                            "type": "ilce",
+                        }
                         should_skip, new_count = self._scrape_target(
                             target,
                             page_limit,
@@ -1138,12 +1365,20 @@ class EmlakJetScraplingScraper:
                             progress_callback=province_callback,
                         )
                         if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[district_name] = new_count
+                            scrape_stats.setdefault(province_name, {})[
+                                district_name
+                            ] = new_count
                         continue
 
-                    neighborhoods, _ = self.get_location_options("Mahalleler", district_item["url"])
+                    neighborhoods, _ = self.get_location_options(
+                        "Mahalleler", district_item["url"]
+                    )
                     if not neighborhoods:
-                        target = {"url": district_item["url"], "label": f"{province_name} / {district_name}", "type": "ilce"}
+                        target = {
+                            "url": district_item["url"],
+                            "label": f"{province_name} / {district_name}",
+                            "type": "ilce",
+                        }
                         should_skip, new_count = self._scrape_target(
                             target,
                             page_limit,
@@ -1152,7 +1387,9 @@ class EmlakJetScraplingScraper:
                             progress_callback=province_callback,
                         )
                         if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[district_name] = new_count
+                            scrape_stats.setdefault(province_name, {})[
+                                district_name
+                            ] = new_count
                         continue
 
                     for neighborhood_item in neighborhoods:
@@ -1176,7 +1413,10 @@ class EmlakJetScraplingScraper:
                         )
                         if not should_skip and new_count > 0:
                             scrape_stats.setdefault(province_name, {})
-                            scrape_stats[province_name][district_name] = scrape_stats[province_name].get(district_name, 0) + new_count
+                            scrape_stats[province_name][district_name] = (
+                                scrape_stats[province_name].get(district_name, 0)
+                                + new_count
+                            )
 
                     if stopped:
                         break
@@ -1185,7 +1425,9 @@ class EmlakJetScraplingScraper:
                     break
 
             self.metrics["end_time"] = time.time()
-            self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
+            self.metrics["total_duration"] = (
+                self.metrics["end_time"] - self.metrics["start_time"]
+            )
             self.metrics["total_listings"] = len(self.all_listings)
 
             task_log.divider()

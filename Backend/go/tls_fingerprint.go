@@ -14,8 +14,8 @@ import (
 
 // TLSFingerprintManager manages TLS fingerprint spoofing
 type TLSFingerprintManager struct {
-	config       *Config
-	rotateIndex  atomic.Int64
+	config      *Config
+	rotateIndex atomic.Int64
 }
 
 // NewTLSFingerprintManager creates a new TLS fingerprint manager

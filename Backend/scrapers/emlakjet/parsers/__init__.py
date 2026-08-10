@@ -8,9 +8,9 @@ from .isyeri_parser import IsyeriParser
 from .turistik_parser import TuristikTesisParser
 
 __all__ = [
-    'BaseEmlakJetParser',
-    'KonutParser',
-    'ArsaParser',
-    'IsyeriParser',
-    'TuristikTesisParser'
+    "BaseEmlakJetParser",
+    "KonutParser",
+    "ArsaParser",
+    "IsyeriParser",
+    "TuristikTesisParser",
 ]

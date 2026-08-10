@@ -54,10 +54,31 @@ SPIDER_METHOD_TO_SESSION = {
     "scrapling_spider_stealth_session": "stealth",
 }
 
-SPIDER_SESSION_CONFIG = {
-    "fetcher": {"concurrent_requests": 3, "download_delay": 0.0, "timeout_ms": 30000, "retries": 3, "retry_delay": 1, "max_blocked_retries": 3},
-    "dynamic": {"concurrent_requests": 2, "download_delay": 0.0, "timeout_ms": 45000, "retries": 4, "retry_delay": 2, "max_blocked_retries": 4},
-    "stealth": {"concurrent_requests": 1, "download_delay": 0.4, "timeout_ms": 60000, "retries": 5, "retry_delay": 2, "max_blocked_retries": 5},
+SPIDER_SESSION_CONFIG: Dict[str, Dict[str, Any]] = {
+    "fetcher": {
+        "concurrent_requests": 3,
+        "download_delay": 0.0,
+        "timeout_ms": 30000,
+        "retries": 3,
+        "retry_delay": 1,
+        "max_blocked_retries": 3,
+    },
+    "dynamic": {
+        "concurrent_requests": 2,
+        "download_delay": 0.0,
+        "timeout_ms": 45000,
+        "retries": 4,
+        "retry_delay": 2,
+        "max_blocked_retries": 4,
+    },
+    "stealth": {
+        "concurrent_requests": 1,
+        "download_delay": 0.4,
+        "timeout_ms": 60000,
+        "retries": 5,
+        "retry_delay": 2,
+        "max_blocked_retries": 5,
+    },
 }
 
 
@@ -78,7 +99,9 @@ class HepsiemlakScraplingScraper:
         proxy_url: Optional[str] = None,
     ):
         base_config = get_hepsiemlak_config()
-        category_path = subtype_path or base_config.categories.get(listing_type, {}).get(category, "")
+        category_path = subtype_path or base_config.categories.get(
+            listing_type, {}
+        ).get(category, "")
 
         self.base_config = base_config
         self.base_url = base_config.base_url + category_path
@@ -89,7 +112,9 @@ class HepsiemlakScraplingScraper:
         self.selected_districts = selected_districts or {}
         self.headless = headless
         self.request_timeout_ms = 45000
-        self.scraping_method = self._resolve_scraping_method(scraping_method, use_stealth)
+        self.scraping_method = self._resolve_scraping_method(
+            scraping_method, use_stealth
+        )
         self.proxy_enabled = proxy_enabled
         self.proxy_fetcher = ProxyFetchClient(
             enabled=proxy_enabled,
@@ -110,7 +135,7 @@ class HepsiemlakScraplingScraper:
         self.new_listings_count = 0
         self.duplicate_count = 0
         self.total_new_listings = 0
-        self.metrics = {
+        self.metrics: Dict[str, Any] = {
             "start_time": None,
             "end_time": None,
             "total_pages": 0,
@@ -121,9 +146,15 @@ class HepsiemlakScraplingScraper:
         }
 
     @staticmethod
-    def _resolve_scraping_method(scraping_method: Optional[str], use_stealth: bool) -> str:
+    def _resolve_scraping_method(
+        scraping_method: Optional[str], use_stealth: bool
+    ) -> str:
         if scraping_method is None:
-            return "scrapling_stealth_session" if use_stealth else "scrapling_fetcher_session"
+            return (
+                "scrapling_stealth_session"
+                if use_stealth
+                else "scrapling_fetcher_session"
+            )
         if scraping_method not in SUPPORTED_SCRAPLING_METHODS:
             raise ValueError(f"Unsupported scraping_method: {scraping_method}")
         return scraping_method
@@ -140,7 +171,21 @@ class HepsiemlakScraplingScraper:
         import unicodedata
 
         text = unicodedata.normalize("NFC", text)
-        for tr_char, en_char in {"I": "i", "İ": "i", "Ğ": "g", "Ü": "u", "Ş": "s", "Ö": "o", "Ç": "c", "ı": "i", "ğ": "g", "ü": "u", "ş": "s", "ö": "o", "ç": "c"}.items():
+        for tr_char, en_char in {
+            "I": "i",
+            "İ": "i",
+            "Ğ": "g",
+            "Ü": "u",
+            "Ş": "s",
+            "Ö": "o",
+            "Ç": "c",
+            "ı": "i",
+            "ğ": "g",
+            "ü": "u",
+            "ş": "s",
+            "ö": "o",
+            "ç": "c",
+        }.items():
             text = text.replace(tr_char, en_char)
         return text.lower().replace(" ", "-")
 
@@ -148,13 +193,17 @@ class HepsiemlakScraplingScraper:
         if self.subtype_path:
             parts = self.subtype_path.strip("/").split("/")
             return parts[-1] if len(parts) >= 2 else ""
-        category_path = self.base_config.categories.get(self.listing_type, {}).get(self.category, "")
+        category_path = self.base_config.categories.get(self.listing_type, {}).get(
+            self.category, ""
+        )
         parts = category_path.strip("/").split("/") if category_path else []
         return parts[-1] if len(parts) >= 2 else ""
 
     def _build_location_url(self, location_slug: str) -> str:
         suffix = self._get_category_or_subtype_slug()
-        base_location_url = f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
+        base_location_url = (
+            f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
+        )
         return f"{base_location_url}/{suffix}" if suffix else base_location_url
 
     def _get_city_url(self, city: str) -> str:
@@ -196,7 +245,9 @@ class HepsiemlakScraplingScraper:
             return None
 
         listing_results = self.common_selectors.get("listing_results")
-        task_log.line(f"Creating Scrapling session via {self.scraping_method} (headless={self.headless})")
+        task_log.line(
+            f"Creating Scrapling session via {self.scraping_method} (headless={self.headless})"
+        )
         if self.scraping_method == "scrapling_stealth_session":
             self.session_context = StealthySession(
                 headless=self.headless,
@@ -222,7 +273,11 @@ class HepsiemlakScraplingScraper:
                 retry_delay=1,
             )
 
-        self.session = self.session_context.__enter__() if hasattr(self.session_context, "__enter__") else self.session_context
+        self.session = (
+            self.session_context.__enter__()
+            if hasattr(self.session_context, "__enter__")
+            else self.session_context
+        )
         task_log.line(f"Scrapling session ready via {self.scraping_method}")
         return self.session
 
@@ -270,12 +325,18 @@ class HepsiemlakScraplingScraper:
 
             status = getattr(response, "status", 200)
             body = getattr(response, "body", b"")
-            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+            if (
+                (isinstance(status, int) and status >= 400)
+                or not body
+                or len(body) <= 100
+            ):
                 self.metrics["failed_requests"] += 1
                 return None
 
             self.metrics["successful_requests"] += 1
-            task_log.line(f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}")
+            task_log.line(
+                f"Fetched {url} in {time.time() - start_time:.2f}s via {self.scraping_method}"
+            )
             return response
         except Exception as exc:
             self.metrics["failed_requests"] += 1
@@ -290,7 +351,9 @@ class HepsiemlakScraplingScraper:
                 match = re.search(r"(\d+)", count_text_clean)
                 if match and int(match.group(1)) <= 24:
                     return 1
-            pagination_links = selector.css("ul.he-pagination__links a, ul.he-pagination a")
+            pagination_links = selector.css(
+                "ul.he-pagination__links a, ul.he-pagination a"
+            )
             max_page = 1
             for link in pagination_links:
                 text = str(link.text).strip()
@@ -301,7 +364,9 @@ class HepsiemlakScraplingScraper:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
 
-    def _extract_text(self, element: Selector, css_selector: str, default: str = "Belirtilmemis") -> str:
+    def _extract_text(
+        self, element: Selector, css_selector: str, default: str = "Belirtilmemis"
+    ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
             value = str(elements[0].text).strip() if elements else ""
@@ -309,73 +374,170 @@ class HepsiemlakScraplingScraper:
         except Exception:
             return default
 
-    def _extract_attribute(self, element: Selector, css_selector: str, attribute: str, default: str = "Belirtilmemis") -> str:
+    def _extract_attribute(
+        self,
+        element: Selector,
+        css_selector: str,
+        attribute: str,
+        default: str = "Belirtilmemis",
+    ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
-            value = str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
+            value = (
+                str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
+            )
             return value or default
         except Exception:
             return default
 
-    def _extract_common_data(self, element: Selector, page_url: str = "") -> Dict[str, Any]:
-        listing_link = self._extract_attribute(element, self.common_selectors.get("link", "a.card-link"), "href")
+    def _extract_common_data(
+        self, element: Selector, page_url: str = ""
+    ) -> Dict[str, Any]:
+        listing_link = self._extract_attribute(
+            element, self.common_selectors.get("link", "a.card-link"), "href"
+        )
         if listing_link != "Belirtilmemis" and page_url:
             listing_link = urljoin(page_url, listing_link)
         location_text = ""
-        for loc_selector in ["span.list-view-location address", "span.list-view-location", ".list-view-location address", ".list-view-location", "address"]:
+        for loc_selector in [
+            "span.list-view-location address",
+            "span.list-view-location",
+            ".list-view-location address",
+            ".list-view-location",
+            "address",
+        ]:
             location_text = self._extract_text(element, loc_selector, default="")
             if location_text and "/" in location_text:
                 break
-        location_parts = [part.strip() for part in location_text.split("/") if part.strip()]
+        location_parts = [
+            part.strip() for part in location_text.split("/") if part.strip()
+        ]
         return {
-            "fiyat": self._extract_text(element, self.common_selectors.get("price", "span.list-view-price")),
-            "baslik": self._extract_text(element, self.common_selectors.get("title", "h3")),
+            "fiyat": self._extract_text(
+                element, self.common_selectors.get("price", "span.list-view-price")
+            ),
+            "baslik": self._extract_text(
+                element, self.common_selectors.get("title", "h3")
+            ),
             "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemis",
             "ilce": location_parts[1] if len(location_parts) > 1 else "Belirtilmemis",
-            "mahalle": location_parts[2] if len(location_parts) > 2 else "Belirtilmemis",
+            "mahalle": location_parts[2]
+            if len(location_parts) > 2
+            else "Belirtilmemis",
             "ilan_linki": listing_link,
-            "ilan_tarihi": self._extract_text(element, self.common_selectors.get("date", "span.list-view-date")),
-            "emlak_ofisi": self._extract_text(element, self.common_selectors.get("firm", "p.listing-card--owner-info__firm-name")),
+            "ilan_tarihi": self._extract_text(
+                element, self.common_selectors.get("date", "span.list-view-date")
+            ),
+            "emlak_ofisi": self._extract_text(
+                element,
+                self.common_selectors.get(
+                    "firm", "p.listing-card--owner-info__firm-name"
+                ),
+            ),
         }
 
     def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
         if self.category == "konut":
-            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.houseRoomCount")), "metrekare": self._extract_text(element, self.selectors.get("size", "span.list-view-size")), "bina_yasi": self._extract_text(element, self.selectors.get("building_age", "span.buildingAge")), "kat": self._extract_text(element, self.selectors.get("floor", "span.floortype"))}
+            return {
+                "oda_sayisi": self._extract_text(
+                    element, self.selectors.get("room_count", "span.houseRoomCount")
+                ),
+                "metrekare": self._extract_text(
+                    element, self.selectors.get("size", "span.list-view-size")
+                ),
+                "bina_yasi": self._extract_text(
+                    element, self.selectors.get("building_age", "span.buildingAge")
+                ),
+                "kat": self._extract_text(
+                    element, self.selectors.get("floor", "span.floortype")
+                ),
+            }
         if self.category == "arsa":
-            data = {"arsa_metrekare": "Belirtilmemis", "metrekare_fiyat": "Belirtilmemis"}
-            for size_element in element.css(self.selectors.get("size", "span.celly.squareMeter.list-view-size")):
+            data = {
+                "arsa_metrekare": "Belirtilmemis",
+                "metrekare_fiyat": "Belirtilmemis",
+            }
+            for size_element in element.css(
+                self.selectors.get("size", "span.celly.squareMeter.list-view-size")
+            ):
                 size_text = str(size_element.text).strip()
                 normalized = size_text.lower().replace(" ", "")
-                if ("tl/m²" in normalized or "tl/m2" in normalized) and data["metrekare_fiyat"] == "Belirtilmemis":
+                if ("tl/m²" in normalized or "tl/m2" in normalized) and data[
+                    "metrekare_fiyat"
+                ] == "Belirtilmemis":
                     data["metrekare_fiyat"] = size_text
-                elif ("m²" in normalized or "m2" in normalized) and data["arsa_metrekare"] == "Belirtilmemis":
+                elif ("m²" in normalized or "m2" in normalized) and data[
+                    "arsa_metrekare"
+                ] == "Belirtilmemis":
                     data["arsa_metrekare"] = size_text
             return data
         if self.category == "isyeri":
-            return {"metrekare": self._extract_text(element, self.selectors.get("size", "span.celly.squareMeter.list-view-size"))}
+            return {
+                "metrekare": self._extract_text(
+                    element,
+                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
+                )
+            }
         if self.category == "devremulk":
-            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.houseRoomCount")), "metrekare": self._extract_text(element, self.selectors.get("size", "span.celly.squareMeter.list-view-size")), "bina_yasi": self._extract_text(element, self.selectors.get("building_age", "span.buildingAge")), "kat": self._extract_text(element, self.selectors.get("floor", "span.floortype"))}
+            return {
+                "oda_sayisi": self._extract_text(
+                    element, self.selectors.get("room_count", "span.houseRoomCount")
+                ),
+                "metrekare": self._extract_text(
+                    element,
+                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
+                ),
+                "bina_yasi": self._extract_text(
+                    element, self.selectors.get("building_age", "span.buildingAge")
+                ),
+                "kat": self._extract_text(
+                    element, self.selectors.get("floor", "span.floortype")
+                ),
+            }
         if self.category == "turistik_isletme":
-            return {"oda_sayisi": self._extract_text(element, self.selectors.get("room_count", "span.workRoomCount")), "otel_tipi": self._extract_text(element, self.selectors.get("star_count", "span.startCount"))}
+            return {
+                "oda_sayisi": self._extract_text(
+                    element, self.selectors.get("room_count", "span.workRoomCount")
+                ),
+                "otel_tipi": self._extract_text(
+                    element, self.selectors.get("star_count", "span.startCount")
+                ),
+            }
         return {}
 
-    def _extract_from_scrapling_element(self, element: Selector, page_url: str = "") -> Dict[str, Any]:
+    def _extract_from_scrapling_element(
+        self, element: Selector, page_url: str = ""
+    ) -> Dict[str, Any]:
         data = self._extract_common_data(element, page_url=page_url)
         data.update(self._extract_category_specific_data(element))
         return data
 
-    def extract_listings_from_page(self, selector: Selector, city: Optional[str] = None, district: Optional[str] = None, page_url: str = "") -> List[Dict[str, Any]]:
+    def extract_listings_from_page(
+        self,
+        selector: Selector,
+        city: Optional[str] = None,
+        district: Optional[str] = None,
+        page_url: str = "",
+    ) -> List[Dict[str, Any]]:
         listings: List[Dict[str, Any]] = []
         try:
-            listing_elements = selector.css(self.common_selectors.get("listing_container", "li.listing-item:not(.listing-item--promo)"))
+            listing_elements = selector.css(
+                self.common_selectors.get(
+                    "listing_container", "li.listing-item:not(.listing-item--promo)"
+                )
+            )
             source_url = page_url or getattr(selector, "url", "")
             for element in listing_elements:
-                data = self._extract_from_scrapling_element(element, page_url=source_url)
+                data = self._extract_from_scrapling_element(
+                    element, page_url=source_url
+                )
                 if not data:
                     continue
                 if city and (not data.get("il") or data.get("il") == "Belirtilmemis"):
                     data["il"] = city
-                if district and (not data.get("ilce") or data.get("ilce") == "Belirtilmemis"):
+                if district and (
+                    not data.get("ilce") or data.get("ilce") == "Belirtilmemis"
+                ):
                     data["ilce"] = district
                 data["scraped_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 data["scraping_method"] = self.scraping_method
@@ -415,7 +577,9 @@ class HepsiemlakScraplingScraper:
         location_name: str,
     ) -> None:
         task_log.line(f"   ✅ Sayfa {page_num}: {extracted_count} ilan çıkarıldı")
-        task_log.line(f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi")
+        task_log.line(
+            f"   💾 Sayfa {page_num}: {new_count} yeni, {updated_count} güncellendi, {unchanged_count} değişmedi"
+        )
 
     def _log_location_start(self, location_name: str, location_url: str) -> None:
         task_log.section(
@@ -425,13 +589,19 @@ class HepsiemlakScraplingScraper:
         )
 
     def _log_location_plan(self, location_name: str, pages_to_scrape: int) -> None:
-        task_log.line(f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}")
+        task_log.line(
+            f"{location_name}: scraping {pages_to_scrape} pages via {self.scraping_method}"
+        )
         task_log.line(f"📄 {pages_to_scrape} sayfa taranacak")
 
-    def _make_city_progress_callback(self, progress_callback, current_city_idx: int, num_cities: int, city_name: str):
+    def _make_city_progress_callback(
+        self, progress_callback, current_city_idx: int, num_cities: int, city_name: str
+    ):
         def city_progress_callback(msg, current=None, total=None, progress=None):
             city_local_progress = progress if progress is not None else 0
-            overall = int(((current_city_idx - 1 + city_local_progress / 100) / num_cities) * 100)
+            overall = int(
+                ((current_city_idx - 1 + city_local_progress / 100) / num_cities) * 100
+            )
             if progress_callback:
                 progress_callback(
                     f"[{current_city_idx}/{num_cities}] {city_name}: {msg}",
@@ -454,14 +624,18 @@ class HepsiemlakScraplingScraper:
 
         return city_progress_callback
 
-    def _resolve_page_limit(self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]) -> int:
+    def _resolve_page_limit(
+        self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]
+    ) -> int:
         total_pages = max(1, detected_total_pages or 1)
         if requested_max_pages is None or requested_max_pages <= 0:
             return total_pages
         return min(requested_max_pages, total_pages)
 
-    def _fetch_spider_seed_page(self, url: str, session_mode: str) -> Optional[Selector]:
-        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+    def _fetch_spider_seed_page(
+        self, url: str, session_mode: str
+    ) -> Optional[Selector]:
+        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_results = self.common_selectors.get("listing_results")
 
         try:
@@ -483,7 +657,7 @@ class HepsiemlakScraplingScraper:
                     retry_delay=mode_settings["retry_delay"],
                     network_idle=False,
                 ) as session:
-                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    fetch_kwargs = {"timeout": mode_settings["timeout_ms"]}
                     if listing_results:
                         fetch_kwargs["wait_selector"] = listing_results
                     response = session.fetch(url, **fetch_kwargs)
@@ -496,7 +670,7 @@ class HepsiemlakScraplingScraper:
                     network_idle=True,
                     disable_resources=True,
                 ) as session:
-                    fetch_kwargs: Dict[str, Any] = {"timeout": mode_settings["timeout_ms"]}
+                    fetch_kwargs = {"timeout": mode_settings["timeout_ms"]}
                     if listing_results:
                         fetch_kwargs["wait_selector"] = listing_results
                     response = session.fetch(url, **fetch_kwargs)
@@ -506,11 +680,17 @@ class HepsiemlakScraplingScraper:
 
             status = getattr(response, "status", 200)
             body = getattr(response, "body", b"")
-            if (isinstance(status, int) and status >= 400) or not body or len(body) <= 100:
+            if (
+                (isinstance(status, int) and status >= 400)
+                or not body
+                or len(body) <= 100
+            ):
                 return None
             return response
         except Exception as exc:
-            task_log.line(f"Could not detect pagination seed for {url}: {exc}", level="warning")
+            task_log.line(
+                f"Could not detect pagination seed for {url}: {exc}", level="warning"
+            )
             return None
 
     def _scrape_location_with_session(
@@ -529,16 +709,21 @@ class HepsiemlakScraplingScraper:
             task_log.line(f"⚠️ İlk sayfa alınamadı: {location_name}", level="warning")
             return listings
 
-        pages_to_scrape = self._resolve_page_limit(self.get_total_pages(first_page), max_pages)
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(first_page), max_pages
+        )
         self._log_location_plan(location_name, pages_to_scrape)
 
         for page_num in range(1, pages_to_scrape + 1):
-
             current_url = self._build_page_url(location_url, page_num)
-            task_log.line(f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor...")
+            task_log.line(
+                f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor..."
+            )
             selector = first_page if page_num == 1 else self.fetch_page(current_url)
             if not selector:
-                task_log.line(f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor", level="warning")
+                task_log.line(
+                    f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor", level="warning"
+                )
                 continue
 
             if progress_callback:
@@ -556,7 +741,9 @@ class HepsiemlakScraplingScraper:
                 page_url=getattr(selector, "url", current_url),
             )
             listings.extend(page_listings)
-            new_count, updated_count, unchanged_count = self._persist_listings(page_listings)
+            new_count, updated_count, unchanged_count = self._persist_listings(
+                page_listings
+            )
             self._report_page_persist_result(
                 page_num=page_num,
                 extracted_count=len(page_listings),
@@ -583,7 +770,7 @@ class HepsiemlakScraplingScraper:
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
         session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
-        mode_settings = SPIDER_SESSION_CONFIG[session_mode]
+        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_results = self.common_selectors.get("listing_results")
         spider_errors: List[Dict[str, str]] = []
         visited_pages: set[int] = set()
@@ -659,7 +846,10 @@ class HepsiemlakScraplingScraper:
                         "error": f"{type(error).__name__}: {error}",
                     }
                 )
-                task_log.line(f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}", level="warning")
+                task_log.line(
+                    f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}",
+                    level="warning",
+                )
 
             async def parse(self, response: Response):
                 current_page = outer._get_page_number(response.url)
@@ -667,7 +857,9 @@ class HepsiemlakScraplingScraper:
                 if current_page in processed_pages:
                     return
 
-                task_log.line(f"🔍 [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor...")
+                task_log.line(
+                    f"🔍 [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor..."
+                )
                 if progress_callback:
                     progress_callback(
                         f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
@@ -686,7 +878,9 @@ class HepsiemlakScraplingScraper:
                     listing["page"] = current_page
                     listing["scraping_method"] = outer.scraping_method
 
-                new_count, updated_count, unchanged_count = outer._persist_listings(page_listings)
+                new_count, updated_count, unchanged_count = outer._persist_listings(
+                    page_listings
+                )
                 outer._report_page_persist_result(
                     page_num=current_page,
                     extracted_count=len(page_listings),
@@ -700,14 +894,16 @@ class HepsiemlakScraplingScraper:
 
                 if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs = {"callback": self.parse}
+                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_results:
                         follow_kwargs["wait_selector"] = listing_results
                     yield response.follow(next_url, **follow_kwargs)
 
         HepsiemlakSpider().start()
         method_items = list(collected_items)
-        method_items.sort(key=lambda item: (item.get("page", 1), item.get("ilan_linki", "")))
+        method_items.sort(
+            key=lambda item: (item.get("page", 1), item.get("ilan_linki", ""))
+        )
         self.metrics["total_pages"] += len(visited_pages)
         self.metrics["successful_requests"] += len(visited_pages)
         self.metrics["failed_requests"] += len(spider_errors)
@@ -715,7 +911,9 @@ class HepsiemlakScraplingScraper:
         if not method_items:
             task_log.line(f"⚠️ {location_name} için ilan bulunamadı", level="warning")
         else:
-            task_log.line(f"✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi")
+            task_log.line(
+                f"✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi"
+            )
         return method_items
 
     def _scrape_location(
@@ -745,7 +943,9 @@ class HepsiemlakScraplingScraper:
             progress_callback=progress_callback,
         )
 
-    def _run_scraping(self, max_pages: Optional[int], progress_callback=None) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    def _run_scraping(
+        self, max_pages: Optional[int], progress_callback=None
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         task_log.line(
             f"Starting _run_scraping with method={self.scraping_method}, "
             f"cities={self.selected_cities}, max_pages={max_pages}"
@@ -771,12 +971,16 @@ class HepsiemlakScraplingScraper:
         total_cities = len(self.selected_cities)
 
         if (not self.proxy_enabled) and self.scraping_method in SESSION_METHODS:
-            task_log.line(f"Initializing session-backed scraping flow for {self.scraping_method}")
+            task_log.line(
+                f"Initializing session-backed scraping flow for {self.scraping_method}"
+            )
             self._create_session()
 
         try:
             for city_idx, city in enumerate(self.selected_cities, 1):
-                city_callback = self._make_city_progress_callback(progress_callback, city_idx, total_cities, city)
+                city_callback = self._make_city_progress_callback(
+                    progress_callback, city_idx, total_cities, city
+                )
 
                 if self.selected_districts and city in self.selected_districts:
                     district_results: Dict[str, List[Dict[str, Any]]] = {}
@@ -813,21 +1017,34 @@ class HepsiemlakScraplingScraper:
                     time.sleep(random.uniform(2, 4))
 
             self.metrics["end_time"] = time.time()
-            self.metrics["total_duration"] = self.metrics["end_time"] - self.metrics["start_time"]
+            self.metrics["total_duration"] = (
+                self.metrics["end_time"] - self.metrics["start_time"]
+            )
             self.metrics["total_listings"] = len(all_listings)
             return all_results, all_listings
         finally:
             self._close_session()
 
-    def start_scraping(self, max_pages_per_city: int = 3, max_pages_per_district: int = 2) -> Dict[str, Any]:
-        task_log.line(f"Starting Scrapling-based scraping with method={self.scraping_method}")
+    def start_scraping(
+        self, max_pages_per_city: int = 3, max_pages_per_district: int = 2
+    ) -> Dict[str, Any]:
+        task_log.line(
+            f"Starting Scrapling-based scraping with method={self.scraping_method}"
+        )
         results, listings = self._run_scraping(
             max_pages=max(max_pages_per_city, max_pages_per_district),
             progress_callback=None,
         )
-        return {"results": results, "listings": listings, "metrics": self.metrics, "summary": self.get_summary()}
+        return {
+            "results": results,
+            "listings": listings,
+            "metrics": self.metrics,
+            "summary": self.get_summary(),
+        }
 
-    def start_scraping_api(self, max_pages: Optional[int] = None, progress_callback=None):
+    def start_scraping_api(
+        self, max_pages: Optional[int] = None, progress_callback=None
+    ):
         task_log.line(
             f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})",
         )
@@ -854,7 +1071,9 @@ class HepsiemlakScraplingScraper:
         return results
 
     def get_summary(self) -> Dict[str, Any]:
-        total_requests = self.metrics["successful_requests"] + self.metrics["failed_requests"]
+        total_requests = (
+            self.metrics["successful_requests"] + self.metrics["failed_requests"]
+        )
         return {
             "scraping_method": self.scraping_method,
             "total_duration_seconds": round(self.metrics["total_duration"], 2),
@@ -862,9 +1081,16 @@ class HepsiemlakScraplingScraper:
             "total_pages": self.metrics["total_pages"],
             "successful_requests": self.metrics["successful_requests"],
             "failed_requests": self.metrics["failed_requests"],
-            "success_rate": round(self.metrics["successful_requests"] / max(1, total_requests) * 100, 2),
-            "listings_per_second": round(self.metrics["total_listings"] / max(1, self.metrics["total_duration"]), 2),
-            "pages_per_second": round(self.metrics["total_pages"] / max(1, self.metrics["total_duration"]), 2),
+            "success_rate": round(
+                self.metrics["successful_requests"] / max(1, total_requests) * 100, 2
+            ),
+            "listings_per_second": round(
+                self.metrics["total_listings"] / max(1, self.metrics["total_duration"]),
+                2,
+            ),
+            "pages_per_second": round(
+                self.metrics["total_pages"] / max(1, self.metrics["total_duration"]), 2
+            ),
         }
 
     def print_summary(self):

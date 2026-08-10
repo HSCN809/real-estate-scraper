@@ -22,7 +22,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # İlçe verileri dizini
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
@@ -44,7 +44,7 @@ CATEGORY_NAMES = {
     "turistik_tesis": "Turistik Tesis",
     "kat_karsiligi_arsa": "Kat Karşılığı Arsa",
     "devren_isyeri": "Devren İşyeri",
-    "gunluk_kiralik": "Günlük Kiralık"
+    "gunluk_kiralik": "Günlük Kiralık",
 }
 
 
@@ -72,10 +72,14 @@ def _require_task_status_store():
         return get_task_status_store()
     except Exception as exc:
         logger.error("Task status store unavailable: %s", exc)
-        raise HTTPException(status_code=503, detail="Task status store unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="Task status store unavailable"
+        ) from exc
 
 
-def _enqueue_scrape_task(task_callable, *, kwargs: Dict[str, Any], message: str, platform: str) -> TaskStatusResponse:
+def _enqueue_scrape_task(
+    task_callable, *, kwargs: Dict[str, Any], message: str, platform: str
+) -> TaskStatusResponse:
     store = _require_task_status_store()
     task_id = uuid4().hex
     task_callable.apply_async(kwargs=kwargs, queue="scraping", task_id=task_id)
@@ -98,12 +102,12 @@ async def get_categories():
     return {
         "emlakjet": {
             "satilik": format_categories(emlakjet.categories["satilik"]),
-            "kiralik": format_categories(emlakjet.categories["kiralik"])
+            "kiralik": format_categories(emlakjet.categories["kiralik"]),
         },
         "hepsiemlak": {
             "satilik": format_categories(hepsiemlak.categories["satilik"]),
-            "kiralik": format_categories(hepsiemlak.categories["kiralik"])
-        }
+            "kiralik": format_categories(hepsiemlak.categories["kiralik"]),
+        },
     }
 
 
@@ -111,16 +115,22 @@ async def get_categories():
 async def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
     """Belirli kategori için alt tipleri JSON'dan oku"""
     if platform == "emlakjet":
-        from scrapers.emlakjet.subtype_fetcher import SUBCATEGORIES_JSON_PATH, fetch_subtypes
+        from scrapers.emlakjet.subtype_fetcher import (
+            SUBCATEGORIES_JSON_PATH,
+            fetch_subtypes,
+        )
     else:
-        from scrapers.hepsiemlak.subtype_fetcher import SUBCATEGORIES_JSON_PATH, fetch_subtypes
+        from scrapers.hepsiemlak.subtype_fetcher import (
+            SUBCATEGORIES_JSON_PATH,
+            fetch_subtypes,
+        )
 
     subtypes = fetch_subtypes(listing_type, category)
 
     if not SUBCATEGORIES_JSON_PATH.exists():
         return {
             "subtypes": [],
-            "error": f"{platform} subcategories JSON dosyası bulunamadı."
+            "error": f"{platform} subcategories JSON dosyası bulunamadı.",
         }
 
     return {"subtypes": subtypes, "cached": True}
@@ -167,7 +177,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
             if city not in request.cities:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok"
+                    detail=f"İlçe seçilen şehir ({city}) şehir listesinde yok",
                 )
 
     task_status = _enqueue_scrape_task(
@@ -216,12 +226,17 @@ async def get_price_analytics(
     platform: str = None,
     category: str = None,
     listing_type: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Veritabanından fiyat verilerini çek - grafikler için (filtrelenebilir)"""
     # Goruntuleme adlari icin platform/kategori/ilan tipi eslemeleri
     platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
-    category_map = {"konut": "Konut", "arsa": "Arsa", "isyeri": "İşyeri", "devremulk": "Devremülk"}
+    category_map = {
+        "konut": "Konut",
+        "arsa": "Arsa",
+        "isyeri": "İşyeri",
+        "devremulk": "Devremülk",
+    }
     listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
 
     # Filtreleme icin goruntuleme adlarini DB degerlerine cevir
@@ -230,7 +245,11 @@ async def get_price_analytics(
     db_listing_type = None
 
     if platform and platform != "all":
-        db_platform = platform.lower().replace("hepsiemlak", "hepsiemlak").replace("emlakjet", "emlakjet")
+        db_platform = (
+            platform.lower()
+            .replace("hepsiemlak", "hepsiemlak")
+            .replace("emlakjet", "emlakjet")
+        )
         if platform == "HepsiEmlak":
             db_platform = "hepsiemlak"
         elif platform == "Emlakjet":
@@ -253,24 +272,26 @@ async def get_price_analytics(
             db_listing_type = listing_type.lower()
 
     result = crud.get_price_analytics(
-        db,
-        platform=db_platform,
-        kategori=db_category,
-        ilan_tipi=db_listing_type
+        db, platform=db_platform, kategori=db_category, ilan_tipi=db_listing_type
     )
 
     # Goruntuleme adlarina donustur
     prices = []
     for p in result["prices"]:
-        prices.append({
-            "city": p["city"],
-            "platform": platform_map.get(p["platform"], p["platform"]),
-            "category": category_map.get(p["category"], p["category"]),
-            "listing_type": listing_type_map.get(p["listing_type"], p["listing_type"]),
-            "price": p["price"]
-        })
+        prices.append(
+            {
+                "city": p["city"],
+                "platform": platform_map.get(p["platform"], p["platform"]),
+                "category": category_map.get(p["category"], p["category"]),
+                "listing_type": listing_type_map.get(
+                    p["listing_type"], p["listing_type"]
+                ),
+                "price": p["price"],
+            }
+        )
 
     return {"prices": prices, "summary": result["summary"]}
+
 
 @router.get("/analytics/city/{city_name}")
 async def get_city_analytics(
@@ -279,7 +300,7 @@ async def get_city_analytics(
     category: str = None,
     listing_type: str = None,
     subtype: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Veritabanindan belirli bir sehrin ilanlarini ve istatistiklerini dondur."""
     # Goruntuleme adlarini DB degerlerine cevir
@@ -296,7 +317,12 @@ async def get_city_analytics(
             db_platform = platform.lower()
 
     if category and category != "all":
-        category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri", "Devremülk": "devremulk"}
+        category_map = {
+            "Konut": "konut",
+            "Arsa": "arsa",
+            "İşyeri": "isyeri",
+            "Devremülk": "devremulk",
+        }
         db_category = category_map.get(category, category.lower())
 
     if listing_type and listing_type != "all":
@@ -308,8 +334,9 @@ async def get_city_analytics(
         city_name=city_name,
         platform=db_platform,
         kategori=db_category,
-        ilan_tipi=db_listing_type
+        ilan_tipi=db_listing_type,
     )
+
 
 @router.get("/analytics/stats")
 async def get_listing_statistics(
@@ -318,7 +345,7 @@ async def get_listing_statistics(
     ilan_tipi: str = None,
     city: str = None,
     district: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
     import statistics
@@ -333,7 +360,12 @@ async def get_listing_statistics(
         query = query.filter(Listing.platform == db_platform)
 
     if kategori and kategori != "all":
-        category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri", "Devremülk": "devremulk"}
+        category_map = {
+            "Konut": "konut",
+            "Arsa": "arsa",
+            "İşyeri": "isyeri",
+            "Devremülk": "devremulk",
+        }
         db_kategori = category_map.get(kategori, kategori.lower())
         query = query.filter(Listing.kategori == db_kategori)
 
@@ -379,15 +411,17 @@ async def get_listing_statistics(
         "q25": round(percentile(sorted_prices, 25), 2),
         "median": round(statistics.median(prices), 2),
         "q75": round(percentile(sorted_prices, 75), 2),
-        "max": round(max(prices), 2)
+        "max": round(max(prices), 2),
     }
 
     # Yuzdelik tabanli gruplama ile dinamik fiyat araligi dagilimi
     num_bins = 5
-    bin_edges = [percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)]
+    bin_edges = [
+        percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)
+    ]
 
     # Benzersiz kenarlari sagla
-    unique_edges = []
+    unique_edges: list[float] = []
     for e in bin_edges:
         if not unique_edges or e > unique_edges[-1]:
             unique_edges.append(e)
@@ -407,9 +441,9 @@ async def get_listing_statistics(
         # Aralık etiketini biçimlendir
         def format_price(p):
             if p >= 1000000:
-                return f"{p/1000000:.1f}M"
+                return f"{p / 1000000:.1f}M"
             elif p >= 1000:
-                return f"{p/1000:.0f}K"
+                return f"{p / 1000:.0f}K"
             else:
                 return f"{p:.0f}"
 
@@ -421,22 +455,16 @@ async def get_listing_statistics(
         else:
             count = sum(1 for p in prices if low <= p < high)
 
-        price_ranges.append({
-            "range": label,
-            "count": count,
-            "percentage": round(count / n * 100, 1)
-        })
+        price_ranges.append(
+            {"range": label, "count": count, "percentage": round(count / n * 100, 1)}
+        )
 
-    return {
-        "stats": describe_stats,
-        "price_ranges": price_ranges,
-        "total_listings": n
-    }
+    return {"stats": describe_stats, "price_ranges": price_ranges, "total_listings": n}
+
 
 @router.delete("/clear-results")
 async def clear_results(db: Session = Depends(get_db)):
     """Veritabanindaki tum ilanlari ve outputs klasorundeki dosyalari sil"""
-    import os
     import shutil
 
     deleted_failed_pages = 0
@@ -455,8 +483,7 @@ async def clear_results(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=500,
-            detail=f"Veritabani temizleme hatasi: {str(e)}"
+            status_code=500, detail=f"Veritabani temizleme hatasi: {str(e)}"
         )
 
     # 2. Outputs klasorundeki dosyalari da sil
@@ -502,6 +529,7 @@ async def get_results(db: Session = Depends(get_db)):
     """Veritabanından sonuçları döndür"""
     return crud.get_results_for_frontend(db)
 
+
 @router.get("/listings/preview")
 async def get_listings_preview(
     platform: str = None,
@@ -510,7 +538,7 @@ async def get_listings_preview(
     city: str = None,
     district: str = None,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Veritabanindan filtrelenmis ilanlarin onizlemesini dondur."""
     listings, total = crud.get_listings(
@@ -521,11 +549,12 @@ async def get_listings_preview(
         city=city,
         district=district,
         page=1,
-        limit=limit
+        limit=limit,
     )
 
-    data = [l.to_dict() for l in listings]
+    data = [listing.to_dict() for listing in listings]
     return {"data": data, "total": total, "showing": len(data)}
+
 
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):
@@ -533,8 +562,8 @@ async def get_stats(db: Session = Depends(get_db)):
     return crud.get_stats_summary(db)
 
 
-
 # ==================== NEW DB-BASED ENDPOINTS ====================
+
 
 @router.get("/listings")
 async def get_listings(
@@ -548,7 +577,7 @@ async def get_listings(
     max_price: float = None,
     page: int = 1,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Veritabanından ilanları listele (filtre ve pagination destekli)"""
     listings, total = crud.get_listings(
@@ -562,7 +591,7 @@ async def get_listings(
         min_price=min_price,
         max_price=max_price,
         page=page,
-        limit=limit
+        limit=limit,
     )
 
     return {
@@ -570,7 +599,7 @@ async def get_listings(
         "page": page,
         "limit": limit,
         "pages": (total + limit - 1) // limit,
-        "items": [l.to_dict() for l in listings]
+        "items": [listing.to_dict() for listing in listings],
     }
 
 
@@ -589,22 +618,18 @@ async def get_scrape_sessions(
     status: str = None,
     page: int = 1,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Tarama oturumlarını listele"""
     sessions, total = crud.get_scrape_sessions(
-        db,
-        platform=platform,
-        status=status,
-        page=page,
-        limit=limit
+        db, platform=platform, status=status, page=page, limit=limit
     )
 
     return {
         "total": total,
         "page": page,
         "limit": limit,
-        "items": [s.to_dict() for s in sessions]
+        "items": [s.to_dict() for s in sessions],
     }
 
 
@@ -629,7 +654,7 @@ async def export_to_excel(
     ilan_tipi: str = None,
     city: str = None,
     district: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Filtrelere göre verileri Excel'e aktar ve indir"""
     import pandas as pd
@@ -644,7 +669,7 @@ async def export_to_excel(
         city=city,
         district=district,
         page=1,
-        limit=10000
+        limit=10000,
     )
 
     if not listings:
@@ -652,24 +677,26 @@ async def export_to_excel(
 
     # DataFrame'e donustur
     data = []
-    for l in listings:
+    for listing in listings:
         row = {
-            "Başlık": l.baslik,
-            "Fiyat": l.fiyat_text or l.fiyat,
-            "Platform": l.platform,
-            "Kategori": l.kategori,
-            "İlan Tipi": l.ilan_tipi,
-            "Alt Kategori": l.alt_kategori,
-            "İl": l.location.il if l.location else "",
-            "İlçe": l.location.ilce if l.location else "",
-            "Mahalle": l.location.mahalle if l.location else "",
-            "İlan URL": l.ilan_url,
-            "Emlak Ofisi": l.emlak_ofisi,
-            "Tarih": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else "",
+            "Başlık": listing.baslik,
+            "Fiyat": listing.fiyat_text or listing.fiyat,
+            "Platform": listing.platform,
+            "Kategori": listing.kategori,
+            "İlan Tipi": listing.ilan_tipi,
+            "Alt Kategori": listing.alt_kategori,
+            "İl": listing.location.il if listing.location else "",
+            "İlçe": listing.location.ilce if listing.location else "",
+            "Mahalle": listing.location.mahalle if listing.location else "",
+            "İlan URL": listing.ilan_url,
+            "Emlak Ofisi": listing.emlak_ofisi,
+            "Tarih": listing.created_at.strftime("%Y-%m-%d %H:%M")
+            if listing.created_at
+            else "",
         }
         # Add details
-        if l.details:
-            for k, v in l.details.items():
+        if listing.details:
+            for k, v in listing.details.items():
                 row[k] = v
         data.append(row)
 
@@ -679,7 +706,7 @@ async def export_to_excel(
     from fastapi.responses import StreamingResponse
 
     buffer = io.BytesIO()
-    df.to_excel(buffer, index=False, engine='openpyxl')
+    df.to_excel(buffer, index=False, engine="openpyxl")
     buffer.seek(0)
 
     timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
@@ -688,7 +715,7 @@ async def export_to_excel(
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -700,7 +727,7 @@ async def delete_listing_group(
     city: str = Query(default=None),
     district: str = Query(default=None),
     alt_kategori: str = Query(default=None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Filtrelere göre ilan grubunu sil"""
     from database.models import Listing, Location
@@ -715,8 +742,13 @@ async def delete_listing_group(
 
     # Kategori filtresi
     if kategori:
-        category_map = {"Konut": "konut", "Arsa": "arsa", "İşyeri": "isyeri",
-                       "Devremülk": "devremulk", "Turistik İşletme": "turistik_isletme"}
+        category_map = {
+            "Konut": "konut",
+            "Arsa": "arsa",
+            "İşyeri": "isyeri",
+            "Devremülk": "devremulk",
+            "Turistik İşletme": "turistik_isletme",
+        }
         db_kategori = category_map.get(kategori, kategori.lower())
         query = query.filter(Listing.kategori == db_kategori)
 
@@ -729,7 +761,7 @@ async def delete_listing_group(
     # Alt kategori filtresi
     if alt_kategori:
         # "Cafe Bar" -> "cafe_bar" donusumu
-        db_alt = alt_kategori.lower().replace(' ', '_')
+        db_alt = alt_kategori.lower().replace(" ", "_")
         query = query.filter(Listing.alt_kategori == db_alt)
 
     # Şehir/ilçe filtresi - önce lokasyon ID'lerini al
@@ -753,7 +785,11 @@ async def delete_listing_group(
     query.delete(synchronize_session=False)
     db.commit()
 
-    return {"status": "success", "message": f"{count} ilan silindi", "deleted_count": count}
+    return {
+        "status": "success",
+        "message": f"{count} ilan silindi",
+        "deleted_count": count,
+    }
 
 
 @router.delete("/listings/{listing_id}")
@@ -770,6 +806,7 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
 
 
 # ==================== ILCE GEOJSON ENDPOINTLER ====================
+
 
 def _load_districts_index() -> Dict[str, Any]:
     """Ilce index.json dosyasini yukle ve onbellege al."""
@@ -798,15 +835,21 @@ def _load_district_geojson(province_name: str) -> Dict[str, Any]:
     province_info = index.get(province_name)
 
     if not province_info:
-        raise HTTPException(status_code=404, detail=f"Province '{province_name}' not found in index")
+        raise HTTPException(
+            status_code=404, detail=f"Province '{province_name}' not found in index"
+        )
 
     filename = province_info.get("file")
     if not filename:
-        raise HTTPException(status_code=404, detail=f"No file specified for province '{province_name}'")
+        raise HTTPException(
+            status_code=404, detail=f"No file specified for province '{province_name}'"
+        )
 
     filepath = DISTRICTS_DIR / filename
     if not filepath.exists():
-        raise HTTPException(status_code=404, detail=f"GeoJSON file not found: {filename}")
+        raise HTTPException(
+            status_code=404, detail=f"GeoJSON file not found: {filename}"
+        )
 
     with open(filepath, "r", encoding="utf-8") as f:
         geojson_data = json.load(f)
@@ -836,13 +879,15 @@ async def get_district_info(province_name: str):
     province_info = index.get(province_name)
 
     if not province_info:
-        raise HTTPException(status_code=404, detail=f"Province '{province_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Province '{province_name}' not found"
+        )
 
     return {
         "province": province_name,
         "file": province_info.get("file"),
         "count": province_info.get("count"),
-        "districts": province_info.get("districts", [])
+        "districts": province_info.get("districts", []),
     }
 
 
@@ -853,7 +898,10 @@ async def clear_districts_cache():
     cache_size = len(_districts_cache)
     _districts_cache = {}
     _districts_index = None
-    return {"status": "success", "message": f"Cache cleared. {cache_size} provinces removed from cache."}
+    return {
+        "status": "success",
+        "message": f"Cache cleared. {cache_size} provinces removed from cache.",
+    }
 
 
 @router.get("/districts/cache/status")
@@ -862,5 +910,5 @@ async def get_cache_status():
     return {
         "cached_provinces": list(_districts_cache.keys()),
         "cache_size": len(_districts_cache),
-        "index_loaded": _districts_index is not None
+        "index_loaded": _districts_index is not None,
     }

@@ -12,10 +12,7 @@ from .security import decode_token
 COOKIE_NAME = "session_token"
 
 
-async def get_current_user(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> User:
+async def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     """HTTP-only cookie'den mevcut kullanıcıyı al"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,28 +49,25 @@ async def get_current_user(
 
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hesap devre dışı"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Hesap devre dışı"
         )
 
     return user
 
 
 async def get_current_active_admin(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """Kullanıcının yönetici olduğunu doğrula"""
     if not current_user.is_admin:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Yönetici yetkisi gerekli"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Yönetici yetkisi gerekli"
         )
     return current_user
 
 
 async def get_optional_user(
-    request: Request,
-    db: Session = Depends(get_db)
+    request: Request, db: Session = Depends(get_db)
 ) -> Optional[User]:
     """Opsiyonel kimlik doğrulama - geçerli cookie yoksa None döner"""
     token = request.cookies.get(COOKIE_NAME)
@@ -93,4 +87,4 @@ async def get_optional_user(
     except (TypeError, ValueError):
         return None
 
-    return db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    return db.query(User).filter(User.id == user_id, User.is_active).first()

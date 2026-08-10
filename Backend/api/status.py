@@ -21,7 +21,9 @@ class TaskStatus:
         self.is_retrying = False
         self.successful_retries = 0
 
-    def update(self, message=None, progress=None, current=None, total=None, details=None):
+    def update(
+        self, message=None, progress=None, current=None, total=None, details=None
+    ):
         if message is not None:
             self.message = message
         if progress is not None:

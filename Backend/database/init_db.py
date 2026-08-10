@@ -30,7 +30,7 @@ def drop_all_tables():
     """Tüm tabloları sil (dikkatli kullanın!)"""
     print("WARNING: This will delete all data!")
     confirm = input("Type 'yes' to confirm: ")
-    if confirm.lower() == 'yes':
+    if confirm.lower() == "yes":
         Base.metadata.drop_all(bind=engine)
         print("All tables dropped.")
     else:
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Database management")
-    parser.add_argument('--drop', action='store_true', help='Drop all tables')
+    parser.add_argument("--drop", action="store_true", help="Drop all tables")
     args = parser.parse_args()
 
     if args.drop:

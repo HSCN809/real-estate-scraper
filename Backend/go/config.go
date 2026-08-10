@@ -16,21 +16,21 @@ type Config struct {
 	WriteTimeout time.Duration
 
 	// Proxy settings
-	MobileProxyURL     string
-	MobileProxyUser    string
-	MobileProxyPass    string
-	UseMobileProxy     bool
+	MobileProxyURL  string
+	MobileProxyUser string
+	MobileProxyPass string
+	UseMobileProxy  bool
 
 	// TLS fingerprint settings
-	TLSClientID    string // uTLS ClientHello ID
-	JA3Fingerprint string // JA3 fingerprint to emulate
-	TLSRotate      bool   // Enable TLS fingerprint rotation
+	TLSClientID    string   // uTLS ClientHello ID
+	JA3Fingerprint string   // JA3 fingerprint to emulate
+	TLSRotate      bool     // Enable TLS fingerprint rotation
 	TLSRotateList  []string // List of TLS client IDs to rotate
 
 	// Browser emulation settings
 	UserAgent      string
 	AcceptLanguage string
-	AcceptHeader  string
+	AcceptHeader   string
 
 	// Connection pool settings
 	MaxIdleConns        int
@@ -38,17 +38,17 @@ type Config struct {
 	IdleConnTimeout     time.Duration
 
 	// Retry settings
-	MaxRetries      int
-	RetryDelay      time.Duration
-	RetryOnTimeout  bool
+	MaxRetries     int
+	RetryDelay     time.Duration
+	RetryOnTimeout bool
 
 	// Security settings
-	APIKey          string // API key for authentication
-	AllowedOrigins  []string // Allowed CORS origins
+	APIKey         string   // API key for authentication
+	AllowedOrigins []string // Allowed CORS origins
 
 	// Rate limiting
-	RateLimit       int // Requests per second
-	RateLimitBurst  int // Max burst size
+	RateLimit      int // Requests per second
+	RateLimitBurst int // Max burst size
 }
 
 // DefaultConfig returns configuration with sensible defaults
@@ -59,7 +59,7 @@ func DefaultConfig() *Config {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 
-		MobileProxyURL:  "",
+		MobileProxyURL: "",
 		UseMobileProxy: false,
 
 		// Chrome 120 fingerprint
@@ -76,7 +76,7 @@ func DefaultConfig() *Config {
 
 		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		AcceptLanguage: "en-US,en;q=0.9,tr;q=0.8",
-		AcceptHeader:  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		AcceptHeader:   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
@@ -86,15 +86,15 @@ func DefaultConfig() *Config {
 		RetryDelay:     1 * time.Second,
 		RetryOnTimeout: true,
 
-		APIKey:         "",  // No auth by default
+		APIKey: "", // No auth by default
 		AllowedOrigins: []string{
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
 			"http://real-estate-frontend:3000",
 		},
 
-		RateLimit:      10,  // 10 requests per second
-		RateLimitBurst: 20,  // Max burst of 20
+		RateLimit:      10, // 10 requests per second
+		RateLimitBurst: 20, // Max burst of 20
 	}
 }
 

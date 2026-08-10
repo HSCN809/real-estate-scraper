@@ -6,7 +6,7 @@ import os
 import pytest
 
 # Üst dizini import yoluna ekle
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.config import (
     ScraperConfig,
@@ -14,7 +14,7 @@ from core.config import (
     HepsiemlakConfig,
     get_config,
     get_emlakjet_config,
-    get_hepsiemlak_config
+    get_hepsiemlak_config,
 )
 
 
@@ -25,22 +25,18 @@ class TestScraperConfig:
         """Varsayılan yapılandırma değerlerini test et"""
         config = ScraperConfig()
 
-        assert config.page_load_timeout == 15
+        assert config.page_load_timeout == 30
         assert config.element_wait_timeout == 10
         assert config.max_retries == 3
-        assert config.headless == False
-        assert config.max_pages_per_location == 50
+        assert not config.headless
+        assert config.max_pages_per_location == 100
 
     def test_custom_values(self):
         """Özel yapılandırma değerlerini test et"""
-        config = ScraperConfig(
-            page_load_timeout=30,
-            headless=False,
-            max_retries=5
-        )
+        config = ScraperConfig(page_load_timeout=30, headless=False, max_retries=5)
 
         assert config.page_load_timeout == 30
-        assert config.headless == False
+        assert not config.headless
         assert config.max_retries == 5
 
 

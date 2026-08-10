@@ -9,10 +9,10 @@ from .devremulk_parser import DevremulkParser
 from .turistik_parser import TuristikParser
 
 __all__ = [
-    'BaseHepsiemlakParser',
-    'KonutParser',
-    'ArsaParser',
-    'IsyeriParser',
-    'DevremulkParser',
-    'TuristikParser'
+    "BaseHepsiemlakParser",
+    "KonutParser",
+    "ArsaParser",
+    "IsyeriParser",
+    "DevremulkParser",
+    "TuristikParser",
 ]

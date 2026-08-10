@@ -24,23 +24,29 @@ from database.models import Base
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def init_database(max_retries=5, retry_delay=3):
     """Veritabani tablolari yoksa olusturur (yeniden deneme destekli)."""
     for attempt in range(1, max_retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
-            if DATABASE_URL and DATABASE_URL.startswith('postgresql'):
+            if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
                 logger.info("PostgreSQL veritabanina baglandi")
             else:
                 logger.info("SQLite veritabani kullaniliyor")
             return
         except Exception as e:
             if attempt < max_retries:
-                logger.warning(f"Veritabani baglantisi basarisiz (deneme {attempt}/{max_retries}): {e}")
+                logger.warning(
+                    f"Veritabani baglantisi basarisiz (deneme {attempt}/{max_retries}): {e}"
+                )
                 time.sleep(retry_delay)
             else:
-                logger.error(f"Veritabani baglantisi {max_retries} denemede kurulamadi: {e}")
+                logger.error(
+                    f"Veritabani baglantisi {max_retries} denemede kurulamadi: {e}"
+                )
                 raise
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +62,7 @@ async def lifespan(app: FastAPI):
         db.close()
     yield
     # Kapatma
+
 
 # FastAPI uygulamasini baslat
 app = FastAPI(

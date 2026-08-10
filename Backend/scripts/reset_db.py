@@ -21,10 +21,10 @@ from database.models import Base, Listing, Location, ScrapeSession, PriceHistory
 def get_table_counts(session) -> dict:
     """Tablo sayilarini al"""
     return {
-        'listings': session.query(Listing).count(),
-        'locations': session.query(Location).count(),
-        'scrape_sessions': session.query(ScrapeSession).count(),
-        'price_history': session.query(PriceHistory).count(),
+        "listings": session.query(Listing).count(),
+        "locations": session.query(Location).count(),
+        "scrape_sessions": session.query(ScrapeSession).count(),
+        "price_history": session.query(PriceHistory).count(),
     }
 
 
@@ -51,7 +51,7 @@ def confirm(message: str) -> bool:
     """Onay al"""
     print(f"\n[!] {message}")
     response = input("    Devam etmek icin 'evet' yazin: ")
-    return response.lower() in ('evet', 'e', 'yes', 'y')
+    return response.lower() in ("evet", "e", "yes", "y")
 
 
 def delete_all_data(session):
@@ -138,8 +138,12 @@ def main():
     print("  DATABASE RESET TOOL")
     print("=" * 50)
 
-    if DATABASE_URL and 'postgresql' in DATABASE_URL:
-        db_host = DATABASE_URL.split('@')[1].split('/')[0] if '@' in DATABASE_URL else 'unknown'
+    if DATABASE_URL and "postgresql" in DATABASE_URL:
+        db_host = (
+            DATABASE_URL.split("@")[1].split("/")[0]
+            if "@" in DATABASE_URL
+            else "unknown"
+        )
         print(f"  Veritabani: PostgreSQL ({db_host})")
     else:
         print("  Veritabani: SQLite (lokal)")
@@ -156,10 +160,10 @@ def main():
                 print("\n\n[!] Cikis yapiliyor...")
                 break
 
-            if choice == '1':
+            if choice == "1":
                 print_stats(session)
 
-            elif choice == '2':
+            elif choice == "2":
                 counts = get_table_counts(session)
                 total = sum(counts.values())
 
@@ -174,7 +178,7 @@ def main():
                 else:
                     print("\n[X] Islem iptal edildi.")
 
-            elif choice == '3':
+            elif choice == "3":
                 count = session.query(Listing).count()
 
                 if count == 0:
@@ -186,7 +190,7 @@ def main():
                 else:
                     print("\n[X] Islem iptal edildi.")
 
-            elif choice == '4':
+            elif choice == "4":
                 count = session.query(ScrapeSession).count()
 
                 if count == 0:
@@ -198,13 +202,13 @@ def main():
                 else:
                     print("\n[X] Islem iptal edildi.")
 
-            elif choice == '5':
+            elif choice == "5":
                 if confirm("TUM TABLOLAR SILINECEK VE YENIDEN OLUSTURULACAK!"):
                     session = drop_and_recreate(session)
                 else:
                     print("\n[X] Islem iptal edildi.")
 
-            elif choice == '6':
+            elif choice == "6":
                 print("\n[!] Cikis yapiliyor...")
                 break
 
@@ -223,5 +227,5 @@ def main():
         print("=" * 50 + "\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

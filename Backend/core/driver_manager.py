@@ -45,11 +45,13 @@ def _kill_zombie_chrome():
 class DriverManager:
     """Chrome WebDriver yaşam döngüsünü yönetir"""
 
-    def __init__(self, headless: Optional[bool] = None, proxy_url: Optional[str] = None):
+    def __init__(
+        self, headless: Optional[bool] = None, proxy_url: Optional[str] = None
+    ):
         self.config = get_config()
         self.headless = headless if headless is not None else self.config.headless
         self.proxy_url = proxy_url
-        self.driver = None
+        self.driver: Optional[WebDriver] = None
         self.wait: Optional[WebDriverWait] = None
         self.user_agent = random.choice(USER_AGENTS)
 
@@ -97,7 +99,9 @@ class DriverManager:
         """Webdriver tespitini gizlemek için JS yamaları uygula"""
         if self.driver:
             try:
-                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                self.driver.execute_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                )
                 self.driver.execute_script("""
                     Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
                     Object.defineProperty(navigator, 'languages', {get: () => ['tr-TR', 'tr', 'en-US', 'en']});
@@ -116,7 +120,12 @@ class DriverManager:
 
         return chrome_path, chromedriver_path
 
-    def _start_standard_driver(self, options: Options, chrome_path: Optional[str], chromedriver_path: Optional[str]) -> WebDriver:
+    def _start_standard_driver(
+        self,
+        options: Options,
+        chrome_path: Optional[str],
+        chromedriver_path: Optional[str],
+    ) -> WebDriver:
         if chrome_path:
             options.binary_location = chrome_path
             logger.info(f"Using Chrome at: {chrome_path}")
@@ -130,7 +139,12 @@ class DriverManager:
             return webdriver.Chrome(service=service, options=options)
         return webdriver.Chrome(options=options)
 
-    def _start_undetected_driver(self, options: Options, chrome_path: Optional[str], chromedriver_path: Optional[str]) -> WebDriver:
+    def _start_undetected_driver(
+        self,
+        options: Options,
+        chrome_path: Optional[str],
+        chromedriver_path: Optional[str],
+    ) -> WebDriver:
         driver_kwargs = {
             "options": options,
             "headless": self.headless,
@@ -157,15 +171,25 @@ class DriverManager:
 
         for attempt in range(self.config.max_retries):
             try:
-                mode_label = "UNDETECTED" if self.config.use_undetected_chromedriver else "STANDARD"
-                logger.info(f"🚀 Starting {mode_label} Chrome driver (Attempt {attempt + 1}/{self.config.max_retries})")
+                mode_label = (
+                    "UNDETECTED"
+                    if self.config.use_undetected_chromedriver
+                    else "STANDARD"
+                )
+                logger.info(
+                    f"🚀 Starting {mode_label} Chrome driver (Attempt {attempt + 1}/{self.config.max_retries})"
+                )
 
                 options = self._create_options()
                 chrome_path, chromedriver_path = self._resolve_binary_paths()
                 if self.config.use_undetected_chromedriver:
-                    self.driver = self._start_undetected_driver(options, chrome_path, chromedriver_path)
+                    self.driver = self._start_undetected_driver(
+                        options, chrome_path, chromedriver_path
+                    )
                 else:
-                    self.driver = self._start_standard_driver(options, chrome_path, chromedriver_path)
+                    self.driver = self._start_standard_driver(
+                        options, chrome_path, chromedriver_path
+                    )
 
                 self._apply_stealth_scripts()
                 self.wait = WebDriverWait(self.driver, self.config.element_wait_timeout)
@@ -207,7 +231,7 @@ class DriverManager:
         try:
             _ = self.driver.current_url
             return True
-        except:
+        except Exception:
             logger.warning("⚠️ Driver çökmüş, yeniden başlatılması gerekiyor!")
             self.driver = None
             self.wait = None
@@ -226,6 +250,8 @@ class DriverManager:
     def get_wait(self) -> WebDriverWait:
         if self.wait is None:
             self.ensure_driver()
+        if self.wait is None:
+            raise RuntimeError("WebDriver wait is not initialized")
         return self.wait
 
     def navigate(self, url: str, wait_time: Optional[float] = None) -> bool:

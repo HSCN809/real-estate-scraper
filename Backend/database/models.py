@@ -2,18 +2,29 @@
 """SQLAlchemy ORM modelleri"""
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, Boolean,
-    ForeignKey, DateTime, Date, JSON, Index, UniqueConstraint
+    Column,
+    Integer,
+    String,
+    Float,
+    Text,
+    Boolean,
+    ForeignKey,
+    DateTime,
+    Date,
+    JSON,
+    Index,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
 
-Base = declarative_base()
+Base: Any = declarative_base()
 
 
 class Location(Base):
     """Normalize edilmiş il/ilce/mahalle tablosu"""
+
     __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -25,8 +36,8 @@ class Location(Base):
     listings = relationship("Listing", back_populates="location")
 
     __table_args__ = (
-        UniqueConstraint('il', 'ilce', 'mahalle', name='uq_location'),
-        Index('idx_locations_il_ilce', 'il', 'ilce'),
+        UniqueConstraint("il", "ilce", "mahalle", name="uq_location"),
+        Index("idx_locations_il_ilce", "il", "ilce"),
     )
 
     def __repr__(self):
@@ -40,6 +51,7 @@ class Location(Base):
 
 class Listing(Base):
     """Ana ilan tablosu"""
+
     __tablename__ = "listings"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -50,7 +62,9 @@ class Listing(Base):
     fiyat_text = Column(String(50))  # Orijinal fiyat metni (ör. "1.500.000 TL")
 
     # Platform ve Kategori
-    platform = Column(String(20), nullable=False, index=True)  # 'emlakjet' / 'hepsiemlak'
+    platform = Column(
+        String(20), nullable=False, index=True
+    )  # 'emlakjet' / 'hepsiemlak'
     kategori = Column(String(50), nullable=False, index=True)  # 'konut', 'arsa', etc.
     ilan_tipi = Column(String(20), nullable=False, index=True)  # 'satilik' / 'kiralik'
     alt_kategori = Column(String(50))  # 'daire', 'villa', 'tarla', etc.
@@ -78,12 +92,18 @@ class Listing(Base):
 
     # İlişkiler
     scrape_session = relationship("ScrapeSession", back_populates="listings")
-    price_history = relationship("PriceHistory", back_populates="listing", order_by="desc(PriceHistory.changed_at)")
+    price_history = relationship(
+        "PriceHistory",
+        back_populates="listing",
+        order_by="desc(PriceHistory.changed_at)",
+    )
 
     __table_args__ = (
-        Index('idx_listings_filter', 'platform', 'kategori', 'ilan_tipi', 'location_id'),
-        Index('idx_listings_price', 'fiyat'),
-        Index('idx_listings_created', 'created_at'),
+        Index(
+            "idx_listings_filter", "platform", "kategori", "ilan_tipi", "location_id"
+        ),
+        Index("idx_listings_price", "fiyat"),
+        Index("idx_listings_created", "created_at"),
     )
 
     def __repr__(self):
@@ -114,6 +134,7 @@ class Listing(Base):
 
 class ScrapeSession(Base):
     """Tarama oturumu takibi"""
+
     __tablename__ = "scrape_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -141,16 +162,16 @@ class ScrapeSession(Base):
     duration_seconds = Column(Integer)
 
     # Durum
-    status = Column(String(20), default="running", index=True)  # running, completed, failed
+    status = Column(
+        String(20), default="running", index=True
+    )  # running, completed, failed
     error_message = Column(Text)
 
     # İlişkiler
     listings = relationship("Listing", back_populates="scrape_session")
     failed_page_records = relationship("FailedPage", back_populates="scrape_session")
 
-    __table_args__ = (
-        Index('idx_sessions_started', 'started_at'),
-    )
+    __table_args__ = (Index("idx_sessions_started", "started_at"),)
 
     def __repr__(self):
         return f"<ScrapeSession(id={self.id}, platform={self.platform}, status={self.status})>"
@@ -171,7 +192,9 @@ class ScrapeSession(Base):
             "successful_pages": self.successful_pages,
             "failed_pages": self.failed_pages_count,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": self.completed_at.isoformat()
+            if self.completed_at
+            else None,
             "duration_seconds": self.duration_seconds,
             "status": self.status,
             "error_message": self.error_message,
@@ -180,6 +203,7 @@ class ScrapeSession(Base):
 
 class PriceHistory(Base):
     """İlan fiyat değişikliği geçmişi"""
+
     __tablename__ = "price_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -196,8 +220,8 @@ class PriceHistory(Base):
     listing = relationship("Listing", back_populates="price_history")
 
     __table_args__ = (
-        Index('idx_price_history_listing', 'listing_id'),
-        Index('idx_price_history_changed', 'changed_at'),
+        Index("idx_price_history_listing", "listing_id"),
+        Index("idx_price_history_changed", "changed_at"),
     )
 
     def __repr__(self):
@@ -217,6 +241,7 @@ class PriceHistory(Base):
 
 class FailedPage(Base):
     """Başarısız sayfa takibi"""
+
     __tablename__ = "failed_pages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -238,9 +263,7 @@ class FailedPage(Base):
     # İlişkiler
     scrape_session = relationship("ScrapeSession", back_populates="failed_page_records")
 
-    __table_args__ = (
-        Index('idx_failed_resolved', 'resolved'),
-    )
+    __table_args__ = (Index("idx_failed_resolved", "resolved"),)
 
     def __repr__(self):
         return f"<FailedPage(id={self.id}, url='{self.url[:50]}...', resolved={self.resolved})>"
@@ -248,6 +271,7 @@ class FailedPage(Base):
 
 class User(Base):
     """Kullanıcı modeli"""
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -261,8 +285,8 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
 
     __table_args__ = (
-        Index('idx_users_username', 'username'),
-        Index('idx_users_email', 'email'),
+        Index("idx_users_username", "username"),
+        Index("idx_users_email", "email"),
     )
 
     def __repr__(self):

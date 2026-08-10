@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import redis
 
@@ -40,7 +40,7 @@ LEGACY_SCRAPE_SESSION_STATUS_MAP = {
 
 
 def utcnow_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def build_task_status_key(task_id: str) -> str:
@@ -108,7 +108,9 @@ class TaskStatusStore:
     def __init__(self, redis_client: Optional[redis.Redis] = None):
         self.redis_client = redis_client or get_redis_client()
 
-    def create_queued_task(self, task_id: str, *, message: str, platform: Optional[str] = None) -> Dict[str, Any]:
+    def create_queued_task(
+        self, task_id: str, *, message: str, platform: Optional[str] = None
+    ) -> Dict[str, Any]:
         payload = create_task_status_payload(
             task_id,
             status=TASK_STATUS_QUEUED,
@@ -134,7 +136,9 @@ class TaskStatusStore:
         existing = self.get_task(task_id)
         if existing is None:
             if status is None:
-                raise ValueError("status is required when creating a missing task payload")
+                raise ValueError(
+                    "status is required when creating a missing task payload"
+                )
             existing = create_task_status_payload(
                 task_id,
                 status=status,
@@ -222,7 +226,7 @@ class TaskStatusStore:
         data = self.redis_client.get(build_task_status_key(task_id))
         if not data:
             return None
-        return json.loads(data)
+        return json.loads(cast(str | bytes, data))
 
     def get_active_tasks(self) -> List[Dict[str, Any]]:
         tasks: List[Dict[str, Any]] = []
@@ -230,7 +234,7 @@ class TaskStatusStore:
             data = self.redis_client.get(key)
             if not data:
                 continue
-            payload = json.loads(data)
+            payload = json.loads(cast(str | bytes, data))
             if is_active_task_status(payload.get("status")):
                 tasks.append(payload)
         tasks.sort(key=lambda item: item.get("updated_at") or "", reverse=True)

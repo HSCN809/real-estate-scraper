@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Veritabanı URL - PostgreSQL veya SQLite
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
     # PostgreSQL (Docker)
@@ -15,7 +15,7 @@ if DATABASE_URL:
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,  # Bağlantı kontrolü
-        echo=False
+        echo=False,
     )
 else:
     # SQLite (Lokal geliştirme)
@@ -24,9 +24,7 @@ else:
     DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
     engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        echo=False
+        DATABASE_URL, connect_args={"check_same_thread": False}, echo=False
     )
 
 # Oturum fabrikası

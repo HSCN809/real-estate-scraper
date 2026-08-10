@@ -29,11 +29,11 @@ type ProxyHandler struct {
 
 // RateLimiter implements token bucket rate limiting
 type RateLimiter struct {
-	mu       sync.Mutex
-	tokens   map[string]*tokenBucket
-	rate     int           // requests per second
-	burst    int           // max burst size
-	cleanup  time.Duration // cleanup interval
+	mu      sync.Mutex
+	tokens  map[string]*tokenBucket
+	rate    int           // requests per second
+	burst   int           // max burst size
+	cleanup time.Duration // cleanup interval
 }
 
 type tokenBucket struct {
@@ -45,10 +45,10 @@ type tokenBucket struct {
 // NewRateLimiter creates a new rate limiter
 func NewRateLimiter(rate int, burst int) *RateLimiter {
 	rl := &RateLimiter{
-		tokens:   make(map[string]*tokenBucket),
-		rate:     rate,
-		burst:    burst,
-		cleanup:  5 * time.Minute,
+		tokens:  make(map[string]*tokenBucket),
+		rate:    rate,
+		burst:   burst,
+		cleanup: 5 * time.Minute,
 	}
 
 	// Start cleanup goroutine
@@ -269,8 +269,8 @@ func (ph *ProxyHandler) handleGetProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := ProxyRequest{
-		URL:    targetURL,
-		Method: "GET",
+		URL:     targetURL,
+		Method:  "GET",
 		Timeout: int(ph.config.ReadTimeout.Milliseconds() / 1000),
 	}
 

@@ -46,7 +46,10 @@ def validate_payload(payload: Dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api-base", default=os.getenv("VERIFY_API_BASE", "http://localhost:8000/api/v1"))
+    parser.add_argument(
+        "--api-base",
+        default=os.getenv("VERIFY_API_BASE", "http://localhost:8000/api/v1"),
+    )
     parser.add_argument("--task-id", help="Validate a specific task id as well")
     args = parser.parse_args()
 
@@ -61,7 +64,9 @@ def main() -> int:
     if not args.task_id:
         return 0
 
-    redis_payload = json.loads(redis_client.get(f"{TASK_STATUS_KEY_PREFIX}:{args.task_id}"))
+    redis_payload = json.loads(
+        redis_client.get(f"{TASK_STATUS_KEY_PREFIX}:{args.task_id}")
+    )
     validate_payload(redis_payload)
 
     response = requests.get(f"{args.api_base}/tasks/{args.task_id}", timeout=10)

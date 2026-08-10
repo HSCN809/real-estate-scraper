@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """HepsiEmlak icin Selenium ve Scrapling modlari karsilastirmasi."""
 
@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List
 
 # Proje root'u ekle
 import sys
@@ -60,7 +61,7 @@ def _count_listing_elements(response, container_selector: str) -> int:
 
 def _flatten_selenium_results(raw_result) -> list:
     """Selenium sonucunu sehir/ilce agacindan duz listeye cevir."""
-    rows = []
+    rows: List[Dict[str, Any]] = []
     if not isinstance(raw_result, dict):
         return rows
 
@@ -256,13 +257,17 @@ def run_scrapling_session_test(use_stealth: bool, max_pages: int = MAX_PAGES):
         )
 
         start_time = time.time()
-        result = scraper.start_scraping(max_pages_per_city=max_pages, max_pages_per_district=max_pages)
+        result = scraper.start_scraping(
+            max_pages_per_city=max_pages, max_pages_per_district=max_pages
+        )
         end_time = time.time()
 
         duration = end_time - start_time
         total_listings = len(result.get("listings", []))
 
-        print(f"\n✅ Scrapling ({mode_name}) tamamlandi: {duration:.2f}s, {total_listings} ilan")
+        print(
+            f"\n✅ Scrapling ({mode_name}) tamamlandi: {duration:.2f}s, {total_listings} ilan"
+        )
 
         return {
             "method": f"scrapling_{mode_name}",
@@ -350,7 +355,9 @@ def run_scrapling_dynamic_session_test(max_pages: int = MAX_PAGES):
         end_time = time.time()
         duration = end_time - start_time
 
-        print(f"\n✅ Scrapling (dynamic_session) tamamlandi: {duration:.2f}s, {total_listings} ilan")
+        print(
+            f"\n✅ Scrapling (dynamic_session) tamamlandi: {duration:.2f}s, {total_listings} ilan"
+        )
 
         return {
             "method": "scrapling_dynamic_session",
@@ -380,7 +387,7 @@ def run_scrapling_dynamic_session_test(max_pages: int = MAX_PAGES):
 
 def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
     """Scrapling Spider API ile benchmark calistir (fetcher/async_dynamic/async_stealth)."""
-    session_cfg = {
+    session_cfg: Dict[str, Dict[str, Any]] = {
         "fetcher": {
             "method": "scrapling_spider_fetcher_session",
             "label": "🟪 Scrapling (spider_fetcher_session)",
@@ -418,11 +425,15 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
 
     method_name = session_cfg[session_mode]["method"]
     label = session_cfg[session_mode]["label"]
-    mode_settings = session_cfg[session_mode]
+    mode_settings: Dict[str, Any] = session_cfg[session_mode]
     print(f"\n{label} testi basliyor... (max_pages={max_pages})")
 
     try:
-        from scrapling.fetchers import AsyncDynamicSession, AsyncStealthySession, FetcherSession
+        from scrapling.fetchers import (
+            AsyncDynamicSession,
+            AsyncStealthySession,
+            FetcherSession,
+        )
         from scrapling.spiders import Response, Spider
         from scrapling_scraper import HepsiemlakScraplingScraper
 
@@ -506,7 +517,9 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
                         "error": f"{type(error).__name__}: {error}",
                     }
                 )
-                logger.warning(f"{label} request error: {request.url} -> {type(error).__name__}: {error}")
+                logger.warning(
+                    f"{label} request error: {request.url} -> {type(error).__name__}: {error}"
+                )
 
             async def parse(self, response: Response):
                 current_page = _get_page_number(response.url)
@@ -524,7 +537,9 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
                         href = ""
                     data = {}
                     try:
-                        data = helper._extract_from_scrapling_element(listing, page_url=response.url)
+                        data = helper._extract_from_scrapling_element(
+                            listing, page_url=response.url
+                        )
                     except Exception:
                         data = {}
 
@@ -540,7 +555,7 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
 
                 if current_page < max_pages:
                     next_url = _build_page_url(city_url, current_page + 1)
-                    follow_kwargs = {"callback": self.parse}
+                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
                     # wait_selector is browser-session specific; FetcherSession does not accept it.
                     if session_mode != "fetcher" and listing_results:
                         follow_kwargs["wait_selector"] = listing_results
@@ -555,7 +570,9 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
         duration = end_time - start_time
         total_listings = len(method_items)
         visited_pages_sorted = sorted(visited_pages)
-        missing_pages = [page for page in range(1, max_pages + 1) if page not in visited_pages]
+        missing_pages = [
+            page for page in range(1, max_pages + 1) if page not in visited_pages
+        ]
 
         print(f"\n✅ {label} tamamlandi: {duration:.2f}s, {total_listings} ilan")
         print(f"   📄 Ziyaret edilen sayfalar: {visited_pages_sorted}")
@@ -564,7 +581,9 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
         if spider_errors:
             print(f"   ⚠️ Toplam request hatasi: {len(spider_errors)}")
         if page_listing_counts:
-            ordered_counts = {p: page_listing_counts[p] for p in sorted(page_listing_counts.keys())}
+            ordered_counts = {
+                p: page_listing_counts[p] for p in sorted(page_listing_counts.keys())
+            }
             print(f"   📊 Sayfa bazli ilan: {ordered_counts}")
 
         return {
@@ -581,7 +600,10 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
                 "listings": method_items,
                 "visited_pages": visited_pages_sorted,
                 "missing_pages": missing_pages,
-                "page_listing_counts": {str(k): page_listing_counts[k] for k in sorted(page_listing_counts.keys())},
+                "page_listing_counts": {
+                    str(k): page_listing_counts[k]
+                    for k in sorted(page_listing_counts.keys())
+                },
                 "request_errors_count": len(spider_errors),
                 "request_errors": spider_errors[:20],
             },
@@ -632,9 +654,13 @@ def compare_results(results):
         ranked = sorted(successful_results, key=lambda r: r["duration"])
         ranking = [r["method"] for r in ranked]
         winner_method = ranked[0]["method"]
-        print(f"   ⭐ En hizli: {labels.get(winner_method, winner_method)} ({ranked[0]['duration']:.2f}s)")
+        print(
+            f"   ⭐ En hizli: {labels.get(winner_method, winner_method)} ({ranked[0]['duration']:.2f}s)"
+        )
 
-        selenium_result = next((r for r in successful_results if r["method"] == "selenium"), None)
+        selenium_result = next(
+            (r for r in successful_results if r["method"] == "selenium"), None
+        )
         if selenium_result and selenium_result["duration"] > 0:
             for result in successful_results:
                 if result["method"] == "selenium":
@@ -644,7 +670,9 @@ def compare_results(results):
                 if ratio >= 1:
                     print(f"   {method_label}, Selenium'dan {ratio:.2f}x daha yavas")
                 else:
-                    print(f"   {method_label}, Selenium'dan {1/ratio:.2f}x daha hizli")
+                    print(
+                        f"   {method_label}, Selenium'dan {1 / ratio:.2f}x daha hizli"
+                    )
     else:
         print("   Basarili sure olusmadi, hiz karsilastirmasi yapilamadi.")
 
@@ -654,8 +682,12 @@ def compare_results(results):
     print("   FetcherSession: HTTP tabanli, genelde en hizli Scrapling modu")
     print("   DynamicSession: Browser tabanli orta seviye gizlilik")
     print("   Spider+FetcherSession: Crawl framework + HTTP session")
-    print("   Spider+AsyncDynamicSession: Crawl framework + async dynamic browser session")
-    print("   Spider+AsyncStealthySession: Crawl framework + async stealth browser session")
+    print(
+        "   Spider+AsyncDynamicSession: Crawl framework + async dynamic browser session"
+    )
+    print(
+        "   Spider+AsyncStealthySession: Crawl framework + async stealth browser session"
+    )
 
     output = {
         "timestamp": datetime.now().isoformat(),
@@ -703,7 +735,9 @@ def main():
 
     # Geçici olarak kapalı: StealthSession benchmark'ı.
     if ENABLE_STEALTH_SESSION_BENCHMARK:
-        results.append(run_scrapling_session_test(use_stealth=True, max_pages=MAX_PAGES))
+        results.append(
+            run_scrapling_session_test(use_stealth=True, max_pages=MAX_PAGES)
+        )
         print(f"\n⏳ {WAIT_BETWEEN_TESTS_SECONDS} saniye bekleniyor...")
         time.sleep(WAIT_BETWEEN_TESTS_SECONDS)
     else:
@@ -719,17 +753,23 @@ def main():
     print(f"\n⏳ {WAIT_BETWEEN_TESTS_SECONDS} saniye bekleniyor...")
     time.sleep(WAIT_BETWEEN_TESTS_SECONDS)
 
-    results.append(run_scrapling_spider_test(session_mode="fetcher", max_pages=MAX_PAGES))
+    results.append(
+        run_scrapling_spider_test(session_mode="fetcher", max_pages=MAX_PAGES)
+    )
 
     print(f"\n⏳ {WAIT_BETWEEN_TESTS_SECONDS} saniye bekleniyor...")
     time.sleep(WAIT_BETWEEN_TESTS_SECONDS)
 
-    results.append(run_scrapling_spider_test(session_mode="dynamic", max_pages=MAX_PAGES))
+    results.append(
+        run_scrapling_spider_test(session_mode="dynamic", max_pages=MAX_PAGES)
+    )
 
     print(f"\n⏳ {WAIT_BETWEEN_TESTS_SECONDS} saniye bekleniyor...")
     time.sleep(WAIT_BETWEEN_TESTS_SECONDS)
 
-    results.append(run_scrapling_spider_test(session_mode="stealth", max_pages=MAX_PAGES))
+    results.append(
+        run_scrapling_spider_test(session_mode="stealth", max_pages=MAX_PAGES)
+    )
 
     compare_results(results)
 

@@ -8,15 +8,15 @@ from .parsers import (
     ArsaParser,
     IsyeriParser,
     DevremulkParser,
-    TuristikParser
+    TuristikParser,
 )
 
 __all__ = [
-    'HepsiemlakScraper',
-    'HepsiemlakScraplingScraper',
-    'KonutParser',
-    'ArsaParser',
-    'IsyeriParser',
-    'DevremulkParser',
-    'TuristikParser'
+    "HepsiemlakScraper",
+    "HepsiemlakScraplingScraper",
+    "KonutParser",
+    "ArsaParser",
+    "IsyeriParser",
+    "DevremulkParser",
+    "TuristikParser",
 ]

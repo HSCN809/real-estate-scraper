@@ -5,7 +5,6 @@ This script tests the Go proxy server functionality and Cloudflare bypass capabi
 """
 
 import requests
-import json
 import time
 from typing import Dict, Any
 
@@ -27,6 +26,7 @@ TEST_URLS = [
     "https://www.hepsiemlak.com",
 ]
 
+
 def test_health_check() -> bool:
     """Test proxy server health check"""
     try:
@@ -41,6 +41,7 @@ def test_health_check() -> bool:
     except Exception as e:
         print(f"❌ Health check failed: {e}")
         return False
+
 
 def test_simple_proxy(url: str) -> Dict[str, Any]:
     """Test simple proxy GET request"""
@@ -57,11 +58,14 @@ def test_simple_proxy(url: str) -> Dict[str, Any]:
             print(f"   Body length: {len(data.get('body', ''))} bytes")
             return data
         else:
-            print(f"❌ Simple proxy test failed for {url}: Status {response.status_code}")
+            print(
+                f"❌ Simple proxy test failed for {url}: Status {response.status_code}"
+            )
             return {}
     except Exception as e:
         print(f"❌ Simple proxy test failed for {url}: {e}")
         return {}
+
 
 def test_advanced_proxy(url: str) -> Dict[str, Any]:
     """Test advanced proxy POST request with custom headers"""
@@ -71,9 +75,9 @@ def test_advanced_proxy(url: str) -> Dict[str, Any]:
             "method": "GET",
             "headers": {
                 "X-Custom-Header": "test-value",
-                "Accept-Language": "en-US,en;q=0.9,tr;q=0.8"
+                "Accept-Language": "en-US,en;q=0.9,tr;q=0.8",
             },
-            "timeout": 30
+            "timeout": 30,
         }
 
         start_time = time.time()
@@ -89,25 +93,26 @@ def test_advanced_proxy(url: str) -> Dict[str, Any]:
             print(f"   Body length: {len(data.get('body', ''))} bytes")
 
             # Check if custom header was forwarded
-            if data.get('headers'):
-                print(f"   Custom header forwarded: {'X-Custom-Header' in str(data.get('headers'))}")
+            if data.get("headers"):
+                print(
+                    f"   Custom header forwarded: {'X-Custom-Header' in str(data.get('headers'))}"
+                )
 
             return data
         else:
-            print(f"❌ Advanced proxy test failed for {url}: Status {response.status_code}")
+            print(
+                f"❌ Advanced proxy test failed for {url}: Status {response.status_code}"
+            )
             return {}
     except Exception as e:
         print(f"❌ Advanced proxy test failed for {url}: {e}")
         return {}
 
+
 def test_cloudflare_bypass(url: str) -> Dict[str, Any]:
     """Test Cloudflare bypass capabilities"""
     try:
-        payload = {
-            "url": url,
-            "method": "GET",
-            "timeout": 60
-        }
+        payload = {"url": url, "method": "GET", "timeout": 60}
 
         start_time = time.time()
         response = requests.post(f"{PROXY_URL}/proxy", json=payload, timeout=65)
@@ -120,29 +125,34 @@ def test_cloudflare_bypass(url: str) -> Dict[str, Any]:
             print(f"   Response time: {end_time - start_time:.2f}s")
 
             # Check if we got actual content (not Cloudflare challenge page)
-            body = data.get('body', '')
+            body = data.get("body", "")
             if isinstance(body, bytes):
-                body_str = body.decode('utf-8', errors='ignore')
+                body_str = body.decode("utf-8", errors="ignore")
             else:
                 body_str = str(body)
 
-            cloudflare_indicators = ['cf-challenge', 'Cloudflare', 'challenge-platform']
-            has_cloudflare = any(indicator in body_str.lower() for indicator in cloudflare_indicators)
+            cloudflare_indicators = ["cf-challenge", "Cloudflare", "challenge-platform"]
+            has_cloudflare = any(
+                indicator in body_str.lower() for indicator in cloudflare_indicators
+            )
 
             if has_cloudflare:
-                print(f"   ⚠️  Cloudflare challenge detected in response")
+                print("   ⚠️  Cloudflare challenge detected in response")
             else:
-                print(f"   ✅ No Cloudflare challenge detected")
+                print("   ✅ No Cloudflare challenge detected")
 
             print(f"   Body length: {len(body)} bytes")
 
             return data
         else:
-            print(f"❌ Cloudflare bypass test failed for {url}: Status {response.status_code}")
+            print(
+                f"❌ Cloudflare bypass test failed for {url}: Status {response.status_code}"
+            )
             return {}
     except Exception as e:
         print(f"❌ Cloudflare bypass test failed for {url}: {e}")
         return {}
+
 
 def test_error_handling() -> bool:
     """Test error handling with invalid requests"""
@@ -152,10 +162,7 @@ def test_error_handling() -> bool:
         print(f"✅ Error handling test: Invalid URL - Status {response.status_code}")
 
         # Test with timeout
-        payload = {
-            "url": "https://httpbin.org/delay/30",
-            "timeout": 5
-        }
+        payload = {"url": "https://httpbin.org/delay/30", "timeout": 5}
         response = requests.post(f"{PROXY_URL}/proxy", json=payload, timeout=10)
         print(f"✅ Error handling test: Timeout - Status {response.status_code}")
 
@@ -163,6 +170,7 @@ def test_error_handling() -> bool:
     except Exception as e:
         print(f"❌ Error handling test failed: {e}")
         return False
+
 
 def test_performance() -> Dict[str, Any]:
     """Test proxy performance with multiple requests"""
@@ -180,7 +188,7 @@ def test_performance() -> Dict[str, Any]:
             if response.status_code == 200:
                 responses.append(response.json())
         except Exception as e:
-            print(f"   Request {i+1} failed: {e}")
+            print(f"   Request {i + 1} failed: {e}")
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -190,7 +198,7 @@ def test_performance() -> Dict[str, Any]:
     avg_time = total_time / request_count
     requests_per_second = request_count / total_time
 
-    print(f"✅ Performance test completed")
+    print("✅ Performance test completed")
     print(f"   Successful requests: {successful_requests}/{request_count}")
     print(f"   Success rate: {success_rate:.1f}%")
     print(f"   Total time: {total_time:.2f}s")
@@ -203,8 +211,9 @@ def test_performance() -> Dict[str, Any]:
         "success_rate": success_rate,
         "total_time": total_time,
         "avg_time": avg_time,
-        "requests_per_second": requests_per_second
+        "requests_per_second": requests_per_second,
     }
+
 
 def main():
     """Run all tests"""
@@ -266,11 +275,12 @@ def main():
     print("   - Error handling is functioning")
     print("   - Performance metrics collected")
     print()
-    print(f"📈 Performance Results:")
+    print("📈 Performance Results:")
     print(f"   - Success Rate: {performance_data['success_rate']:.1f}%")
     print(f"   - Requests/sec: {performance_data['requests_per_second']:.2f}")
     print()
     print("🎉 Test suite completed!")
+
 
 if __name__ == "__main__":
     try:
@@ -280,4 +290,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ Unexpected error: {e}")
         import traceback
+
         traceback.print_exc()

@@ -12,16 +12,17 @@ from logging.handlers import RotatingFileHandler
 # Core modülünden içe aktarım
 import sys as _sys
 import os as _os
-_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
+
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
 from core.config import get_config
 
 
 def resolve_writable_log_file(log_file: str) -> Optional[str]:
     """Yazilabilir bir log dosyasi yolu dondurur, gerekirse fallback kullanir."""
-    fallback_dir = os.getenv('LOG_FALLBACK_DIR', '/tmp/scraper-logs')
+    fallback_dir = os.getenv("LOG_FALLBACK_DIR", "/tmp/scraper-logs")
     candidates = [log_file]
 
-    log_basename = os.path.basename(log_file) if log_file else 'scraper.log'
+    log_basename = os.path.basename(log_file) if log_file else "scraper.log"
     fallback_path = os.path.join(fallback_dir, log_basename)
     if fallback_path not in candidates:
         candidates.append(fallback_path)
@@ -31,7 +32,7 @@ def resolve_writable_log_file(log_file: str) -> Optional[str]:
             log_dir = os.path.dirname(candidate)
             if log_dir:
                 os.makedirs(log_dir, exist_ok=True)
-            with open(candidate, 'a', encoding='utf-8'):
+            with open(candidate, "a", encoding="utf-8"):
                 pass
             return candidate
         except OSError:
@@ -55,11 +56,11 @@ class StructuredFormatter(logging.Formatter):
         }
 
         # Varsa task_id ekle
-        if hasattr(record, 'task_id'):
+        if hasattr(record, "task_id"):
             log_data["task_id"] = record.task_id
 
         # Ek alanları ekle
-        if hasattr(record, 'extra_data'):
+        if hasattr(record, "extra_data"):
             log_data.update(record.extra_data)
 
         # Varsa hata bilgisini ekle
@@ -73,20 +74,20 @@ class ColoredFormatter(logging.Formatter):
     """Renkli konsol biçimlendirici"""
 
     COLORS = {
-        'DEBUG': '\033[36m',     # Camgöbeği
-        'INFO': '\033[32m',      # Yeşil
-        'WARNING': '\033[33m',   # Sarı
-        'ERROR': '\033[31m',     # Kırmızı
-        'CRITICAL': '\033[35m',  # Eflatun
+        "DEBUG": "\033[36m",  # Camgöbeği
+        "INFO": "\033[32m",  # Yeşil
+        "WARNING": "\033[33m",  # Sarı
+        "ERROR": "\033[31m",  # Kırmızı
+        "CRITICAL": "\033[35m",  # Eflatun
     }
-    RESET = '\033[0m'
+    RESET = "\033[0m"
 
     def format(self, record):
         color = self.COLORS.get(record.levelname, self.RESET)
         record.levelname = f"{color}{record.levelname}{self.RESET}"
 
         # Varsa task_id öneki ekle
-        if hasattr(record, 'task_id') and record.task_id:
+        if hasattr(record, "task_id") and record.task_id:
             record.msg = f"[{record.task_id[:8]}] {record.msg}"
 
         return super().format(record)
@@ -101,9 +102,10 @@ class TaskContextFilter(logging.Filter):
 
     def filter(self, record):
         # Celery current_task'tan task_id almayı dene
-        if not hasattr(record, 'task_id'):
+        if not hasattr(record, "task_id"):
             try:
                 from celery import current_task
+
                 if current_task and current_task.request:
                     record.task_id = current_task.request.id
                 else:
@@ -119,7 +121,7 @@ def setup_logger(
     log_to_file: Optional[bool] = None,
     log_file: Optional[str] = None,
     structured: bool = False,
-    task_id: Optional[str] = None
+    task_id: Optional[str] = None,
 ) -> logging.Logger:
     """Konsol ve isteğe bağlı dosya handler'ları ile logger yapılandırır ve döndürür."""
     config = get_config()
@@ -130,7 +132,9 @@ def setup_logger(
     log_file = log_file or config.log_file
     resolved_log_file = resolve_writable_log_file(log_file) if log_to_file else None
     if log_to_file and not resolved_log_file:
-        print("Logger file output disabled: no writable log path found.", file=sys.stderr)
+        print(
+            "Logger file output disabled: no writable log path found.", file=sys.stderr
+        )
         log_to_file = False
 
     # Logger oluştur
@@ -149,8 +153,7 @@ def setup_logger(
     console_handler = logging.StreamHandler(console_stream)
     console_handler.setLevel(logging.DEBUG)
     console_format = ColoredFormatter(
-        '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-        datefmt='%H:%M:%S'
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%H:%M:%S"
     )
     console_handler.setFormatter(console_format)
     logger.addHandler(console_handler)
@@ -165,9 +168,9 @@ def setup_logger(
         # Dönen dosya handler'ı kullan (maks 10MB, 5 yedek)
         file_handler = RotatingFileHandler(
             resolved_log_file,
-            maxBytes=10*1024*1024,  # 10MB
+            maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
-            encoding='utf-8'
+            encoding="utf-8",
         )
         file_handler.setLevel(logging.DEBUG)
 
@@ -175,7 +178,7 @@ def setup_logger(
             file_handler.setFormatter(StructuredFormatter())
         else:
             file_format = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - [%(task_id)s] - %(filename)s:%(lineno)d - %(message)s'
+                "%(asctime)s - %(name)s - %(levelname)s - [%(task_id)s] - %(filename)s:%(lineno)d - %(message)s"
             )
             file_handler.setFormatter(file_format)
 
@@ -183,12 +186,9 @@ def setup_logger(
 
     # Yapılandırılmış JSON log dosyası (normal loglardan ayrı)
     if log_to_file:
-        json_log_path = resolved_log_file.replace('.log', '_structured.jsonl')
+        json_log_path = resolved_log_file.replace(".log", "_structured.jsonl")
         json_handler = RotatingFileHandler(
-            json_log_path,
-            maxBytes=10*1024*1024,
-            backupCount=5,
-            encoding='utf-8'
+            json_log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
         )
         json_handler.setLevel(logging.INFO)
         json_handler.setFormatter(StructuredFormatter())
@@ -225,13 +225,7 @@ class ScraperLogger:
     def _log_with_context(self, level: str, message: str, **extra):
         """Ek bağlam verisiyle logla"""
         record = self.logger.makeRecord(
-            self.logger.name,
-            getattr(logging, level.upper()),
-            "",
-            0,
-            message,
-            (),
-            None
+            self.logger.name, getattr(logging, level.upper()), "", 0, message, (), None
         )
         if extra:
             record.extra_data = extra
@@ -253,7 +247,9 @@ class ScraperLogger:
 
     def error(self, message: str, exc_info: bool = False, **extra):
         """Hata mesajı logla"""
-        self.logger.error(f"{message}", exc_info=exc_info, extra=extra if extra else None)
+        self.logger.error(
+            f"{message}", exc_info=exc_info, extra=extra if extra else None
+        )
 
     def success(self, message: str, **extra):
         """Başarı mesajı logla (info seviyesinde)"""
@@ -271,7 +267,7 @@ class ScraperLogger:
         """Sayfa kazıma ilerlemesini logla"""
         self.logger.info(
             f"Sayfa {page}/{total}: {count} ilan bulundu",
-            extra={"page": page, "total": total, "count": count, **(extra or {})}
+            extra={"page": page, "total": total, "count": count, **(extra or {})},
         )
 
     def navigate(self, url: str, **extra):
@@ -282,14 +278,13 @@ class ScraperLogger:
         """Veri kaydetmeyi logla"""
         self.logger.info(
             f"{count} kayit {filename} dosyasina kaydedildi",
-            extra={"filename": filename, "count": count, **(extra or {})}
+            extra={"filename": filename, "count": count, **(extra or {})},
         )
 
     def task_progress(self, progress: int, message: str, **extra):
         """Görev ilerleme güncellemesini logla"""
         self.logger.info(
-            f"[%{progress}] {message}",
-            extra={"progress": progress, **(extra or {})}
+            f"[%{progress}] {message}", extra={"progress": progress, **(extra or {})}
         )
 
 

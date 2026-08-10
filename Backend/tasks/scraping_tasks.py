@@ -66,7 +66,7 @@ class TaskProgressManager:
                 "progress": data["progress"],
                 "current": data["current"],
                 "total": data["total"],
-            }
+            },
         )
 
     def complete(self, message: str = "Tamamlandı", success: bool = True):
@@ -84,6 +84,7 @@ class TaskProgressManager:
             error=error,
             details=error,
         )
+
 
 @celery_app.task(bind=True, name="scrape_hepsiemlak")
 def scrape_hepsiemlak_task(
@@ -137,9 +138,9 @@ def scrape_hepsiemlak_task(
         # subtype_path'tan alt_kategori çıkar
         alt_kategori = None
         if subtype_path:
-            parts = subtype_path.strip('/').split('/')
+            parts = subtype_path.strip("/").split("/")
             if len(parts) >= 2:
-                alt_kategori = parts[-1].replace('-', '_')
+                alt_kategori = parts[-1].replace("-", "_")
 
         # Veritabaninda kazima oturumu olustur
         scrape_session = crud.create_scrape_session(
@@ -149,7 +150,7 @@ def scrape_hepsiemlak_task(
             ilan_tipi=listing_type,
             alt_kategori=alt_kategori,
             target_cities=cities,
-            target_districts=districts
+            target_districts=districts,
         )
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
@@ -157,10 +158,7 @@ def scrape_hepsiemlak_task(
         # Redis'i guncelleyen ilerleme geri cagirima fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
-                message=message,
-                current=current,
-                total=total,
-                progress=progress
+                message=message, current=current, total=total, progress=progress
             )
             # Durdurma istegini kontrol et
 
@@ -170,6 +168,7 @@ def scrape_hepsiemlak_task(
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
             from scrapers.hepsiemlak.main import HepsiemlakScraper
+
             manager = DriverManager(proxy_url=go_proxy_url if proxy_enabled else None)
             driver = manager.start()
 
@@ -179,7 +178,7 @@ def scrape_hepsiemlak_task(
                 category=category,
                 subtype_path=subtype_path,
                 selected_cities=cities,
-                selected_districts=districts
+                selected_districts=districts,
             )
         else:
             from scrapers.hepsiemlak.scrapling_scraper import HepsiemlakScraplingScraper
@@ -220,9 +219,9 @@ def scrape_hepsiemlak_task(
         return {
             "status": "completed",
             "task_id": task_id,
-            "total_listings": getattr(scraper, 'total_scraped_count', 0),
-            "new_listings": getattr(scraper, 'new_listings_count', 0),
-            "duplicates": getattr(scraper, 'duplicate_count', 0)
+            "total_listings": getattr(scraper, "total_scraped_count", 0),
+            "new_listings": getattr(scraper, "new_listings_count", 0),
+            "duplicates": getattr(scraper, "duplicate_count", 0),
         }
 
     except SoftTimeLimitExceeded:
@@ -243,21 +242,32 @@ def scrape_hepsiemlak_task(
         # Her durumda (SIGTERM dahil) session'ı kapat ve kaydet
         try:
             if scrape_session and db:
-                total_listings = getattr(scraper, 'total_scraped_count', 0) if scraper else 0
-                new_listings = getattr(scraper, 'new_listings_count', 0) if scraper else 0
-                duplicate_listings = getattr(scraper, 'duplicate_count', 0) if scraper else 0
+                total_listings = (
+                    getattr(scraper, "total_scraped_count", 0) if scraper else 0
+                )
+                new_listings = (
+                    getattr(scraper, "new_listings_count", 0) if scraper else 0
+                )
+                duplicate_listings = (
+                    getattr(scraper, "duplicate_count", 0) if scraper else 0
+                )
 
                 crud.update_scrape_session(
-                    db, scrape_session.id,
+                    db,
+                    scrape_session.id,
                     total_listings=total_listings,
                     new_listings=new_listings,
-                    duplicate_listings=duplicate_listings
+                    duplicate_listings=duplicate_listings,
                 )
-                status = locals().get('_final_status', 'failed')
-                error_msg = locals().get('_error_msg', None)
-                crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
+                status = locals().get("_final_status", "failed")
+                error_msg = locals().get("_error_msg", None)
+                crud.complete_scrape_session(
+                    db, scrape_session.id, status=status, error_message=error_msg
+                )
                 db.commit()
-                logger.info(f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})")
+                logger.info(
+                    f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})"
+                )
         except Exception as save_err:
             logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
             try:
@@ -320,9 +330,9 @@ def scrape_emlakjet_task(
         # subtype_path'tan alt_kategori çıkar
         alt_kategori = None
         if subtype_path:
-            parts = subtype_path.strip('/').split('-')
+            parts = subtype_path.strip("/").split("-")
             if len(parts) >= 2:
-                alt_kategori = parts[-1].replace('-', '_')
+                alt_kategori = parts[-1].replace("-", "_")
 
         # Veritabaninda kazima oturumu olustur
         scrape_session = crud.create_scrape_session(
@@ -332,7 +342,7 @@ def scrape_emlakjet_task(
             ilan_tipi=listing_type,
             alt_kategori=alt_kategori,
             target_cities=cities,
-            target_districts=districts
+            target_districts=districts,
         )
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
@@ -341,16 +351,13 @@ def scrape_emlakjet_task(
         if subtype_path:
             base_url = config.base_url + subtype_path
         else:
-            category_path = config.categories[listing_type].get(category, '')
+            category_path = config.categories[listing_type].get(category, "")
             base_url = config.base_url + category_path
 
         # Ilerleme geri cagirima fonksiyonu
         def progress_callback(message, current=0, total=0, progress=0):
             progress_manager.update(
-                message=message,
-                current=current,
-                total=total,
-                progress=progress
+                message=message, current=current, total=total, progress=progress
             )
 
         # Kazıyıcı için durdurma kontrol fonksiyonu
@@ -366,7 +373,7 @@ def scrape_emlakjet_task(
                 base_url=base_url,
                 category=category,
                 listing_type=listing_type,
-                subtype_path=subtype_path
+                subtype_path=subtype_path,
             )
         else:
             from scrapers.emlakjet.scrapling_scraper import EmlakJetScraplingScraper
@@ -397,8 +404,10 @@ def scrape_emlakjet_task(
 
         _final_status = "completed"
 
-        total_listings = len(getattr(scraper, 'all_listings', []))
-        logger.info(f"[Task {task_id}] Scraping completed: {total_listings} listings collected")
+        total_listings = len(getattr(scraper, "all_listings", []))
+        logger.info(
+            f"[Task {task_id}] Scraping completed: {total_listings} listings collected"
+        )
         progress_manager.complete(
             message=f"EmlakJet taraması tamamlandı! {total_listings} ilan bulundu."
         )
@@ -428,17 +437,24 @@ def scrape_emlakjet_task(
         # Listing'ler zaten sayfa bazlı kaydedildi, tekrar kaydetmeye gerek yok
         try:
             if scrape_session and db:
-                total_listings = len(getattr(scraper, 'all_listings', [])) if scraper else 0
+                total_listings = (
+                    len(getattr(scraper, "all_listings", [])) if scraper else 0
+                )
 
                 crud.update_scrape_session(
-                    db, scrape_session.id,
+                    db,
+                    scrape_session.id,
                     total_listings=total_listings,
                 )
-                status = locals().get('_final_status', 'failed')
-                error_msg = locals().get('_error_msg', None)
-                crud.complete_scrape_session(db, scrape_session.id, status=status, error_message=error_msg)
+                status = locals().get("_final_status", "failed")
+                error_msg = locals().get("_error_msg", None)
+                crud.complete_scrape_session(
+                    db, scrape_session.id, status=status, error_message=error_msg
+                )
                 db.commit()
-                logger.info(f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})")
+                logger.info(
+                    f"[Task {task_id}] Finally: session closed (status={status}, total={total_listings})"
+                )
         except Exception as save_err:
             logger.error(f"[Task {task_id}] Finally save failed: {save_err}")
             try:
