@@ -464,6 +464,12 @@ class EmlakJetScraper(BaseScraper):
                 By.CSS_SELECTOR, location_selector
             )
 
+            # Yeni yapı: alt lokasyon linkleri mevcut yolun devamıdır
+            from urllib.parse import urlparse as _urlparse
+
+            base_path = _urlparse(current_url).path.rstrip("/")
+            excluded_segments = {"projeler", "emlakcidan", "sahibinden", "muteahhitten"}
+
             # Duplicate kontrolü için seen set
             seen_names = set()
 
@@ -472,18 +478,30 @@ class EmlakJetScraper(BaseScraper):
                     location_name = _extract_location_name(link.text)
                     location_url = link.get_attribute("href")
 
-                    if location_name and location_url:
-                        # Duplicate kontrolü
-                        normalized_name = _normalize_location_token(location_name)
-                        if normalized_name not in seen_names:
-                            seen_names.add(normalized_name)
-                            location_options.append(
-                                {"name": location_name, "url": location_url}
-                            )
-                        else:
-                            logger.debug(
-                                f"Duplicate {location_type} skipped: {location_name}"
-                            )
+                    if not location_name or not location_url:
+                        continue
+                    if "sayfa=" in location_url or "filtreler=" in location_url:
+                        continue
+                    href_path = _urlparse(location_url).path.rstrip("/")
+                    if href_path == base_path or not (
+                        href_path.startswith(base_path + "/")
+                        or href_path.startswith(base_path + "-")
+                    ):
+                        continue
+                    if href_path.rsplit("/", 1)[-1] in excluded_segments:
+                        continue
+
+                    # Duplicate kontrolü
+                    normalized_name = _normalize_location_token(location_name)
+                    if normalized_name not in seen_names:
+                        seen_names.add(normalized_name)
+                        location_options.append(
+                            {"name": location_name, "url": location_url}
+                        )
+                    else:
+                        logger.debug(
+                            f"Duplicate {location_type} skipped: {location_name}"
+                        )
                 except Exception:  # nosec
                     continue
 
@@ -538,7 +556,7 @@ class EmlakJetScraper(BaseScraper):
             # Sonraki ok (right arrow) var mı kontrol et - eğer yoksa son sayfadayız
             # Eğer varsa, son sayfaya git ve oradaki pagination'dan max page bul
             right_arrow = self.driver.find_elements(
-                By.CSS_SELECTOR, "li.styles_rightArrow__Kn4kW a"
+                By.CSS_SELECTOR, "a[aria-label='Sonraki Sayfa']"
             )
             pagination_links = self.driver.find_elements(
                 By.XPATH, "//a[contains(@href, 'sayfa=')]"
@@ -583,7 +601,7 @@ class EmlakJetScraper(BaseScraper):
             # Seçili sayfa (active page) daha büyükse onu kullan
             try:
                 selected_page = self.driver.find_element(
-                    By.CSS_SELECTOR, "span.styles_selected__hilA_"
+                    By.CSS_SELECTOR, "span[aria-current='page']"
                 )
                 selected_num = int(selected_page.text)
                 if selected_num > max_page:
@@ -604,6 +622,29 @@ class EmlakJetScraper(BaseScraper):
     def _parse_listing_count(self) -> int:
         """Zaten yüklenmiş sayfadan ilan sayısını parse et"""
         try:
+            # Yeni yapı: meta description "N adet ... ilanı" bilgisi içerir
+            try:
+                import re as _re
+
+                meta = self.driver.find_element(
+                    By.CSS_SELECTOR, "meta[name='description']"
+                )
+                meta_content = meta.get_attribute("content") or ""
+                match = _re.search(r"(\d[\d\.]*)\s*adet", meta_content)
+                if match:
+                    return int(_re.sub(r"[^\d]", "", match.group(1)))
+            except Exception:  # nosec
+                pass
+
+            # Yeni yapı: başlık altındaki ilan sayısı
+            count_element = self.driver.find_elements(
+                By.CSS_SELECTOR, "p.text-body span.font-semibold"
+            )
+            if count_element:
+                text = count_element[0].text.strip().replace(".", "").replace(",", "")
+                if text.isdigit():
+                    return int(text)
+
             # "uygun ilan bulunamadı" kontrolü
             no_results = self.driver.find_elements(
                 By.CSS_SELECTOR, "span.styles_adsCount__A1YW5"
@@ -612,7 +653,7 @@ class EmlakJetScraper(BaseScraper):
                 if "bulunamadı" in el.text.lower():
                     return 0
 
-            # İlan sayısını çek
+            # İlan sayısını çek (eski yapı)
             count_element = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 "span.styles_adsCount__A1YW5 strong.styles_strong__cw1jn",
@@ -621,7 +662,7 @@ class EmlakJetScraper(BaseScraper):
                 text = count_element[0].text.strip().replace(".", "").replace(",", "")
                 return int(text) if text.isdigit() else 0
 
-            # Alternatif seçici
+            # Alternatif seçici (eski yapı)
             count_element = self.driver.find_elements(
                 By.CSS_SELECTOR, "strong.styles_strong__cw1jn"
             )
@@ -890,7 +931,8 @@ class EmlakJetScraper(BaseScraper):
                 if current_page == 1:
                     try:
                         no_results = self.driver.find_elements(
-                            By.CSS_SELECTOR, "span.styles_title__e_y3h"
+                            By.CSS_SELECTOR,
+                            "span.styles_title__e_y3h, [class*='no-result'], [class*='empty-state']",
                         )
                         for element in no_results:
                             if "ilan bulunamadı" in element.text.lower():

@@ -369,7 +369,9 @@ class HepsiemlakScraplingScraper:
     ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
-            value = str(elements[0].text).strip() if elements else ""
+            if not elements:
+                return default
+            value = " ".join(str(elements[0].get_all_text()).split())
             return value or default
         except Exception:
             return default
@@ -400,6 +402,7 @@ class HepsiemlakScraplingScraper:
             listing_link = urljoin(page_url, listing_link)
         location_text = ""
         for loc_selector in [
+            "span.listingCard__location address",
             "span.list-view-location address",
             "span.list-view-location",
             ".list-view-location address",
@@ -414,10 +417,10 @@ class HepsiemlakScraplingScraper:
         ]
         return {
             "fiyat": self._extract_text(
-                element, self.common_selectors.get("price", "span.list-view-price")
+                element, self.common_selectors.get("price", "p.listingCard__price")
             ),
             "baslik": self._extract_text(
-                element, self.common_selectors.get("title", "h3")
+                element, self.common_selectors.get("title", "h3.listingCard__title")
             ),
             "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemis",
             "ilce": location_parts[1] if len(location_parts) > 1 else "Belirtilmemis",
@@ -426,84 +429,50 @@ class HepsiemlakScraplingScraper:
             else "Belirtilmemis",
             "ilan_linki": listing_link,
             "ilan_tarihi": self._extract_text(
-                element, self.common_selectors.get("date", "span.list-view-date")
+                element, self.common_selectors.get("date", "time.listingCard__date")
             ),
             "emlak_ofisi": self._extract_text(
                 element,
-                self.common_selectors.get(
-                    "firm", "p.listing-card--owner-info__firm-name"
-                ),
+                self.common_selectors.get("firm", "p.listingCard__owner-firm"),
             ),
         }
 
-    def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
-        if self.category == "konut":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.houseRoomCount")
-                ),
-                "metrekare": self._extract_text(
-                    element, self.selectors.get("size", "span.list-view-size")
-                ),
-                "bina_yasi": self._extract_text(
-                    element, self.selectors.get("building_age", "span.buildingAge")
-                ),
-                "kat": self._extract_text(
-                    element, self.selectors.get("floor", "span.floortype")
-                ),
-            }
-        if self.category == "arsa":
-            data = {
-                "arsa_metrekare": "Belirtilmemis",
-                "metrekare_fiyat": "Belirtilmemis",
-            }
-            for size_element in element.css(
-                self.selectors.get("size", "span.celly.squareMeter.list-view-size")
-            ):
-                size_text = str(size_element.text).strip()
-                normalized = size_text.lower().replace(" ", "")
-                if ("tl/m²" in normalized or "tl/m2" in normalized) and data[
-                    "metrekare_fiyat"
-                ] == "Belirtilmemis":
-                    data["metrekare_fiyat"] = size_text
-                elif ("m²" in normalized or "m2" in normalized) and data[
-                    "arsa_metrekare"
-                ] == "Belirtilmemis":
-                    data["arsa_metrekare"] = size_text
-            return data
-        if self.category == "isyeri":
-            return {
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
+    def _extract_spec_values(self, element: Selector) -> Dict[str, str]:
+        values: Dict[str, str] = {}
+        try:
+            for item in element.css(
+                self.common_selectors.get(
+                    "specs", "dl.listingCard__specs div.listingCard__spec-item"
                 )
-            }
-        if self.category == "devremulk":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.houseRoomCount")
-                ),
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
-                ),
-                "bina_yasi": self._extract_text(
-                    element, self.selectors.get("building_age", "span.buildingAge")
-                ),
-                "kat": self._extract_text(
-                    element, self.selectors.get("floor", "span.floortype")
-                ),
-            }
-        if self.category == "turistik_isletme":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.workRoomCount")
-                ),
-                "otel_tipi": self._extract_text(
-                    element, self.selectors.get("star_count", "span.startCount")
-                ),
-            }
-        return {}
+            ):
+                label = self._extract_text(
+                    item,
+                    self.common_selectors.get(
+                        "spec_label", "dt.listingCard__spec-label"
+                    ),
+                    default="",
+                )
+                value = self._extract_text(
+                    item, self.common_selectors.get("spec_value", "dd"), default=""
+                )
+                if label and value:
+                    values[label.strip()] = value.strip()
+        except Exception:  # nosec
+            pass
+        return values
+
+    def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
+        spec_map = self.selectors.get("spec_map")
+        if not spec_map:
+            return {}
+        values = self._extract_spec_values(element)
+        data: Dict[str, Any] = {}
+        for field, labels in spec_map.items():
+            data[field] = next(
+                (values[label] for label in labels if label in values),
+                "Belirtilmemis",
+            )
+        return data
 
     def _extract_from_scrapling_element(
         self, element: Selector, page_url: str = ""
@@ -521,11 +490,14 @@ class HepsiemlakScraplingScraper:
     ) -> List[Dict[str, Any]]:
         listings: List[Dict[str, Any]] = []
         try:
-            listing_elements = selector.css(
-                self.common_selectors.get(
-                    "listing_container", "li.listing-item:not(.listing-item--promo)"
-                )
+            listing_selector = self.common_selectors.get(
+                "listing_container", "article.listingCard__box"
             )
+            listing_elements = selector.css(listing_selector)
+            if not listing_elements:
+                listing_elements = selector.css(
+                    "li.listing-item:not(.listing-item--promo)"
+                )
             source_url = page_url or getattr(selector, "url", "")
             for element in listing_elements:
                 data = self._extract_from_scrapling_element(

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """EmlakJet Arsa parser'ı"""
 
+import re
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
@@ -18,7 +19,7 @@ class ArsaParser(BaseEmlakJetParser):
         # Quick info'yu parse et
         if quick_info:
             try:
-                parts = [part.strip() for part in quick_info.split("|")]
+                parts = [part.strip() for part in re.split(r"[|·]", quick_info)]
 
                 for part in parts:
                     part_lower = part.lower()
@@ -30,8 +31,12 @@ class ArsaParser(BaseEmlakJetParser):
                     ):
                         details["arsa_tipi"] = part
 
-                    # Metrekare
-                    elif "m²" in part or "m2" in part_lower:
+                    # Metrekare (m² fiyatı olan "/m²" parçalarını atla)
+                    elif (
+                        ("m²" in part or "m2" in part_lower)
+                        and "/" not in part
+                        and not details["metrekare"]
+                    ):
                         details["metrekare"] = part
 
             except Exception:  # nosec

@@ -410,6 +410,7 @@ class HepsiemlakGoProxyScraper:
         # Extract location
         location_text = ""
         loc_selectors = [
+            "span.listingCard__location address",
             "span.list-view-location address",
             "span.list-view-location",
             ".list-view-location address",
@@ -427,16 +428,16 @@ class HepsiemlakGoProxyScraper:
 
         return {
             "fiyat": self._extract_text(
-                element, self.common_selectors.get("price", "span.list-view-price")
+                element, self.common_selectors.get("price", "p.listingCard__price")
             ),
             "baslik": self._extract_text(
                 element,
                 [
-                    self.common_selectors.get("title", "h3"),
+                    self.common_selectors.get("title", "h3.listingCard__title"),
+                    "h3.listingCard__title",
                     "h2",
                     "a.card-link h2",
                     "a.card-link h3",
-                    ".listing-card__title",
                 ],
             ),
             "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemis",
@@ -446,91 +447,58 @@ class HepsiemlakGoProxyScraper:
             else "Belirtilmemis",
             "ilan_linki": listing_link,
             "ilan_tarihi": self._extract_text(
-                element, self.common_selectors.get("date", "span.list-view-date")
+                element, self.common_selectors.get("date", "time.listingCard__date")
             ),
             "emlak_ofisi": self._extract_text(
                 element,
-                self.common_selectors.get(
-                    "firm", "p.listing-card--owner-info__firm-name"
-                ),
+                self.common_selectors.get("firm", "p.listingCard__owner-firm"),
             ),
         }
 
-    def _extract_category_specific_data(self, element) -> Dict[str, Any]:
-        """Extract category-specific data"""
-        if self.category == "konut":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.houseRoomCount")
-                ),
-                "metrekare": self._extract_text(
-                    element, self.selectors.get("size", "span.list-view-size")
-                ),
-                "bina_yasi": self._extract_text(
-                    element, self.selectors.get("building_age", "span.buildingAge")
-                ),
-                "kat": self._extract_text(
-                    element, self.selectors.get("floor", "span.floortype")
-                ),
-            }
-
-        elif self.category == "arsa":
-            data = {
-                "arsa_metrekare": "Belirtilmemis",
-                "metrekare_fiyat": "Belirtilmemis",
-            }
-            size_elements = element.select(
-                self.selectors.get("size", "span.celly.squareMeter.list-view-size")
-            )
-            for size_element in size_elements:
-                size_text = size_element.get_text().strip()
-                normalized = size_text.lower().replace(" ", "").replace("²", "2")
-                if "tl/m2" in normalized and data["metrekare_fiyat"] == "Belirtilmemis":
-                    data["metrekare_fiyat"] = size_text
-                elif "m2" in normalized and data["arsa_metrekare"] == "Belirtilmemis":
-                    data["arsa_metrekare"] = size_text
-            return data
-
-        elif self.category == "isyeri":
-            return {
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
+    def _extract_spec_values(self, element) -> Dict[str, str]:
+        """Extract dl/dt/dd spec items as label->value map"""
+        values: Dict[str, str] = {}
+        try:
+            spec_items = element.select(
+                self.common_selectors.get(
+                    "specs", "dl.listingCard__specs div.listingCard__spec-item"
                 )
-            }
+            )
+            for item in spec_items:
+                label_el = item.select_one(
+                    self.common_selectors.get(
+                        "spec_label", "dt.listingCard__spec-label"
+                    )
+                )
+                value_el = item.select_one(
+                    self.common_selectors.get("spec_value", "dd")
+                )
+                if label_el and value_el:
+                    label = label_el.get_text(" ", strip=True)
+                    value = value_el.get_text(" ", strip=True)
+                    if label and value:
+                        values[label] = value
+        except Exception:  # nosec
+            pass
+        return values
 
-        elif self.category == "devremulk":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.houseRoomCount")
-                ),
-                "metrekare": self._extract_text(
-                    element,
-                    self.selectors.get("size", "span.celly.squareMeter.list-view-size"),
-                ),
-                "bina_yasi": self._extract_text(
-                    element, self.selectors.get("building_age", "span.buildingAge")
-                ),
-                "kat": self._extract_text(
-                    element, self.selectors.get("floor", "span.floortype")
-                ),
-            }
-
-        elif self.category == "turistik_isletme":
-            return {
-                "oda_sayisi": self._extract_text(
-                    element, self.selectors.get("room_count", "span.workRoomCount")
-                ),
-                "otel_tipi": self._extract_text(
-                    element, self.selectors.get("star_count", "span.startCount")
-                ),
-            }
-
-        return {}
+    def _extract_category_specific_data(self, element) -> Dict[str, Any]:
+        """Extract category-specific data from dl/dt/dd spec items"""
+        spec_map = self.selectors.get("spec_map")
+        if not spec_map:
+            return {}
+        values = self._extract_spec_values(element)
+        data: Dict[str, Any] = {}
+        for field, labels in spec_map.items():
+            data[field] = next(
+                (values[label] for label in labels if label in values),
+                "Belirtilmemis",
+            )
+        return data
 
     def _select_listing_elements(self, soup: BeautifulSoup):
         primary_selector = self.common_selectors.get(
-            "listing_container", "li.listing-item:not(.listing-item--promo)"
+            "listing_container", "article.listingCard__box"
         )
         fallback_selectors = [
             primary_selector,

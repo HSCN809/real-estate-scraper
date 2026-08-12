@@ -104,100 +104,83 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
 
                     subtypes = []
 
-                    # Sidebar'daki kategori menüsünü bul
-                    # "styles_ulSubMenu__E0zyf" içindeki linkler alt kategoriler
+                    # Yeni yapı: sidebar menüde ana kategori düğümü
+                    # <div data-node-id="satilik-konut"> ve alt türler
+                    # <div data-node-id="satilik-daire"><a href="/satilik-daire">Daire</a>
+                    main_slug = path.strip("/").replace("/", "-")
                     try:
-                        # Önce aktif kategoriyi bul (styles_activeSubMenu__er_lw)
-                        # Sonra onun altındaki ul.styles_ulSubMenu__E0zyf içindeki linkleri al
-
-                        # Tüm subMenu2 elemanlarını bul
-                        submenu_items = driver.find_elements(
-                            By.CSS_SELECTOR, "li.styles_subMenu2__BskGl"
+                        main_node = driver.find_element(
+                            By.CSS_SELECTOR, f"[data-node-id='{main_slug}']"
+                        )
+                        sub_ul = main_node.find_element(
+                            By.XPATH, "following-sibling::ul[1]"
+                        )
+                        sub_links = sub_ul.find_elements(
+                            By.CSS_SELECTOR, "[data-node-id] a[href^='/']"
                         )
 
-                        for item in submenu_items:
+                        for link in sub_links:
                             try:
-                                # Bu item'ın linkini al
-                                main_link = item.find_element(By.CSS_SELECTOR, "a")
-                                main_href = main_link.get_attribute("href") or ""
+                                href = link.get_attribute("href") or ""
+                                name = link.text.strip()
 
-                                # Bu kategorinin path'i ile eşleşiyorsa, alt kategorilerini al
-                                if path in main_href or main_href.endswith(path):
-                                    # Alt kategoriler bu item'ın içindeki ul.styles_ulSubMenu__E0zyf içinde
-                                    sub_links = item.find_elements(
-                                        By.CSS_SELECTOR,
-                                        "ul.styles_ulSubMenu__E0zyf li.styles_subMenu2__BskGl a",
+                                if name and href:
+                                    subtype_path = href.replace(base_url, "")
+                                    subtype_id = extract_subtype_id(subtype_path)
+
+                                    subtypes.append(
+                                        {
+                                            "id": subtype_id,
+                                            "name": name,
+                                            "path": subtype_path,
+                                        }
                                     )
-
-                                    for link in sub_links:
-                                        try:
-                                            href = link.get_attribute("href") or ""
-
-                                            # Span içindeki text'i al (ilan sayısı olmadan)
-                                            span = link.find_element(
-                                                By.CSS_SELECTOR, "span"
-                                            )
-                                            # İlk text node'u al (ilan sayısı span içinde ayrı)
-                                            name = span.text.split("(")[0].strip()
-
-                                            if name and href:
-                                                subtype_path = href.replace(
-                                                    base_url, ""
-                                                )
-                                                subtype_id = extract_subtype_id(
-                                                    subtype_path
-                                                )
-
-                                                subtypes.append(
-                                                    {
-                                                        "id": subtype_id,
-                                                        "name": name,
-                                                        "path": subtype_path,
-                                                    }
-                                                )
-                                        except Exception:  # nosec
-                                            continue
-                                    break
                             except Exception:  # nosec
                                 continue
 
-                        # Eğer yukarıdaki yöntem çalışmazsa, alternatif yöntem dene
+                        # Eski yapı: styles_ulSubMenu seçicileri (geriye dönük uyumluluk)
                         if not subtypes:
-                            # Aktif menüyü bul ve altındaki linkleri al
-                            active_items = driver.find_elements(
-                                By.CSS_SELECTOR, "span.styles_activeSubMenu__er_lw"
+                            submenu_items = driver.find_elements(
+                                By.CSS_SELECTOR, "li.styles_subMenu2__BskGl"
                             )
-
-                            for active in active_items:
-                                parent_li = active.find_element(By.XPATH, "../..")
-                                sub_ul = parent_li.find_elements(
-                                    By.CSS_SELECTOR, "ul.styles_ulSubMenu__E0zyf li a"
-                                )
-
-                                for link in sub_ul:
-                                    try:
-                                        href = link.get_attribute("href") or ""
-                                        span = link.find_element(
-                                            By.CSS_SELECTOR, "span"
+                            for item in submenu_items:
+                                try:
+                                    main_link = item.find_element(By.CSS_SELECTOR, "a")
+                                    main_href = main_link.get_attribute("href") or ""
+                                    if path in main_href or main_href.endswith(path):
+                                        sub_links_legacy = item.find_elements(
+                                            By.CSS_SELECTOR,
+                                            "ul.styles_ulSubMenu__E0zyf li.styles_subMenu2__BskGl a",
                                         )
-                                        name = span.text.split("(")[0].strip()
-
-                                        if name and href:
-                                            subtype_path = href.replace(base_url, "")
-                                            subtype_id = extract_subtype_id(
-                                                subtype_path
-                                            )
-
-                                            subtypes.append(
-                                                {
-                                                    "id": subtype_id,
-                                                    "name": name,
-                                                    "path": subtype_path,
-                                                }
-                                            )
-                                    except Exception:  # nosec
-                                        continue
-
+                                        for legacy_link in sub_links_legacy:
+                                            try:
+                                                href = (
+                                                    legacy_link.get_attribute("href")
+                                                    or ""
+                                                )
+                                                span = legacy_link.find_element(
+                                                    By.CSS_SELECTOR, "span"
+                                                )
+                                                name = span.text.split("(")[0].strip()
+                                                if name and href:
+                                                    subtype_path = href.replace(
+                                                        base_url, ""
+                                                    )
+                                                    subtype_id = extract_subtype_id(
+                                                        subtype_path
+                                                    )
+                                                    subtypes.append(
+                                                        {
+                                                            "id": subtype_id,
+                                                            "name": name,
+                                                            "path": subtype_path,
+                                                        }
+                                                    )
+                                            except Exception:  # nosec
+                                                continue
+                                        break
+                                except Exception:  # nosec
+                                    continue
                     except Exception as e:
                         logger.warning(f"Alt kategori çekme hatası: {e}")
 

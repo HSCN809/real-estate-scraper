@@ -20,37 +20,5 @@ class DevremulkParser(BaseHepsiemlakParser):
             "bina_yasi": "Belirtilmemiş",
             "kat": "Belirtilmemiş",
         }
-
-        try:
-            room_sel = self.selectors.get("room_count", "span.houseRoomCount")
-            data["oda_sayisi"] = (
-                self.get_element_text(container, room_sel) or "Belirtilmemiş"
-            )
-        except Exception:  # nosec
-            pass
-
-        try:
-            size_sel = self.selectors.get(
-                "size", "span.celly.squareMeter.list-view-size"
-            )
-            data["metrekare"] = (
-                self.get_element_text(container, size_sel) or "Belirtilmemiş"
-            )
-        except Exception:  # nosec
-            pass
-
-        try:
-            age_sel = self.selectors.get("building_age", "span.buildingAge")
-            data["bina_yasi"] = (
-                self.get_element_text(container, age_sel) or "Belirtilmemiş"
-            )
-        except Exception:  # nosec
-            pass
-
-        try:
-            floor_sel = self.selectors.get("floor", "span.floortype")
-            data["kat"] = self.get_element_text(container, floor_sel) or "Belirtilmemiş"
-        except Exception:  # nosec
-            pass
-
+        data.update(self.extract_spec_map_data(container))
         return data

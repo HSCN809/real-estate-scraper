@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """EmlakJet Konut parser'ı"""
 
+import re
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
@@ -19,7 +20,7 @@ class KonutParser(BaseEmlakJetParser):
             return details
 
         try:
-            parts = [part.strip() for part in quick_info.split("|")]
+            parts = [part.strip() for part in re.split(r"[|·]", quick_info)]
 
             for part in parts:
                 part_lower = part.lower()
@@ -49,6 +50,20 @@ class KonutParser(BaseEmlakJetParser):
                 # Metrekare
                 elif "m²" in part or "m2" in part_lower:
                     details["metrekare"] = part
+
+            # Tip quick_info'da yoksa başlıktan çıkar
+            if not details["tip"] and title:
+                for tip_keyword in [
+                    "Daire",
+                    "Residence",
+                    "Villa",
+                    "Müstakil",
+                    "Tripleks",
+                    "Dubleks",
+                ]:
+                    if tip_keyword.lower() in title.lower():
+                        details["tip"] = tip_keyword
+                        break
 
         except Exception:  # nosec
             pass

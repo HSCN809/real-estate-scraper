@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """EmlakJet Turistik Tesis parser'ı"""
 
+import re
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
@@ -19,7 +20,7 @@ class TuristikTesisParser(BaseEmlakJetParser):
             return details
 
         try:
-            parts = [part.strip() for part in quick_info.split("|")]
+            parts = [part.strip() for part in re.split(r"[|·]", quick_info)]
 
             for part in parts:
                 part_lower = part.lower()

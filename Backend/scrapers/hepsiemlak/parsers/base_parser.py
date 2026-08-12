@@ -45,13 +45,11 @@ class BaseHepsiemlakParser:
 
     def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
         """İlan konteynerinden ortak veri alanlarını çıkar"""
-        price_sel = self.common_selectors.get("price", "span.list-view-price")
-        title_sel = self.common_selectors.get("title", "h3")
-        date_sel = self.common_selectors.get("date", "span.list-view-date")
+        price_sel = self.common_selectors.get("price", "p.listingCard__price")
+        title_sel = self.common_selectors.get("title", "h3.listingCard__title")
+        date_sel = self.common_selectors.get("date", "time.listingCard__date")
         link_sel = self.common_selectors.get("link", "a.card-link")
-        firm_sel = self.common_selectors.get(
-            "firm", "p.listing-card--owner-info__firm-name"
-        )
+        firm_sel = self.common_selectors.get("firm", "p.listingCard__owner-firm")
 
         price = self.get_element_text(container, price_sel)
         title = self.get_element_text(container, title_sel)
@@ -61,6 +59,7 @@ class BaseHepsiemlakParser:
 
         # Lokasyon için birden fazla seçici dene (HepsiEmlak HTML yapısı değişkenlik gösterir)
         location_selectors = [
+            "span.listingCard__location address",
             "span.list-view-location address",
             "span.list-view-location",
             ".list-view-location address",
@@ -88,6 +87,50 @@ class BaseHepsiemlakParser:
             "ilan_tarihi": date or "Belirtilmemiş",
             "emlak_ofisi": firm or "Belirtilmemiş",
         }
+
+    def extract_spec_values(self, container: WebElement) -> Dict[str, str]:
+        """dl/dt/dd yapısındaki özellikleri label->value haritası olarak çıkar"""
+        values: Dict[str, str] = {}
+        try:
+            spec_items = container.find_elements(
+                By.CSS_SELECTOR,
+                self.common_selectors.get(
+                    "specs", "dl.listingCard__specs div.listingCard__spec-item"
+                ),
+            )
+            for item in spec_items:
+                try:
+                    label = item.find_element(
+                        By.CSS_SELECTOR,
+                        self.common_selectors.get(
+                            "spec_label", "dt.listingCard__spec-label"
+                        ),
+                    ).text.strip()
+                    value = item.find_element(
+                        By.CSS_SELECTOR,
+                        self.common_selectors.get("spec_value", "dd"),
+                    ).text.strip()
+                except NoSuchElementException:
+                    continue
+                if label and value:
+                    values[label] = value
+        except Exception:  # nosec
+            pass
+        return values
+
+    def extract_spec_map_data(self, container: WebElement) -> Dict[str, Any]:
+        """spec_map yapılandırmasına göre kategori alanlarını çıkar"""
+        spec_map = self.selectors.get("spec_map")
+        if not spec_map:
+            return {}
+        values = self.extract_spec_values(container)
+        data: Dict[str, Any] = {}
+        for field, labels in spec_map.items():
+            data[field] = next(
+                (values[label] for label in labels if label in values),
+                "Belirtilmemiş",
+            )
+        return data
 
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
         """Kategoriye özel verileri çıkar; alt sınıflarda override edilmeli"""

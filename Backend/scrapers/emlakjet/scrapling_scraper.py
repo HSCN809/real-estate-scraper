@@ -400,7 +400,9 @@ class EmlakJetScraplingScraper:
     ) -> str:
         try:
             elements = element.css(css_selector) if css_selector else []
-            value = str(elements[0].text).strip() if elements else ""
+            if not elements:
+                return default
+            value = " ".join(str(elements[0].get_all_text()).split())
             return value or default
         except Exception:
             return default
@@ -421,35 +423,43 @@ class EmlakJetScraplingScraper:
         self, element: Selector, page_url: str = ""
     ) -> Dict[str, Any]:
         title = self._extract_text(
-            element, self.common_selectors.get("title", "h3.styles_title__aKEGQ")
-        )
-        location = self._extract_text(
             element,
-            self.common_selectors.get("location", "span.styles_location__OwJiQ"),
+            self.common_selectors.get("title", "h3[data-listing-title] a"),
         )
+
+        # Yeni yapı: konum ve özellikler satırı karttaki iki p.text-xs elemanıdır
+        location = ""
+        quick_info = ""
+        text_p_elements = element.css(
+            self.common_selectors.get("location", "p.text-xs")
+        )
+        if text_p_elements:
+            location = " ".join(str(text_p_elements[0].get_all_text()).split())
+        if len(text_p_elements) > 1:
+            quick_info = " ".join(str(text_p_elements[1].get_all_text()).split())
+
         price = self._extract_text(
-            element, self.common_selectors.get("price", "span.styles_price__F3pMQ")
-        )
-        quick_info = self._extract_text(
             element,
-            self.common_selectors.get(
-                "quick_info", "div.styles_quickinfoWrapper__Vsnk5"
-            ),
+            self.common_selectors.get("price", "span.shrink-0.whitespace-nowrap"),
         )
         image_url = self._extract_attribute(
             element,
-            self.common_selectors.get("image", "img.styles_imageClass___SLvt"),
+            self.common_selectors.get("image", "img[src*='/listing/']"),
             "src",
         )
-        listing_url = str(element.attrib.get("href", "")).strip()
+        listing_url = self._extract_attribute(
+            element,
+            self.common_selectors.get("link", "h3[data-listing-title] a"),
+            "href",
+        )
         if listing_url and page_url:
             listing_url = urljoin(page_url, listing_url)
 
         badges = []
         for badge in element.css(
-            self.common_selectors.get("badge_wrapper", "div.styles_badgewrapper__pS0rt")
+            self.common_selectors.get("badge_wrapper", "span[class*='px-2 py-0.5']")
         ):
-            badge_text = str(badge.text).strip()
+            badge_text = " ".join(str(badge.get_all_text()).split())
             if badge_text:
                 badges.append(self._normalize_text(badge_text))
 
@@ -557,7 +567,9 @@ class EmlakJetScraplingScraper:
     def get_total_pages(self, selector: Selector) -> int:
         try:
             page_numbers: List[int] = []
-            for link in selector.css("a[href*='sayfa='], ul.styles_list__zqOeW li a"):
+            for link in selector.css(
+                self.common_selectors.get("pagination_list", "a[href*='sayfa=']")
+            ):
                 text = str(link.text).strip()
                 if text.isdigit():
                     page_numbers.append(int(text))
@@ -568,7 +580,7 @@ class EmlakJetScraplingScraper:
 
             active_page = self._extract_text(
                 selector,
-                self.common_selectors.get("active_page", "span.styles_selected__hilA_"),
+                self.common_selectors.get("active_page", "span[aria-current='page']"),
             )
             if active_page.isdigit():
                 page_numbers.append(int(active_page))
@@ -581,14 +593,19 @@ class EmlakJetScraplingScraper:
         if not selector:
             return None
         try:
-            for element in selector.css(
-                "span.styles_adsCount__A1YW5, span.styles_title__e_y3h"
-            ):
-                normalized_text = self._normalize_text(str(element.text))
-                if "bulunamadi" in normalized_text:
-                    return 0
+            # Yeni yapı: meta description "N adet ... ilanı" bilgisi içerir
+            meta_description = self._extract_attribute(
+                selector, "meta[name='description']", "content"
+            )
+            if meta_description:
+                match = re.search(r"(\d[\d\.]*)\s*adet", meta_description)
+                if match:
+                    return int(re.sub(r"[^\d]", "", match.group(1)))
 
             for css_selector in [
+                self.common_selectors.get(
+                    "listing_count", "p.text-body span.font-semibold"
+                ),
                 "span.styles_adsCount__A1YW5 strong.styles_strong__cw1jn",
                 "strong.styles_strong__cw1jn",
             ]:
@@ -598,6 +615,13 @@ class EmlakJetScraplingScraper:
                 digits = re.sub(r"[^\d]", "", text)
                 if digits.isdigit():
                     return int(digits)
+
+            for element in selector.css(
+                "span.styles_adsCount__A1YW5, span.styles_title__e_y3h"
+            ):
+                normalized_text = self._normalize_text(str(element.text))
+                if "bulunamadi" in normalized_text:
+                    return 0
 
             return None
         except Exception:
@@ -638,22 +662,45 @@ class EmlakJetScraplingScraper:
         location_options: List[Dict[str, str]] = []
         seen_names = set()
 
-        for link in selector.css(
-            self.common_selectors.get(
-                "location_links", "section.styles_section__xzOd3 a.styles_link__7WOOd"
-            )
-        ):
-            location_name = self._clean_location_name(str(link.text).strip())
+        # Yeni yapı: alt lokasyon linkleri mevcut yolun devamıdır
+        #   /satilik-konut            -> /satilik-konut/istanbul (iller)
+        #   /satilik-konut/kirklareli -> /satilik-konut/kirklareli-merkez (ilçeler)
+        base_path = urlparse(current_url).path.rstrip("/")
+        last_segment = base_path.rsplit("/", 1)[-1]
+        excluded_segments = {"projeler", "emlakcidan", "sahibinden", "muteahhitten"}
+
+        link_selector = self.common_selectors.get("location_links", "a[href]")
+        for link in selector.css(link_selector):
             location_url = str(link.attrib.get("href", "")).strip()
-            if location_url:
-                location_url = urljoin(current_url, location_url)
-            if not location_name or not location_url:
+            if not location_url:
                 continue
+            if "sayfa=" in location_url or "filtreler=" in location_url:
+                continue
+            absolute_url = urljoin(current_url, location_url)
+            href_path = urlparse(absolute_url).path.rstrip("/")
+            if href_path == base_path or not (
+                href_path.startswith(base_path + "/")
+                or href_path.startswith(base_path + "-")
+            ):
+                continue
+            if href_path.rsplit("/", 1)[-1] in excluded_segments:
+                continue
+
+            location_name = self._clean_location_name(str(link.text).strip())
+            normalized_name = self._normalize_text(location_name)
+            normalized_segment = self._normalize_text(last_segment)
+            if normalized_segment and normalized_name.startswith(
+                normalized_segment + "-"
+            ):
+                location_name = location_name[len(last_segment) :].strip()
+            if not location_name:
+                continue
+
             normalized = self._normalize_text(location_name)
             if normalized in seen_names:
                 continue
             seen_names.add(normalized)
-            location_options.append({"name": location_name, "url": location_url})
+            location_options.append({"name": location_name, "url": absolute_url})
 
         return location_options, listing_count
 

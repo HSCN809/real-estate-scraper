@@ -15,15 +15,5 @@ class IsyeriParser(BaseHepsiemlakParser):
     def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
         """İşyerine özel verileri çıkar"""
         data = {"metrekare": "Belirtilmemiş"}
-
-        try:
-            size_sel = self.selectors.get(
-                "size", "span.celly.squareMeter.list-view-size"
-            )
-            data["metrekare"] = (
-                self.get_element_text(container, size_sel) or "Belirtilmemiş"
-            )
-        except Exception:  # nosec
-            pass
-
+        data.update(self.extract_spec_map_data(container))
         return data

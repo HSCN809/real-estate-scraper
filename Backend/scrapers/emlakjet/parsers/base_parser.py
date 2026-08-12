@@ -25,6 +25,14 @@ class BaseEmlakJetParser:
         self.selectors = get_selectors(self.PLATFORM, category)
         self.common_selectors = get_common_selectors(self.PLATFORM)
 
+    def get_elements_text(self, container: WebElement, selector: str) -> List[str]:
+        """Elementlerin metinlerini güvenli şekilde liste olarak al"""
+        try:
+            elements = container.find_elements(By.CSS_SELECTOR, selector)
+            return [element.text.strip() for element in elements]
+        except Exception:  # nosec
+            return []
+
     def get_element_text(self, container: WebElement, selector: str) -> str:
         """Elementten güvenli şekilde metin al"""
         try:
@@ -48,7 +56,7 @@ class BaseEmlakJetParser:
         badges = []
         try:
             badge_selector = self.common_selectors.get(
-                "badge_wrapper", "div.styles_badgewrapper__pS0rt"
+                "badge_wrapper", "span[class*='px-2 py-0.5']"
             )
             badge_elements = container.find_elements(By.CSS_SELECTOR, badge_selector)
             for badge in badge_elements:
@@ -61,22 +69,26 @@ class BaseEmlakJetParser:
 
     def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
         """İlan konteynerinden ortak verileri çıkar"""
-        title_sel = self.common_selectors.get("title", "h3.styles_title__aKEGQ")
-        location_sel = self.common_selectors.get(
-            "location", "span.styles_location__OwJiQ"
+        title_sel = self.common_selectors.get("title", "h3[data-listing-title] a")
+        location_sel = self.common_selectors.get("location", "p.text-xs")
+        price_sel = self.common_selectors.get(
+            "price", "span.shrink-0.whitespace-nowrap"
         )
-        price_sel = self.common_selectors.get("price", "span.styles_price__F3pMQ")
-        quick_info_sel = self.common_selectors.get(
-            "quick_info", "div.styles_quickinfoWrapper__Vsnk5"
-        )
-        image_sel = self.common_selectors.get("image", "img.styles_imageClass___SLvt")
+        quick_info_sel = self.common_selectors.get("quick_info", "p.text-xs")
+        image_sel = self.common_selectors.get("image", "img[src*='/listing/']")
 
         title = self.get_element_text(container, title_sel)
         location = self.get_element_text(container, location_sel)
         price = self.get_element_text(container, price_sel)
-        quick_info = self.get_element_text(container, quick_info_sel)
+
+        # Yeni yapı: konum 1. p.text-xs, özellikler 2. p.text-xs
+        quick_info = ""
+        text_elements = self.get_elements_text(container, quick_info_sel)
+        if len(text_elements) > 1:
+            quick_info = text_elements[1]
+
         image_url = self.get_element_attribute(container, image_sel, "src")
-        listing_url = container.get_attribute("href") or ""
+        listing_url = self.get_element_attribute(container, title_sel, "href")
 
         badges = self.extract_badges(container)
 

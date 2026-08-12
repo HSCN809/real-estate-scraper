@@ -515,7 +515,8 @@ class BaseScraper(ABC):
                 if current_page == 1:
                     try:
                         no_results = self.driver.find_elements(
-                            By.CSS_SELECTOR, "span.styles_title__e_y3h"
+                            By.CSS_SELECTOR,
+                            "span.styles_title__e_y3h, [class*='no-result'], [class*='empty-state']",
                         )
                         for element in no_results:
                             if "ilan bulunamadı" in element.text.lower():

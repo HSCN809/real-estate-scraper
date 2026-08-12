@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """EmlakJet İşyeri parser'ı"""
 
+import re
 from typing import Dict, Any
 from .base_parser import BaseEmlakJetParser
 
@@ -19,7 +20,7 @@ class IsyeriParser(BaseEmlakJetParser):
             return details
 
         try:
-            parts = [part.strip() for part in quick_info.split("|")]
+            parts = [part.strip() for part in re.split(r"[|·]", quick_info)]
 
             for part in parts:
                 part_lower = part.lower()
@@ -43,8 +44,12 @@ class IsyeriParser(BaseEmlakJetParser):
                 ):
                     details["isyeri_tipi"] = part
 
-                # Kat bilgisi
-                elif "kat" in part_lower:
+                # Kat bilgisi (örn: "1. Kat", "Düz Giriş (Zemin)")
+                elif (
+                    "kat" in part_lower
+                    or "giriş" in part_lower
+                    or "zemin" in part_lower
+                ):
                     details["kat"] = part
 
                 # Metrekare

@@ -10,20 +10,22 @@ from typing import Dict, Any, Optional
 
 EMLAKJET_SELECTORS = {
     "common": {
-        # İlan seçicileri
-        "listing_container": "a.styles_wrapper__587DT",
-        "title": "h3.styles_title__aKEGQ",
-        "location": "span.styles_location__OwJiQ",
-        "price": "span.styles_price__F3pMQ",
-        "image": "img.styles_imageClass___SLvt",
-        "badge_wrapper": "div.styles_badgewrapper__pS0rt",
-        "quick_info": "div.styles_quickinfoWrapper__Vsnk5",
-        # Sayfalama
-        "pagination_list": "ul.styles_list__zqOeW li:not([class*='arrow'])",
-        "active_page": "span.styles_selected__hilA_",
-        # Lokasyon navigasyonu
-        "location_links": "section.styles_section__xzOd3 a.styles_link__7WOOd",
-        # Kategori menüsü
+        # İlan seçicileri (yeni Next.js yapısı - Ağustos 2026)
+        "listing_container": "article[data-listing-id]",
+        "title": "h3[data-listing-title] a",
+        "link": "h3[data-listing-title] a",
+        "location": "p.text-xs",
+        "price": "span.shrink-0.whitespace-nowrap",
+        "image": "img[src*='/listing/']",
+        "badge_wrapper": "span[class*='px-2 py-0.5']",
+        "quick_info": "p.text-xs",
+        # Sayfalama (yeni yapı: ?sayfa=N)
+        "pagination_list": "a[href*='sayfa=']",
+        "active_page": "span[aria-current='page']",
+        "listing_count": "p.text-body span.font-semibold",
+        # Lokasyon navigasyonu - kodda URL prefix'ine göre üretilir
+        "location_links": "a[href]",
+        # Kategori menüsü (eski yapı - korundu)
         "category_button": "div[role='button']",
         "sub_menu": "ul.styles_wrapper__xd9_i",
         "sub_category": "ul.styles_ulSubMenu__E0zyf li.styles_subMenu2__BskGl",
@@ -150,15 +152,19 @@ EMLAKJET_SELECTORS = {
 
 HEPSIEMLAK_SELECTORS = {
     "common": {
-        # İlan seçicileri
-        "listing_container": "li.listing-item:not(.listing-item--promo)",
+        # İlan seçicileri (yeni Vue yapısı - Ağustos 2026)
+        "listing_container": "article.listingCard__box",
         "listing_results": "ul.list-items-container, .search-results",
-        "title": "h3",
-        "price": "span.list-view-price",
-        "location": "span.list-view-location address",
-        "date": "span.list-view-date",
+        "title": "h3.listingCard__title",
+        "price": "p.listingCard__price",
+        "location": "span.listingCard__location address",
+        "date": "time.listingCard__date",
         "link": "a.card-link",
-        "firm": "p.listing-card--owner-info__firm-name",
+        "firm": "p.listingCard__owner-firm",
+        # Yeni özellik listesi (dl/dt/dd)
+        "specs": "dl.listingCard__specs div.listingCard__spec-item",
+        "spec_label": "dt.listingCard__spec-label",
+        "spec_value": "dd",
         # İl açılır menüsü
         "city_dropdown": "div.he-select-base__container, div[data-name='city']",
         "city_list": "div.he-select-base__list, div.he-select__list",
@@ -190,10 +196,12 @@ HEPSIEMLAK_SELECTORS = {
     },
     "konut": {
         "fields": ["oda_sayisi", "metrekare", "bina_yasi", "kat", "emlak_ofisi"],
-        "room_count": "span.houseRoomCount",
-        "size": "span.list-view-size",
-        "building_age": "span.buildingAge",
-        "floor": "span.floortype",
+        "spec_map": {
+            "oda_sayisi": ["Oda Sayısı"],
+            "metrekare": ["Brüt m²", "Net m²"],
+            "bina_yasi": ["Bina Yaşı"],
+            "kat": ["Kat"],
+        },
         "csv_fields": [
             "fiyat",
             "baslik",
@@ -211,7 +219,10 @@ HEPSIEMLAK_SELECTORS = {
     },
     "arsa": {
         "fields": ["arsa_metrekare", "metrekare_fiyat", "emlak_ofisi"],
-        "size": "span.celly.squareMeter.list-view-size",
+        "spec_map": {
+            "arsa_metrekare": ["Brüt m²", "Net m²"],
+            "metrekare_fiyat": ["m² Fiyatı"],
+        },
         "csv_fields": [
             "fiyat",
             "baslik",
@@ -227,7 +238,9 @@ HEPSIEMLAK_SELECTORS = {
     },
     "isyeri": {
         "fields": ["metrekare", "emlak_ofisi"],
-        "size": "span.celly.squareMeter.list-view-size",
+        "spec_map": {
+            "metrekare": ["Brüt m²", "Net m²"],
+        },
         "csv_fields": [
             "fiyat",
             "baslik",
@@ -242,10 +255,12 @@ HEPSIEMLAK_SELECTORS = {
     },
     "devremulk": {
         "fields": ["oda_sayisi", "metrekare", "bina_yasi", "kat"],
-        "room_count": "span.houseRoomCount",
-        "size": "span.celly.squareMeter.list-view-size",
-        "building_age": "span.buildingAge",
-        "floor": "span.floortype",
+        "spec_map": {
+            "oda_sayisi": ["Oda Sayısı"],
+            "metrekare": ["Brüt m²", "Net m²"],
+            "bina_yasi": ["Bina Yaşı"],
+            "kat": ["Kat"],
+        },
         "csv_fields": [
             "fiyat",
             "baslik",
@@ -262,8 +277,10 @@ HEPSIEMLAK_SELECTORS = {
     },
     "turistik_isletme": {
         "fields": ["oda_sayisi", "otel_tipi"],
-        "room_count": "span.workRoomCount",
-        "star_count": "span.startCount",
+        "spec_map": {
+            "oda_sayisi": ["Oda Sayısı"],
+            "otel_tipi": ["Yıldız Sayısı"],
+        },
         "csv_fields": [
             "fiyat",
             "baslik",
