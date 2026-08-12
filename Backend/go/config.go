@@ -65,13 +65,11 @@ func DefaultConfig() *Config {
 		// Chrome 120 fingerprint
 		TLSClientID:    "HelloChrome_120",
 		JA3Fingerprint: "771,4865-4866-4867-49195-49199-49196-49200-52393-52542-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-34-51-43-13-45-28-21,29-23-24,0",
-		TLSRotate:      true,
+		TLSRotate:      false,
 		TLSRotateList: []string{
-			"HelloChrome_133",
-			"HelloChrome_131",
+			// HepsiEmlak testlerinde yalnızca HelloChrome_120 + Chrome 120 UA
+			// kombinasyonu Cloudflare'i geçiyor; diğer parmak izleri challenge alıyor.
 			"HelloChrome_120",
-			"HelloFirefox_120",
-			"HelloEdge_85",
 		},
 
 		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

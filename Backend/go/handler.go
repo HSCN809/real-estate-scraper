@@ -307,6 +307,12 @@ func (ph *ProxyHandler) handlePostProxy(w http.ResponseWriter, r *http.Request) 
 func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.Context, req ProxyRequest) {
 	var lastError error
 
+	// A single pooled client is used for all attempts so its cookie jar keeps
+	// the __cf_bm token set by Cloudflare challenge responses.
+	pooled := ph.clientPool.GetClient()
+	client := pooled.Client
+	defer ph.clientPool.ReturnClient(pooled)
+
 	// Retry logic
 	for attempt := 0; attempt <= ph.config.MaxRetries; attempt++ {
 		if attempt > 0 {
@@ -314,14 +320,10 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 			time.Sleep(ph.config.RetryDelay)
 		}
 
-		// Get client from pool
-		client := ph.clientPool.GetClient()
-
 		// Create HTTP request
-		httpReq, err := ph.createHTTPRequest(&req)
+		httpReq, err := ph.createHTTPRequest(&req, pooled.UserAgent)
 		if err != nil {
 			lastError = err
-			ph.clientPool.ReturnClient(client)
 			continue
 		}
 
@@ -331,7 +333,6 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 
 		if err != nil {
 			lastError = err
-			ph.clientPool.ReturnClient(client)
 			if ph.shouldRetry(err) && attempt < ph.config.MaxRetries {
 				log.Warn().Err(err).Msgf("Request failed, retrying (attempt %d/%d)", attempt+1, ph.config.MaxRetries)
 				continue
@@ -345,14 +346,19 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		// Return client to pool after use
-		ph.clientPool.ReturnClient(client)
-
 		if err != nil {
 			lastError = err
 			log.Error().Err(err).Msg("Failed to read response body")
 			ph.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// Cloudflare-style challenge (403/503): retry on the SAME client so the
+		// cookie jar reuses the challenge token on the next attempt.
+		if (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusServiceUnavailable) && attempt < ph.config.MaxRetries {
+			log.Warn().Int("status", resp.StatusCode).Msgf("Challenge response for %s, retrying with same session (attempt %d/%d)", req.URL, attempt+1, ph.config.MaxRetries)
+			time.Sleep(ph.config.RetryDelay * time.Duration(attempt+1))
+			continue
 		}
 
 		// Success! Send response back
@@ -365,8 +371,10 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 	ph.sendErrorResponse(w, fmt.Sprintf("All retries failed: %v", lastError), http.StatusBadGateway)
 }
 
-// createHTTPRequest creates an HTTP request from ProxyRequest
-func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest) (*http.Request, error) {
+// createHTTPRequest creates an HTTP request from ProxyRequest. The userAgent
+// parameter is always applied last so it matches the pooled client's TLS
+// fingerprint.
+func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest, userAgent string) (*http.Request, error) {
 	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewReader(req.Body))
 	if err != nil {
 		return nil, err
@@ -385,6 +393,11 @@ func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest) (*http.Request, err
 		if !strings.EqualFold(key, "Host") && !strings.EqualFold(key, "Accept-Encoding") {
 			httpReq.Header.Set(key, value)
 		}
+	}
+
+	// Always override the User-Agent with the fingerprint-matched one.
+	if userAgent != "" {
+		httpReq.Header.Set("User-Agent", userAgent)
 	}
 
 	return httpReq, nil

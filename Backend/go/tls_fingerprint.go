@@ -18,6 +18,25 @@ type TLSFingerprintManager struct {
 	rotateIndex atomic.Int64
 }
 
+// FingerprintUserAgents maps TLS client IDs to matching User-Agent strings.
+// Keeping UA and TLS fingerprint consistent is critical for Cloudflare detection.
+var FingerprintUserAgents = map[string]string{
+	"HelloChrome_133":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+	"HelloChrome_131":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	"HelloChrome_120":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	"HelloFirefox_120": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+	"HelloFirefox_105": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0",
+	"HelloFirefox_102": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0",
+}
+
+// UserAgentForClientHelloID returns the matching User-Agent for a client hello ID.
+func UserAgentForClientHelloID(clientHelloID string) string {
+	if ua, ok := FingerprintUserAgents[clientHelloID]; ok {
+		return ua
+	}
+	return FingerprintUserAgents["HelloChrome_120"]
+}
+
 // NewTLSFingerprintManager creates a new TLS fingerprint manager
 func NewTLSFingerprintManager(cfg *Config) *TLSFingerprintManager {
 	mgr := &TLSFingerprintManager{
@@ -39,14 +58,28 @@ func NewTLSFingerprintManager(cfg *Config) *TLSFingerprintManager {
 	return mgr
 }
 
-// CreateDialTLSContextFunc creates a TLS dialer that uses utls fingerprinting.
-func (tfm *TLSFingerprintManager) CreateDialTLSContextFunc() func(ctx context.Context, network, addr string) (net.Conn, error) {
+// FingerprintForClient returns the fingerprint ID and matching User-Agent for a
+// pooled client index. Rotation (if enabled) is deterministic per client so the
+// UA sent with the request always matches the TLS fingerprint of the connection.
+func (tfm *TLSFingerprintManager) FingerprintForClient(index int) (string, string) {
+	var clientID string
+	if tfm.config.TLSRotate && len(tfm.config.TLSRotateList) > 0 {
+		clientID = tfm.config.TLSRotateList[index%len(tfm.config.TLSRotateList)]
+	} else {
+		clientID = tfm.config.TLSClientID
+	}
+	return clientID, UserAgentForClientHelloID(clientID)
+}
+
+// CreateDialTLSContextFuncFor creates a TLS dialer that always uses the given
+// client hello preset (no rotation at dial time).
+func (tfm *TLSFingerprintManager) CreateDialTLSContextFuncFor(clientHelloID string) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return tfm.dialUTLSContext(ctx, network, addr)
+		return tfm.dialUTLSContextWith(ctx, network, addr, clientHelloID)
 	}
 }
 
-func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
+func (tfm *TLSFingerprintManager) dialUTLSContextWith(ctx context.Context, network, addr, clientHelloID string) (net.Conn, error) {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
@@ -61,9 +94,6 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 		serverName = host
 	}
 
-	// Get TLS client ID (with rotation if enabled)
-	clientID := tfm.getNextClientHelloID()
-
 	tlsConfig := &utls.Config{
 		ServerName:         serverName,
 		MinVersion:         utls.VersionTLS12,
@@ -72,9 +102,9 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 		NextProtos:         []string{"http/1.1"},
 	}
 
-	clientHelloID := tfm.resolveClientHelloID(clientID)
+	clientHelloPreset := tfm.resolveClientHelloID(clientHelloID)
 	uConn := utls.UClient(rawConn, tlsConfig, utls.HelloCustom)
-	if err := tfm.applyClientHelloPreset(uConn, clientHelloID); err != nil {
+	if err := tfm.applyClientHelloPreset(uConn, clientHelloPreset); err != nil {
 		_ = rawConn.Close()
 		return nil, err
 	}
@@ -84,6 +114,18 @@ func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, 
 	}
 
 	return uConn, nil
+}
+
+// CreateDialTLSContextFunc creates a TLS dialer that uses utls fingerprinting.
+func (tfm *TLSFingerprintManager) CreateDialTLSContextFunc() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return tfm.dialUTLSContext(ctx, network, addr)
+	}
+}
+
+func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	clientID := tfm.getNextClientHelloID()
+	return tfm.dialUTLSContextWith(ctx, network, addr, clientID)
 }
 
 // getNextClientHelloID returns the next TLS client ID for rotation
@@ -121,9 +163,19 @@ func (tfm *TLSFingerprintManager) applyClientHelloPreset(uConn *utls.UConn, clie
 
 func (tfm *TLSFingerprintManager) resolveClientHelloID(clientID string) utls.ClientHelloID {
 	switch strings.ToLower(strings.TrimSpace(clientID)) {
-	case "hellofirefox_120", "hellofirefox_auto", "firefox", "hellofirefox_117", "firefox_117":
+	case "hellochrome_133", "chrome_133":
+		return utls.HelloChrome_133
+	case "hellochrome_131", "chrome_131":
+		return utls.HelloChrome_131
+	case "hellofirefox_120", "firefox_120":
+		return utls.HelloFirefox_120
+	case "hellofirefox_105", "firefox_105":
+		return utls.HelloFirefox_105
+	case "hellofirefox_102", "firefox_102":
+		return utls.HelloFirefox_102
+	case "hellofirefox_auto", "firefox":
 		return utls.HelloFirefox_Auto
-	case "helloedge_120", "helloedge_auto", "edge":
+	case "helloedge_auto", "edge":
 		return utls.HelloEdge_Auto
 	case "hellosafari_auto", "safari":
 		return utls.HelloSafari_Auto

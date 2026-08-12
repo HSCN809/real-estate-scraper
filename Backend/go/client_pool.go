@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"sync"
 	"time"
@@ -11,11 +12,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// PooledClient bundles an HTTP client with the User-Agent that matches its
+// fixed TLS fingerprint, so UA and fingerprint never diverge.
+type PooledClient struct {
+	Client    *http.Client
+	UserAgent string
+}
+
 // ClientPool manages a pool of reusable HTTP clients.
 type ClientPool struct {
 	config     *Config
 	tlsManager *TLSFingerprintManager
-	clients    chan *http.Client
+	clients    chan *PooledClient
 	mu         sync.RWMutex
 	maxSize    int
 }
@@ -25,13 +33,14 @@ func NewClientPool(cfg *Config, tlsManager *TLSFingerprintManager) *ClientPool {
 	pool := &ClientPool{
 		config:     cfg,
 		tlsManager: tlsManager,
-		clients:    make(chan *http.Client, cfg.MaxIdleConns),
+		clients:    make(chan *PooledClient, cfg.MaxIdleConns),
 		maxSize:    cfg.MaxIdleConns,
 	}
 
-	// Pre-warm the pool with some clients.
+	// Pre-warm the pool with some clients. Each client gets a fixed fingerprint
+	// (rotating across the configured list) and the matching User-Agent.
 	for i := 0; i < cfg.MaxIdleConnsPerHost; i++ {
-		pool.clients <- pool.createClient()
+		pool.clients <- pool.createClient(i)
 	}
 
 	log.Info().Msgf("Client pool initialized with %d clients", cfg.MaxIdleConnsPerHost)
@@ -39,18 +48,18 @@ func NewClientPool(cfg *Config, tlsManager *TLSFingerprintManager) *ClientPool {
 }
 
 // GetClient retrieves a client from the pool.
-func (cp *ClientPool) GetClient() *http.Client {
+func (cp *ClientPool) GetClient() *PooledClient {
 	select {
 	case client := <-cp.clients:
 		return client
 	default:
 		// Pool is empty, create a new client.
-		return cp.createClient()
+		return cp.createClient(int(time.Now().UnixNano()))
 	}
 }
 
 // ReturnClient returns a client back to the pool.
-func (cp *ClientPool) ReturnClient(client *http.Client) {
+func (cp *ClientPool) ReturnClient(client *PooledClient) {
 	cp.mu.RLock()
 	defer cp.mu.RUnlock()
 
@@ -64,16 +73,28 @@ func (cp *ClientPool) ReturnClient(client *http.Client) {
 	}
 }
 
-// createClient creates a new HTTP client with custom transport.
-func (cp *ClientPool) createClient() *http.Client {
-	return &http.Client{
-		Transport: cp.createTransport(),
-		Timeout:   cp.config.ReadTimeout,
+// createClient creates a new HTTP client with custom transport, a cookie jar,
+// and a TLS fingerprint bound to the given rotation index.
+func (cp *ClientPool) createClient(index int) *PooledClient {
+	clientHelloID, userAgent := cp.tlsManager.FingerprintForClient(index)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		jar = nil
+	}
+
+	return &PooledClient{
+		Client: &http.Client{
+			Transport: cp.createTransport(clientHelloID),
+			Timeout:   cp.config.ReadTimeout,
+			Jar:       jar,
+		},
+		UserAgent: userAgent,
 	}
 }
 
 // createTransport creates an HTTP transport and wires utls TLS dialing.
-func (cp *ClientPool) createTransport() *http.Transport {
+func (cp *ClientPool) createTransport(clientHelloID string) *http.Transport {
 	var proxyURL *url.URL
 
 	if cp.config.UseMobileProxy && cp.config.MobileProxyURL != "" {
@@ -109,7 +130,7 @@ func (cp *ClientPool) createTransport() *http.Transport {
 	}
 
 	if cp.tlsManager != nil {
-		transport.DialTLSContext = cp.tlsManager.CreateDialTLSContextFunc()
+		transport.DialTLSContext = cp.tlsManager.CreateDialTLSContextFuncFor(clientHelloID)
 	}
 
 	return transport
@@ -120,7 +141,7 @@ func (cp *ClientPool) Close() {
 	close(cp.clients)
 
 	for client := range cp.clients {
-		if transport, ok := client.Transport.(*http.Transport); ok {
+		if transport, ok := client.Client.Transport.(*http.Transport); ok {
 			transport.CloseIdleConnections()
 		}
 	}
