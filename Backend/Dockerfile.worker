@@ -68,7 +68,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN mkdir -p /ms-playwright \
-    && playwright install chromium
+    && (playwright install chromium \
+        || PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright playwright install chromium)
 
 # Uygulama kodları
 COPY Backend/ .
