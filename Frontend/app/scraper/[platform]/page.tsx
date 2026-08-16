@@ -25,15 +25,19 @@ export default function PlatformScraperPage() {
     const [category, setCategory] = useState('konut');
     const [selectedCities, setSelectedCities] = useState<string[]>([]);
     const [selectedDistricts, setSelectedDistricts] = useState<Record<string, string[]>>({});
-    const minPages = Number(process.env.NEXT_PUBLIC_HEPSIEMLAK_MIN_PAGES) || 1;
-    const defaultMaxPages = Number(process.env.NEXT_PUBLIC_HEPSIEMLAK_MAX_PAGES) || 1;
-    const minListings = Number(process.env.NEXT_PUBLIC_EMLAKJET_MIN_LISTINGS) || 100;
-    const defaultMaxListings = Number(process.env.NEXT_PUBLIC_EMLAKJET_MAX_LISTINGS) || 1000;
+    const minPages = Number(
+        platform === 'emlakjet'
+            ? process.env.NEXT_PUBLIC_EMLAKJET_MIN_PAGES
+            : process.env.NEXT_PUBLIC_HEPSIEMLAK_MIN_PAGES
+    ) || 1;
+    const defaultMaxPages = Number(
+        platform === 'emlakjet'
+            ? process.env.NEXT_PUBLIC_EMLAKJET_MAX_PAGES
+            : process.env.NEXT_PUBLIC_HEPSIEMLAK_MAX_PAGES
+    ) || 1;
 
     const [maxPages, setMaxPages] = useState(defaultMaxPages);
     const [scrapeAllPages, setScrapeAllPages] = useState(false);
-    const [maxListings, setMaxListings] = useState(defaultMaxListings);
-    const [scrapeAllListings, setScrapeAllListings] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -152,10 +156,7 @@ export default function PlatformScraperPage() {
                 proxy_enabled: isProxyToggleDisabled ? false : Boolean(proxyEnabled),
                 cities: selectedCities,
                 districts: selectedDistricts,
-                ...(platform === 'emlakjet'
-                    ? scrapeAllListings ? {} : { max_listings: maxListings || defaultMaxListings }
-                    : scrapeAllPages ? {} : { max_pages: maxPages || defaultMaxPages }
-                ),
+                ...(scrapeAllPages ? {} : { max_pages: maxPages || defaultMaxPages }),
             });
 
             // Global context'te takip başlat
@@ -406,76 +407,39 @@ export default function PlatformScraperPage() {
                         onDistrictsChange={setSelectedDistricts}
                     />
 
-                    {/* Limit Ayarları */}
-                    {platform === 'emlakjet' ? (
-                        <div className="flex items-end gap-4">
-                            <div className="flex-1">
-                                <Input
-                                    label="📊 Maksimum İlan Sayısı"
-                                    type="number"
-                                    min={minListings}
-                                    max={defaultMaxListings}
-                                    step={1}
-                                    value={maxListings || ''}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (val === '') {
-                                            setMaxListings(0);
-                                        } else {
-                                            const num = parseInt(val);
-                                            setMaxListings(Math.min(defaultMaxListings, Math.max(minListings, num || defaultMaxListings)));
-                                        }
-                                    }}
-                                    onBlur={() => {
-                                        if (maxListings < minListings) setMaxListings(minListings);
-                                    }}
-                                    disabled={scrapeAllListings}
-                                    className={scrapeAllListings ? 'opacity-50 cursor-not-allowed' : ''}
-                                />
-                            </div>
-                            <div className="pb-3">
-                                <Checkbox
-                                    label="Tümünü Tara (Limit Yok)"
-                                    checked={scrapeAllListings}
-                                    onChange={setScrapeAllListings}
-                                />
-                            </div>
+                    <div className="flex items-end gap-4">
+                        <div className="flex-1">
+                            <Input
+                                label="Maksimum Sayfa"
+                                type="number"
+                                min={minPages}
+                                max={defaultMaxPages}
+                                step={1}
+                                value={maxPages || ''}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                        setMaxPages(0);
+                                    } else {
+                                        const num = parseInt(val);
+                                        setMaxPages(Math.min(defaultMaxPages, Math.max(minPages, num || defaultMaxPages)));
+                                    }
+                                }}
+                                onBlur={() => {
+                                    if (maxPages < minPages) setMaxPages(minPages);
+                                }}
+                                disabled={scrapeAllPages}
+                                className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
+                            />
                         </div>
-                    ) : (
-                        <div className="flex items-end gap-4">
-                            <div className="flex-1">
-                                <Input
-                                    label="📄 Maksimum Sayfa"
-                                    type="number"
-                                    min={minPages}
-                                    max={defaultMaxPages}
-                                    step={1}
-                                    value={maxPages || ''}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (val === '') {
-                                            setMaxPages(0);
-                                        } else {
-                                            const num = parseInt(val);
-                                            setMaxPages(Math.min(defaultMaxPages, Math.max(minPages, num || defaultMaxPages)));
-                                        }
-                                    }}
-                                    onBlur={() => {
-                                        if (maxPages < minPages) setMaxPages(minPages);
-                                    }}
-                                    disabled={scrapeAllPages}
-                                    className={scrapeAllPages ? 'opacity-50 cursor-not-allowed' : ''}
-                                />
-                            </div>
-                            <div className="pb-3">
-                                <Checkbox
-                                    label="Tüm Sayfaları Tara"
-                                    checked={scrapeAllPages}
-                                    onChange={setScrapeAllPages}
-                                />
-                            </div>
+                        <div className="pb-3">
+                            <Checkbox
+                                label="Tüm Sayfaları Tara"
+                                checked={scrapeAllPages}
+                                onChange={setScrapeAllPages}
+                            />
                         </div>
-                    )}
+                    </div>
 
                     {/* Gönder Butonu */}
                     <button

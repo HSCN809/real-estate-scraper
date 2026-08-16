@@ -9,8 +9,8 @@ export interface ScrapeRequest {
   proxy_enabled?: boolean;
   cities?: string[];
   districts?: Record<string, string[]>;  // İl -> [İlçeler] mapping
-  max_pages?: number;           // HepsiEmlak için sayfa limiti
-  max_listings?: number;        // EmlakJet için ilan limiti
+  max_pages?: number;
+  max_listings?: number;
 }
 
 export interface ScrapeStartResponse {

@@ -343,7 +343,7 @@ def scrape_emlakjet_task(
     cities: list[str],
     districts: dict[str, list[str]] | None,
     max_listings: int = 0,
-    max_pages: int = 50,  # kullanim disi, geriye uyumluluk icin tutuldu
+    max_pages: int | None = None,
     scraping_method: str = "selenium",
     proxy_enabled: bool = False,
 ):

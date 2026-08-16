@@ -709,9 +709,12 @@ class EmlakJetScraper(BaseScraper):
         self._requested_max_pages = max_pages
 
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
-        limit_info = (
-            f" (limit: {max_listings} ilan)" if max_listings > 0 else " (limitsiz)"
-        )
+        if max_pages:
+            limit_info = f" (limit: {max_pages} sayfa)"
+        elif max_listings > 0:
+            limit_info = f" (limit: {max_listings} ilan)"
+        else:
+            limit_info = " (tüm sayfalar)"
         print(
             f"\n🚀 API: EmlakJet {self.listing_type.capitalize()} {self.category.capitalize()}{subtype_info} Scraper başlatılıyor{limit_info}"
         )
