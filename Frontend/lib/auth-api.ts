@@ -27,7 +27,7 @@ interface ApiErrorPayload {
     detail?: string | ApiErrorDetail[];
 }
 
-function extractErrorMessage(error: unknown, fallback: string): string {
+export function extractErrorMessage(error: unknown, fallback: string): string {
     const payload = typeof error === 'object' && error !== null ? error as ApiErrorPayload : {};
     const detail = payload.detail;
     if (typeof detail === 'string') return detail;
