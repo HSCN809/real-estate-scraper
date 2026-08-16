@@ -6,11 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import dynamic from 'next/dynamic';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
-
-const Hyperspeed = dynamic(() => import('@/components/ui/Hyperspeed'), { ssr: false });
 
 export default function LoginPage() {
     const { login } = useAuth();
@@ -38,48 +35,7 @@ export default function LoginPage() {
 
     return (
         <div className="relative min-h-screen overflow-hidden bg-black">
-            {/* Arka Plan Efekti */}
-            <div className="absolute inset-0 z-0">
-                <Hyperspeed
-                    effectOptions={{
-                        onSpeedUp: () => {},
-                        onSlowDown: () => {},
-                        distortion: 'turbulentDistortion',
-                        length: 400,
-                        roadWidth: 10,
-                        islandWidth: 2,
-                        lanesPerRoad: 3,
-                        fov: 90,
-                        fovSpeedUp: 150,
-                        speedUp: 2,
-                        carLightsFade: 0.4,
-                        totalSideLightSticks: 50,
-                        lightPairsPerRoadWay: 70,
-                        shoulderLinesWidthPercentage: 0.05,
-                        brokenLinesWidthPercentage: 0.1,
-                        brokenLinesLengthPercentage: 0.5,
-                        lightStickWidth: [0.12, 0.5],
-                        lightStickHeight: [1.3, 1.7],
-                        movingAwaySpeed: [60, 80],
-                        movingCloserSpeed: [-120, -160],
-                        carLightsLength: [400 * 0.05, 400 * 0.15],
-                        carLightsRadius: [0.05, 0.14],
-                        carWidthPercentage: [0.3, 0.5],
-                        carShiftX: [-0.2, 0.2],
-                        carFloorSeparation: [0.05, 1],
-                        colors: {
-                            roadColor: 0x080808,
-                            islandColor: 0x0a0a0a,
-                            background: 0x000000,
-                            shoulderLines: 0x131318,
-                            brokenLines: 0x131318,
-                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Gök mavisi
-                            rightCars: [0x34d399, 0x10b981, 0x059669], // Zümrüt yeşili
-                            sticks: 0x38bdf8, // Gök mavisi
-                        }
-                    }}
-                />
-            </div>
+            <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_#0ea5e933,_transparent_55%),radial-gradient(ellipse_at_bottom,_#10b98122,_#000)]" />
 
             {/* Giriş Formu */}
             <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
@@ -134,6 +90,7 @@ export default function LoginPage() {
                                 />
                                 <button
                                     type="button"
+                                    aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3 top-9 text-gray-400 hover:text-white transition-colors"
                                 >

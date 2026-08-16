@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Docker için standalone output
   output: 'standalone',
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
 
   // Bundle optimization for tree-shaking
   experimental: {

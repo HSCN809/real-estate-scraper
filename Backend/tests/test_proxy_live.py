@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 
 import pytest
@@ -35,6 +33,5 @@ def test_proxy_does_not_succeed_on_closed_loopback():
         params={"url": "http://127.0.0.1:9/"},
         timeout=20,
     )
-    assert response.status_code != 200
-    body = response.text.lower()
-    assert "error" in body or response.status_code in {400, 401, 502, 504}
+    assert response.status_code == 400
+    assert "allowed" in response.text.lower() or "https" in response.text.lower()

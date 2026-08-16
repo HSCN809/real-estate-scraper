@@ -262,6 +262,51 @@ func getClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+var allowedProxyHosts = []string{
+	"hepsiemlak.com",
+	"emlakjet.com",
+}
+
+func normalizeProxyHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	host = strings.TrimSuffix(host, ".")
+	if parsed, _, err := net.SplitHostPort(host); err == nil {
+		host = parsed
+	}
+	return strings.Trim(host, "[]")
+}
+
+func isAllowedProxyHost(host string) bool {
+	host = normalizeProxyHost(host)
+	for _, allowed := range allowedProxyHosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateTargetURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.Opaque != "" {
+		return fmt.Errorf("invalid url")
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("only https targets are allowed")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("userinfo is not allowed")
+	}
+	hostname := parsed.Hostname()
+	if hostname == "" || net.ParseIP(hostname) != nil {
+		return fmt.Errorf("host is not allowed")
+	}
+	if !isAllowedProxyHost(hostname) {
+		return fmt.Errorf("host is not allowed")
+	}
+	return nil
+}
+
 // handleGetProxy handles GET requests with URL query parameter
 func (ph *ProxyHandler) handleGetProxy(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")

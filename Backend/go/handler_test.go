@@ -178,6 +178,43 @@ func TestGetClientIPAndExtractHeaders(t *testing.T) {
 	}
 }
 
+func TestValidateTargetURL(t *testing.T) {
+	allowed := []string{
+		"https://www.hepsiemlak.com/istanbul",
+		"https://hepsiemlak.com/",
+		"https://www.emlakjet.com/satilik-konut",
+	}
+	for _, raw := range allowed {
+		if err := validateTargetURL(raw); err != nil {
+			t.Fatalf("allowed %s: %v", raw, err)
+		}
+	}
+
+	blocked := []string{
+		"http://127.0.0.1:9/",
+		"https://127.0.0.1/",
+		"http://www.hepsiemlak.com/",
+		"https://evil.com/",
+		"https://hepsiemlak.com.evil.com/",
+		"file:///etc/passwd",
+		"https://user:pass@www.hepsiemlak.com/",
+	}
+	for _, raw := range blocked {
+		if err := validateTargetURL(raw); err == nil {
+			t.Fatalf("expected reject for %s", raw)
+		}
+	}
+}
+
+func TestServeHTTPRejectsInternalURL(t *testing.T) {
+	ph := testHandler("")
+	rec := httptest.NewRecorder()
+	ph.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/proxy?url=http://127.0.0.1:9/", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("internal url status = %d", rec.Code)
+	}
+}
+
 func TestSendErrorResponseJSON(t *testing.T) {
 	ph := testHandler("secret")
 	rec := httptest.NewRecorder()
