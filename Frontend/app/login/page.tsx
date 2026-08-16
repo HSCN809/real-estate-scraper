@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { Input } from '@/components/ui/Input';
@@ -39,23 +38,12 @@ export default function LoginPage() {
 
             {/* Giriş Formu */}
             <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="w-full max-w-md"
-                >
-                    <div className="backdrop-blur-xl bg-black/40 rounded-2xl p-8 border border-white/10 shadow-2xl">
-                        {/* Başlık */}
+                <div className="w-full max-w-md">
+                    <div className="bg-black/60 rounded-2xl p-8 border border-white/10 shadow-2xl">
                         <div className="text-center mb-8">
-                            <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, type: 'spring' }}
-                                className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 flex items-center justify-center"
-                            >
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 flex items-center justify-center">
                                 <LogIn className="w-8 h-8 text-white" />
-                            </motion.div>
+                            </div>
                             <h1 className="text-3xl font-bold text-white mb-2">
                                 Hoş Geldiniz
                             </h1>
@@ -130,7 +118,7 @@ export default function LoginPage() {
                             </p>
                         </div>
                     </div>
-                </motion.div>
+                </div>
             </div>
         </div>
     );

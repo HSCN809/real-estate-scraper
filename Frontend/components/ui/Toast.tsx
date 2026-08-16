@@ -89,6 +89,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
                                 {/* Kapat */}
                                 <button
+                                    type="button"
+                                    aria-label="Bildirimi kapat"
                                     onClick={() => removeToast(toast.id)}
                                     className="flex-shrink-0 text-gray-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
                                 >

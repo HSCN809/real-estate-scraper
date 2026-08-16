@@ -9,8 +9,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.config import get_hepsiemlak_config
-from core.driver_manager import DriverManager
-from selenium.webdriver.common.by import By
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,6 +40,9 @@ def save_subcategories_to_json(data: dict[str, dict[str, list[dict]]]):
 
 def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
     """Tüm kategori/listing_type kombinasyonları için alt kategorileri Selenium ile çek"""
+    from core.driver_manager import DriverManager
+    from selenium.webdriver.common.by import By
+
     config = get_hepsiemlak_config()
     all_subcategories: dict[str, dict[str, list[dict]]] = {}
 

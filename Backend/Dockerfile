@@ -1,19 +1,12 @@
 # Backend Dockerfile - FastAPI only (scraping runs in the worker)
 # syntax=docker/dockerfile:1.4
-FROM python:3.11-slim-bookworm
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements-api.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install --no-cache-dir -r requirements-api.txt
 
 COPY Backend/ .
 

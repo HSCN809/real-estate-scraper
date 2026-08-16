@@ -4,7 +4,7 @@ import './globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { ClientLayout } from '@/components/layout/ClientLayout';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'Emlak Scraper - Data Art Dashboard',

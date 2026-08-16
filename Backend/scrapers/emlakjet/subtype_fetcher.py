@@ -8,8 +8,6 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from core.driver_manager import DriverManager
-from selenium.webdriver.common.by import By
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -76,6 +74,9 @@ def extract_subtype_id(path: str) -> str:
 
 def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
     """Selenium ile tüm alt kategorileri çek"""
+    from core.driver_manager import DriverManager
+    from selenium.webdriver.common.by import By
+
     all_subcategories: dict[str, dict[str, list[dict]]] = {}
     base_url = "https://www.emlakjet.com"
 
