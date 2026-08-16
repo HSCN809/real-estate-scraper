@@ -5,9 +5,7 @@ import os
 import random
 import sys
 import time
-from datetime import datetime
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from scrapling.fetchers import (
     AsyncDynamicSession,
@@ -26,14 +24,16 @@ from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
 
 from scrapers.common.http_status import is_failed_http_response, response_http_status
-from scrapers.common.pagination import (
-    max_page_from_hrefs,
-    max_page_from_texts,
-    pages_from_listing_count,
-)
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
-from .main import save_listings_to_db
+from .listings import extract_listings_from_html, extract_total_pages
+from .persist import save_listings_to_db
+from .urls import (
+    build_location_url,
+    build_page_url,
+    normalize_location_slug,
+    page_number_from_url,
+)
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
@@ -173,68 +173,30 @@ class HepsiemlakScraplingScraper:
         return None
 
     def _normalize_text(self, text: str) -> str:
-        import unicodedata
-
-        text = unicodedata.normalize("NFC", text)
-        for tr_char, en_char in {
-            "I": "i",
-            "İ": "i",
-            "Ğ": "g",
-            "Ü": "u",
-            "Ş": "s",
-            "Ö": "o",
-            "Ç": "c",
-            "ı": "i",
-            "ğ": "g",
-            "ü": "u",
-            "ş": "s",
-            "ö": "o",
-            "ç": "c",
-        }.items():
-            text = text.replace(tr_char, en_char)
-        return text.lower().replace(" ", "-")
-
-    def _get_category_or_subtype_slug(self) -> str:
-        if self.subtype_path:
-            parts = self.subtype_path.strip("/").split("/")
-            return parts[-1] if len(parts) >= 2 else ""
-        category_path = self.base_config.categories.get(self.listing_type, {}).get(
-            self.category, ""
-        )
-        parts = category_path.strip("/").split("/") if category_path else []
-        return parts[-1] if len(parts) >= 2 else ""
+        return normalize_location_slug(text)
 
     def _build_location_url(self, location_slug: str) -> str:
-        suffix = self._get_category_or_subtype_slug()
-        base_location_url = (
-            f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
+        return build_location_url(
+            location_slug,
+            listing_type=self.listing_type,
+            category=self.category,
+            subtype_path=self.subtype_path,
+            categories=self.base_config.categories,
         )
-        return f"{base_location_url}/{suffix}" if suffix else base_location_url
 
     def _get_city_url(self, city: str) -> str:
-        return self._build_location_url(self._normalize_text(city))
+        return self._build_location_url(city)
 
     def _get_district_url(self, district: str) -> str:
-        return self._build_location_url(self._normalize_text(district))
+        return self._build_location_url(district)
 
     @staticmethod
     def _build_page_url(base_url: str, page_num: int) -> str:
-        if page_num <= 1:
-            return base_url
-        parsed = urlparse(base_url)
-        query = parse_qs(parsed.query)
-        query["page"] = [str(page_num)]
-        return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+        return build_page_url(base_url, page_num)
 
     @staticmethod
     def _get_page_number(url: str) -> int:
-        try:
-            page_values = parse_qs(urlparse(url).query).get("page")
-            if page_values and page_values[0].isdigit():
-                return int(page_values[0])
-        except Exception:  # nosec
-            pass
-        return 1
+        return page_number_from_url(url)
 
     def _create_session(self):
         if self.proxy_enabled:
@@ -344,140 +306,10 @@ class HepsiemlakScraplingScraper:
 
     def get_total_pages(self, selector: Selector) -> int:
         try:
-            count_text = ""
-            count_elements = selector.css("span.applied-filters__count")
-            if count_elements:
-                count_text = str(count_elements[0].text).strip()
-            pagination_links = selector.css(
-                "ul.he-pagination__links a, ul.he-pagination a, a[href*='page=']"
-            )
-            hrefs = [str(link.attrib.get("href", "")) for link in pagination_links]
-            texts = [str(link.text) for link in pagination_links]
-            return max(
-                max_page_from_hrefs(hrefs, "page"),
-                max_page_from_texts(texts),
-                pages_from_listing_count(count_text, 24),
-            )
+            return extract_total_pages(selector)
         except Exception as exc:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
-
-    def _extract_text(
-        self, element: Selector, css_selector: str, default: str = "Belirtilmemis"
-    ) -> str:
-        try:
-            elements = element.css(css_selector) if css_selector else []
-            if not elements:
-                return default
-            value = " ".join(str(elements[0].get_all_text()).split())
-            return value or default
-        except Exception:
-            return default
-
-    def _extract_attribute(
-        self,
-        element: Selector,
-        css_selector: str,
-        attribute: str,
-        default: str = "Belirtilmemis",
-    ) -> str:
-        try:
-            elements = element.css(css_selector) if css_selector else []
-            value = (
-                str(elements[0].attrib.get(attribute, "")).strip() if elements else ""
-            )
-            return value or default
-        except Exception:
-            return default
-
-    def _extract_common_data(
-        self, element: Selector, page_url: str = ""
-    ) -> dict[str, Any]:
-        listing_link = self._extract_attribute(
-            element, self.common_selectors.get("link", "a.card-link"), "href"
-        )
-        if listing_link != "Belirtilmemis" and page_url:
-            listing_link = urljoin(page_url, listing_link)
-        location_text = ""
-        for loc_selector in [
-            "span.listingCard__location address",
-            "span.list-view-location address",
-            "span.list-view-location",
-            ".list-view-location address",
-            ".list-view-location",
-            "address",
-        ]:
-            location_text = self._extract_text(element, loc_selector, default="")
-            if location_text and "/" in location_text:
-                break
-        location_parts = [
-            part.strip() for part in location_text.split("/") if part.strip()
-        ]
-        return {
-            "fiyat": self._extract_text(
-                element, self.common_selectors.get("price", "p.listingCard__price")
-            ),
-            "baslik": self._extract_text(
-                element, self.common_selectors.get("title", "h3.listingCard__title")
-            ),
-            "il": location_parts[0] if len(location_parts) > 0 else "Belirtilmemis",
-            "ilce": location_parts[1] if len(location_parts) > 1 else "Belirtilmemis",
-            "mahalle": location_parts[2]
-            if len(location_parts) > 2
-            else "Belirtilmemis",
-            "ilan_linki": listing_link,
-            "ilan_tarihi": self._extract_text(
-                element, self.common_selectors.get("date", "time.listingCard__date")
-            ),
-            "emlak_ofisi": self._extract_text(
-                element,
-                self.common_selectors.get("firm", "p.listingCard__owner-firm"),
-            ),
-        }
-
-    def _extract_spec_values(self, element: Selector) -> dict[str, str]:
-        values: dict[str, str] = {}
-        try:
-            for item in element.css(
-                self.common_selectors.get(
-                    "specs", "dl.listingCard__specs div.listingCard__spec-item"
-                )
-            ):
-                label = self._extract_text(
-                    item,
-                    self.common_selectors.get(
-                        "spec_label", "dt.listingCard__spec-label"
-                    ),
-                    default="",
-                )
-                value = self._extract_text(
-                    item, self.common_selectors.get("spec_value", "dd"), default=""
-                )
-                if label and value:
-                    values[label.strip()] = value.strip()
-        except Exception:  # nosec
-            pass
-        return values
-
-    def _extract_category_specific_data(self, element: Selector) -> dict[str, Any]:
-        spec_map = self.selectors.get("spec_map")
-        if not spec_map:
-            return {}
-        values = self._extract_spec_values(element)
-        data: dict[str, Any] = {}
-        for field, labels in spec_map.items():
-            data[field] = next(
-                (values[label] for label in labels if label in values),
-                "Belirtilmemis",
-            )
-        return data
-
-    def _extract_from_scrapling_element(
-        self, element: Selector, page_url: str = ""
-    ) -> dict[str, Any]:
-        data = self._extract_common_data(element, page_url=page_url)
-        data.update(self._extract_category_specific_data(element))
-        return data
 
     def extract_listings_from_page(
         self,
@@ -486,35 +318,18 @@ class HepsiemlakScraplingScraper:
         district: str | None = None,
         page_url: str = "",
     ) -> list[dict[str, Any]]:
-        listings: list[dict[str, Any]] = []
         try:
-            listing_selector = self.common_selectors.get(
-                "listing_container", "article.listingCard__box"
+            return extract_listings_from_html(
+                selector,
+                page_url=page_url or getattr(selector, "url", ""),
+                category=self.category,
+                city=city,
+                district=district,
+                scraping_method=self.scraping_method,
             )
-            listing_elements = selector.css(listing_selector)
-            if not listing_elements:
-                listing_elements = selector.css(
-                    "li.listing-item:not(.listing-item--promo)"
-                )
-            source_url = page_url or getattr(selector, "url", "")
-            for element in listing_elements:
-                data = self._extract_from_scrapling_element(
-                    element, page_url=source_url
-                )
-                if not data:
-                    continue
-                if city and (not data.get("il") or data.get("il") == "Belirtilmemis"):
-                    data["il"] = city
-                if district and (
-                    not data.get("ilce") or data.get("ilce") == "Belirtilmemis"
-                ):
-                    data["ilce"] = district
-                data["scraped_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                data["scraping_method"] = self.scraping_method
-                listings.append(data)
         except Exception as exc:
             task_log.line(f"Error extracting listings from page: {exc}", level="error")
-        return listings
+            return []
 
     def _persist_listings(self, listings: list[dict[str, Any]]) -> tuple[int, int, int]:
         if not listings:

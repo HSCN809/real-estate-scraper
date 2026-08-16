@@ -5,7 +5,6 @@ import random
 import sys
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -24,6 +23,7 @@ from scrapers.common.pagination import (
     pages_from_listing_count,
 )
 
+from .listings import extract_listings_from_html
 from .parsers import (
     ArsaParser,
     DevremulkParser,
@@ -31,186 +31,11 @@ from .parsers import (
     KonutParser,
     TuristikParser,
 )
+from .persist import save_listings_to_db
+from .urls import build_location_url, normalize_location_slug
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
-
-
-def _get_expected_hepsiemlak_subtype_slugs(
-    listing_type: str, category: str
-) -> set[str]:
-    """HepsiEmlak kategori filtresi icin beklenen subtype slug listesini don."""
-    expected_slugs: set[str] = set()
-    if not listing_type or not category:
-        return expected_slugs
-
-    try:
-        from .subtype_fetcher import fetch_subtypes
-
-        for subtype in fetch_subtypes(listing_type, category):
-            subtype_id = str(subtype.get("id", "")).strip().lower().replace("_", "-")
-            subtype_path = str(subtype.get("path", "")).strip().lower()
-            if subtype_id:
-                expected_slugs.add(subtype_id)
-            if subtype_path:
-                path_parts = [
-                    part for part in subtype_path.strip("/").split("/") if part
-                ]
-                if len(path_parts) >= 2:
-                    expected_slugs.add(path_parts[-1])
-    except Exception:  # nosec
-        # JSON yoksa veya okunamazsa URL tabanli zorlayici filtreleme yapmayiz.
-        pass
-
-    if expected_slugs:
-        expected_slugs.add(category.replace("_", "-").lower())
-
-    return expected_slugs
-
-
-def _extract_hepsiemlak_subtype_slug_from_url(
-    listing_url: str, listing_type: str
-) -> str | None:
-    """Ilan URL'sinden subtype slug'i cikar."""
-    if not listing_url:
-        return None
-
-    try:
-        parsed = urlparse(listing_url)
-        host = (parsed.netloc or "").lower()
-        if host and "hepsiemlak.com" not in host:
-            return None
-
-        parts = [part for part in parsed.path.split("/") if part]
-        if not parts:
-            return None
-
-        listing_type_marker = f"-{listing_type.lower()}"
-        first_segment = parts[0].lower()
-        if (
-            listing_type_marker not in first_segment
-            and first_segment != listing_type.lower()
-        ):
-            return None
-
-        # /<lokasyon>-satilik/<subtype-or-id> veya /satilik/<subtype-or-id> desenleri
-        if len(parts) < 2:
-            return ""
-
-        return parts[1].strip().lower()
-    except Exception:
-        return None
-
-
-def _matches_hepsiemlak_filters(
-    listing_url: str,
-    listing_type: str,
-    category: str,
-    alt_kategori: str | None,
-    expected_subtypes: set[str],
-) -> bool:
-    """URL bazli listing_type/category/subtype filtre dogrulamasi."""
-    extracted_slug = _extract_hepsiemlak_subtype_slug_from_url(
-        listing_url, listing_type
-    )
-    if extracted_slug is None:
-        return False
-
-    selected_subtype = (alt_kategori or "").replace("_", "-").strip().lower()
-    if selected_subtype:
-        return extracted_slug == selected_subtype
-
-    # Konut ana sayfasinda slug olmayabilir: /<lokasyon>-satilik/<ilan-id>
-    if category == "konut" and (not extracted_slug or extracted_slug[0].isdigit()):
-        return True
-
-    if not expected_subtypes:
-        return True
-
-    return extracted_slug in expected_subtypes
-
-
-def save_listings_to_db(
-    db,
-    listings: list[dict],
-    platform: str,
-    kategori: str,
-    ilan_tipi: str,
-    alt_kategori: str | None = None,
-    scrape_session_id: int | None = None,
-    log_db_save: bool = True,
-):
-    """İlan listesini veritabanına kaydet (upsert mantığı ile)"""
-    if not db:
-        return 0, 0, 0
-
-    try:
-        from database import crud
-
-        new_count = 0
-        updated_count = 0
-        unchanged_count = 0
-        records_to_save = listings
-
-        if platform == "hepsiemlak":
-            expected_subtypes = _get_expected_hepsiemlak_subtype_slugs(
-                ilan_tipi, kategori
-            )
-            filtered_records: list[dict] = []
-            filtered_out = 0
-
-            for data in listings:
-                listing_url = data.get("ilan_linki") or data.get("ilan_url")
-                if _matches_hepsiemlak_filters(
-                    listing_url=str(listing_url or ""),
-                    listing_type=ilan_tipi,
-                    category=kategori,
-                    alt_kategori=alt_kategori,
-                    expected_subtypes=expected_subtypes,
-                ):
-                    filtered_records.append(data)
-                else:
-                    filtered_out += 1
-
-            if filtered_out > 0:
-                logger.warning(
-                    "Filtered %s listings due to mismatched listing_type/category/subtype "
-                    "(listing_type=%s, kategori=%s, alt_kategori=%s)",
-                    filtered_out,
-                    ilan_tipi,
-                    kategori,
-                    alt_kategori,
-                )
-
-            records_to_save = filtered_records
-
-        for data in records_to_save:
-            _listing, status = crud.upsert_listing(
-                db,
-                data=data,
-                platform=platform,
-                kategori=kategori,
-                ilan_tipi=ilan_tipi,
-                alt_kategori=alt_kategori,
-                scrape_session_id=scrape_session_id,
-            )
-            if status == "created":
-                new_count += 1
-            elif status == "updated":
-                updated_count += 1
-            elif status == "unchanged":
-                unchanged_count += 1
-
-        db.commit()
-        if log_db_save:
-            logger.info(
-                f"DB save: {new_count} new, {updated_count} updated, {unchanged_count} unchanged"
-            )
-        return new_count, updated_count, unchanged_count
-    except Exception as e:
-        logger.error(f"DB save error: {e}")
-        db.rollback()
-        return 0, 0, 0
 
 
 class HepsiemlakScraper(BaseScraper):
@@ -278,21 +103,13 @@ class HepsiemlakScraper(BaseScraper):
         return None
 
     def _build_location_url(self, location_name: str) -> str:
-        location_slug = self._normalize_text(location_name)
-        if self.subtype_path:
-            parts = self.subtype_path.strip("/").split("/")
-            if len(parts) >= 2:
-                return f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}/{parts[-1]}"
-            return f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
-
-        category_path = self.hepsiemlak_config.categories.get(
-            self.listing_type, {}
-        ).get(self.current_category, "")
-        if category_path:
-            parts = category_path.strip("/").split("/")
-            if len(parts) > 1:
-                return f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}/{parts[-1]}"
-        return f"https://www.hepsiemlak.com/{location_slug}-{self.listing_type}"
+        return build_location_url(
+            location_name,
+            listing_type=self.listing_type,
+            category=self.current_category,
+            subtype_path=self.subtype_path,
+            categories=self.hepsiemlak_config.categories,
+        )
 
     def _log_location_start(self, location_name: str, location_url: str) -> None:
         task_log.section(
@@ -354,8 +171,14 @@ class HepsiemlakScraper(BaseScraper):
             task_log.section("HIC ILAN BULUNAMADI", level="warning")
 
     def extract_listing_data(self, container) -> dict[str, Any] | None:
-        """Kategori parser'ı ile ilan verisini çıkar"""
-        return self.parser.extract_listing_data(container)
+        html = container.get_attribute("outerHTML") if container is not None else ""
+        listings = extract_listings_from_html(
+            html,
+            page_url=getattr(self.driver, "current_url", ""),
+            category=self.current_category,
+            scraping_method="selenium",
+        )
+        return listings[0] if listings else None
 
     def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """HepsiEmlak için kullanılmaz - parse işlemi extract_category_data ile yapılır"""
@@ -653,28 +476,7 @@ class HepsiemlakScraper(BaseScraper):
         return unicodedata.normalize("NFKD", s)
 
     def _normalize_text(self, text: str) -> str:
-        """URL için Türkçe karakterleri dönüştür ve slug oluştur"""
-        import unicodedata
-
-        text = unicodedata.normalize("NFC", text)
-        replacements = {
-            "İ": "i",
-            "I": "i",
-            "Ğ": "g",
-            "Ü": "u",
-            "Ş": "s",
-            "Ö": "o",
-            "Ç": "c",
-            "ı": "i",
-            "ğ": "g",
-            "ü": "u",
-            "ş": "s",
-            "ö": "o",
-            "ç": "c",
-        }
-        for tr, en in replacements.items():
-            text = text.replace(tr, en)
-        return text.lower().replace(" ", "-")
+        return normalize_location_slug(text)
 
     def get_district_urls_from_dropdown(self, city_name: str) -> dict[str, str]:
         """Şehir sayfasındaki ilçe dropdown'ından gerçek URL'leri çek ve {ilçe_adı: url} sözlüğü döndür"""
@@ -1362,37 +1164,19 @@ class HepsiemlakScraper(BaseScraper):
     def scrape_current_page(
         self, fallback_city: str | None = None, fallback_district: str | None = None
     ) -> list[dict[str, Any]]:
-        """Mevcut sayfadaki tüm ilanları tara; lokasyon bulunamazsa fallback_city ve fallback_district kullanılır"""
-        listings = []
-
         try:
-            container_sel = self.common_selectors.get("listing_container")
             self._wait_for_listing_ready()
-
-            elements = self.driver.find_elements(By.CSS_SELECTOR, container_sel)
-
-            for element in elements:
-                try:
-                    data = self.parser.extract_listing_data(element)
-                    if data:
-                        # Yedek: Lokasyon parse edilemezse, taranan şehir/ilçeyi kullan
-                        if fallback_city and (
-                            not data.get("il") or data.get("il") == "Belirtilmemiş"
-                        ):
-                            data["il"] = fallback_city
-                        if fallback_district and (
-                            not data.get("ilce") or data.get("ilce") == "Belirtilmemiş"
-                        ):
-                            data["ilce"] = fallback_district
-                        listings.append(data)
-                    time.sleep(random.SystemRandom().uniform(0.02, 0.08))  # Gizli mod
-                except Exception:  # nosec
-                    continue
-
+            return extract_listings_from_html(
+                self.driver.page_source,
+                page_url=self.driver.current_url,
+                category=self.current_category,
+                city=fallback_city,
+                district=fallback_district,
+                scraping_method="selenium",
+            )
         except Exception as e:
             task_log.line(f"❌ Sayfa tarama hatası: {e}", level="error")
-
-        return listings
+            return []
 
     def start_scraping_api(self, max_pages: int = 1, progress_callback=None):
         """API tarama giriş noktası; max_pages ve progress_callback parametreleri alır"""
@@ -1575,72 +1359,47 @@ class HepsiemlakScraper(BaseScraper):
                                     )
                                 )
 
-                                # İlanları tara
-                                container_sel = self.common_selectors.get(
-                                    "listing_container"
+                                listings = extract_listings_from_html(
+                                    retry_driver.page_source,
+                                    page_url=retry_driver.current_url,
+                                    category=self.current_category,
+                                    city=page_info.city,
+                                    district=page_info.district,
+                                    scraping_method="selenium",
                                 )
-                                elements = retry_driver.find_elements(
-                                    By.CSS_SELECTOR, container_sel
-                                )
 
-                                if elements:
-                                    listings = []
-                                    for element in elements:
-                                        try:
-                                            data = self.parser.extract_listing_data(
-                                                element
-                                            )
-                                            if data:
-                                                listings.append(data)
-                                        except Exception:  # nosec
-                                            continue
-
-                                    if listings:
-                                        task_log.line(
-                                            f"   ✅ {len(listings)} ilan bulundu!"
-                                        )
-
-                                        # Verileri kaydet
-                                        if page_info.district:
-                                            self._save_district_data(
-                                                page_info.city,
-                                                page_info.district,
-                                                listings,
-                                            )
-                                        else:
-                                            if self.db:
-                                                save_listings_to_db(
-                                                    self.db,
-                                                    listings,
-                                                    platform="hepsiemlak",
-                                                    kategori=self.category,
-                                                    ilan_tipi=self.listing_type,
-                                                    alt_kategori=self.subtype_name,
-                                                    scrape_session_id=self.scrape_session_id,
-                                                )
-
-                                        # Başarılı olarak işaretle
-                                        failed_pages_tracker.mark_as_success(
+                                if listings:
+                                    task_log.line(
+                                        f"   ✅ {len(listings)} ilan bulundu!"
+                                    )
+                                    if page_info.district:
+                                        self._save_district_data(
                                             page_info.city,
                                             page_info.district,
-                                            page_info.page_number,
+                                            listings,
                                         )
-                                        successful_retries += 1
-                                        self.total_scraped_count += len(listings)
-                                        total_listings_count += len(listings)
-                                    else:
-                                        task_log.line(
-                                            "   ⚠️ 0 ilan - devam ediliyor",
-                                            level="warning",
+                                    elif self.db:
+                                        save_listings_to_db(
+                                            self.db,
+                                            listings,
+                                            platform="hepsiemlak",
+                                            kategori=self.category,
+                                            ilan_tipi=self.listing_type,
+                                            alt_kategori=self.subtype_name,
+                                            scrape_session_id=self.scrape_session_id,
                                         )
-                                        failed_pages_tracker.increment_retry_count(
-                                            page_info.city,
-                                            page_info.district,
-                                            page_info.page_number,
-                                        )
+                                    failed_pages_tracker.mark_as_success(
+                                        page_info.city,
+                                        page_info.district,
+                                        page_info.page_number,
+                                    )
+                                    successful_retries += 1
+                                    self.total_scraped_count += len(listings)
+                                    total_listings_count += len(listings)
                                 else:
                                     task_log.line(
-                                        "   ⚠️ Element bulunamadı", level="warning"
+                                        "   ⚠️ 0 ilan - devam ediliyor",
+                                        level="warning",
                                     )
                                     failed_pages_tracker.increment_retry_count(
                                         page_info.city,

@@ -6,10 +6,8 @@ import random
 import re
 import sys
 import time
-import unicodedata
-from datetime import datetime
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse
 
 from scrapling.fetchers import (
     AsyncDynamicSession,
@@ -30,7 +28,15 @@ from utils.logger import TaskLogLayout, get_logger
 from scrapers.common.http_status import is_failed_http_response, response_http_status
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
-from .main import EmlakJetScraper, save_listings_to_db
+from .listings import CATEGORY_PARSERS, extract_listings_from_html, extract_total_pages
+from .persist import save_listings_to_db
+from .urls import (
+    build_city_url,
+    build_page_url,
+    extract_location_name,
+    normalize_text,
+    page_number_from_url,
+)
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
@@ -129,9 +135,7 @@ class EmlakJetScraplingScraper:
 
         self.selectors = get_selectors("emlakjet", category)
         self.common_selectors = get_common_selectors("emlakjet")
-        parser_class = EmlakJetScraper.CATEGORY_PARSERS.get(
-            category, EmlakJetScraper.CATEGORY_PARSERS["konut"]
-        )
+        parser_class = CATEGORY_PARSERS.get(category, CATEGORY_PARSERS["konut"])
         self.parser = parser_class()
 
         self.session_context = None
@@ -188,52 +192,23 @@ class EmlakJetScraplingScraper:
         return "scrapling_stealth_session"
 
     def _normalize_text(self, text: str) -> str:
-        normalized = unicodedata.normalize("NFKD", text or "")
-        ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-        replacements = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc")
-        return ascii_only.translate(replacements).casefold().strip()
+        return normalize_text(text)
 
     @staticmethod
     def _build_page_url(base_url: str, page_num: int) -> str:
-        if page_num <= 1:
-            return base_url
-        parsed = urlparse(base_url)
-        query = parse_qs(parsed.query)
-        query["sayfa"] = [str(page_num)]
-        return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-
-    def _slugify_location(self, name: str) -> str:
-        normalized = unicodedata.normalize("NFKD", str(name or ""))
-        ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-        ascii_only = ascii_only.translate(str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc"))
-        slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
-        return slug
+        return build_page_url(base_url, page_num)
 
     def _build_city_url(self, city_name: str) -> str:
-        base_path = (self.subtype_path or self.base_url).strip()
-        if base_path.startswith(("http://", "https://")):
-            parsed = urlparse(base_path)
-            path_part = parsed.path.strip("/")
-        else:
-            path_part = base_path.strip("/")
-
-        if not path_part:
-            return self.base_url
-
-        city_slug = self._slugify_location(city_name)
-        if not city_slug:
-            return f"{self.base_config.base_url.rstrip('/')}/{path_part}"
-        return f"{self.base_config.base_url.rstrip('/')}/{path_part}/{city_slug}"
+        return build_city_url(
+            city_name,
+            base_url=self.base_url,
+            site_base=self.base_config.base_url,
+            subtype_path=self.subtype_path,
+        )
 
     @staticmethod
     def _get_page_number(url: str) -> int:
-        try:
-            page_values = parse_qs(urlparse(url).query).get("sayfa")
-            if page_values and page_values[0].isdigit():
-                return int(page_values[0])
-        except Exception:  # nosec
-            pass
-        return 1
+        return page_number_from_url(url)
 
     def _is_listing_limit_reached(self) -> bool:
         return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
@@ -410,63 +385,6 @@ class EmlakJetScraplingScraper:
         except Exception:
             return default
 
-    def _extract_common_data(
-        self, element: Selector, page_url: str = ""
-    ) -> dict[str, Any]:
-        title = self._extract_text(
-            element,
-            self.common_selectors.get("title", "h3[data-listing-title] a"),
-        )
-
-        # Yeni yapı: konum ve özellikler satırı karttaki iki p.text-xs elemanıdır
-        location = ""
-        quick_info = ""
-        text_p_elements = element.css(
-            self.common_selectors.get("location", "p.text-xs")
-        )
-        if text_p_elements:
-            location = " ".join(str(text_p_elements[0].get_all_text()).split())
-        if len(text_p_elements) > 1:
-            quick_info = " ".join(str(text_p_elements[1].get_all_text()).split())
-
-        price = self._extract_text(
-            element,
-            self.common_selectors.get("price", "span.shrink-0.whitespace-nowrap"),
-        )
-        image_url = self._extract_attribute(
-            element,
-            self.common_selectors.get("image", "img[src*='/listing/']"),
-            "src",
-        )
-        listing_url = self._extract_attribute(
-            element,
-            self.common_selectors.get("link", "h3[data-listing-title] a"),
-            "href",
-        )
-        if listing_url and page_url:
-            listing_url = urljoin(page_url, listing_url)
-
-        badges = []
-        for badge in element.css(
-            self.common_selectors.get("badge_wrapper", "span[class*='px-2 py-0.5']")
-        ):
-            badge_text = " ".join(str(badge.get_all_text()).split())
-            if badge_text:
-                badges.append(self._normalize_text(badge_text))
-
-        return {
-            "baslik": title,
-            "lokasyon": location,
-            "fiyat": price,
-            "ilan_url": listing_url,
-            "resim_url": image_url,
-            "one_cikan": any("one cikan" in badge for badge in badges),
-            "yeni": any(
-                badge == "yeni" or badge.startswith("yeni ") for badge in badges
-            ),
-            "_quick_info": quick_info,
-        }
-
     def extract_listings_from_page(
         self,
         selector: Selector,
@@ -475,37 +393,19 @@ class EmlakJetScraplingScraper:
         district: str | None = None,
         neighborhood: str | None = None,
     ) -> list[dict[str, Any]]:
-        listings: list[dict[str, Any]] = []
         try:
-            listing_selector = self.common_selectors.get(
-                "listing_container", "a.styles_wrapper__587DT"
+            return extract_listings_from_html(
+                selector,
+                page_url=page_url or getattr(selector, "url", ""),
+                category=self.category,
+                city=city,
+                district=district,
+                neighborhood=neighborhood,
+                scraping_method=self.scraping_method,
             )
-            for element in selector.css(listing_selector):
-                data = self._extract_common_data(
-                    element, page_url=page_url or getattr(selector, "url", "")
-                )
-                if not all(
-                    [data.get("baslik"), data.get("lokasyon"), data.get("fiyat")]
-                ):
-                    continue
-                quick_info = data.pop("_quick_info", "")
-                data.update(
-                    self.parser.parse_category_details(
-                        quick_info, data.get("baslik", "")
-                    )
-                )
-                data["tarih"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                data["scraping_method"] = self.scraping_method
-                if city:
-                    data["il"] = city
-                if district:
-                    data["ilce"] = district
-                if neighborhood:
-                    data["mahalle"] = neighborhood
-                listings.append(data)
         except Exception as exc:
             task_log.line(f"Error extracting listings from page: {exc}", level="error")
-        return listings
+            return []
 
     def _persist_listings(self, listings: list[dict[str, Any]]) -> tuple[int, int, int]:
         if not listings:
@@ -557,25 +457,7 @@ class EmlakJetScraplingScraper:
 
     def get_total_pages(self, selector: Selector) -> int:
         try:
-            page_numbers: list[int] = []
-            for link in selector.css(
-                self.common_selectors.get("pagination_list", "a[href*='sayfa=']")
-            ):
-                text = str(link.text).strip()
-                if text.isdigit():
-                    page_numbers.append(int(text))
-                href = str(link.attrib.get("href", "")).strip()
-                page_value = parse_qs(urlparse(href).query).get("sayfa")
-                if page_value and page_value[0].isdigit():
-                    page_numbers.append(int(page_value[0]))
-
-            active_page = self._extract_text(
-                selector,
-                self.common_selectors.get("active_page", "span[aria-current='page']"),
-            )
-            if active_page.isdigit():
-                page_numbers.append(int(active_page))
-            return max(page_numbers) if page_numbers else 1
+            return extract_total_pages(selector)
         except Exception as exc:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
@@ -627,19 +509,7 @@ class EmlakJetScraplingScraper:
         return str(listing_count) if listing_count is not None else "Bilinmiyor"
 
     def _clean_location_name(self, text: str) -> str:
-        compact = " ".join(str(text).split())
-        compact = re.sub(r"\s+\(?[\d\.\,]+\)?$", "", compact).strip()
-        compact = re.sub(
-            r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE
-        ).strip()
-        compact = re.sub(
-            r"\s+(satılık|satilik|kiralık|kiralik)\b.*$",
-            "",
-            compact,
-            flags=re.IGNORECASE,
-        ).strip()
-        compact = re.sub(r"\s*[-–|•]+\s*$", "", compact).strip()
-        return compact
+        return extract_location_name(text)
 
     def get_location_options(
         self, location_type: str, current_url: str

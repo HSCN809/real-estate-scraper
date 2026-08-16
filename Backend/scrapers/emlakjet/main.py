@@ -2,12 +2,9 @@
 
 import os
 import random
-import re
 import sys
 import time
-import unicodedata
 from typing import Any
-from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -21,293 +18,20 @@ from core.driver_manager import DriverManager
 from core.failed_pages_tracker import FailedPageInfo, failed_pages_tracker
 from utils.logger import TaskLogLayout, get_logger
 
-from .parsers import ArsaParser, IsyeriParser, KonutParser, TuristikTesisParser
+from .listings import CATEGORY_PARSERS, extract_listings_from_html
+from .parsers import KonutParser
+from .persist import save_listings_to_db
+from .urls import extract_location_name as _extract_location_name
+from .urls import normalize_location_token as _normalize_location_token
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
-_URL_FILTER_FALLBACK_LOGGED: set[tuple] = set()
-
-
-def _normalize_emlakjet_slug(value: str | None) -> str:
-    """Normalize slug-like values for robust filter matching."""
-    text = str(value or "").strip().lower().replace("_", "-")
-    normalized = unicodedata.normalize("NFKD", text)
-    ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    ascii_only = (
-        ascii_only.replace("ı", "i")
-        .replace("ş", "s")
-        .replace("ğ", "g")
-        .replace("ü", "u")
-        .replace("ö", "o")
-        .replace("ç", "c")
-    )
-    ascii_only = re.sub(r"[^a-z0-9-]+", "-", ascii_only)
-    ascii_only = re.sub(r"-{2,}", "-", ascii_only).strip("-")
-    return ascii_only
-
-
-def _normalize_location_token(value: str | None) -> str:
-    text = unicodedata.normalize("NFKD", str(value or ""))
-    ascii_only = "".join(ch for ch in text if not unicodedata.combining(ch))
-    ascii_only = ascii_only.translate(str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc"))
-    return re.sub(r"\s+", " ", ascii_only).strip().casefold()
-
-
-def _extract_location_name(raw_text: str) -> str:
-    compact = " ".join(str(raw_text or "").split())
-    compact = re.sub(r"\s+\(?[\d\.\,]+\)?$", "", compact).strip()
-    compact = re.sub(
-        r"\s+\d[\d\.\,]*\s+ilan.*$", "", compact, flags=re.IGNORECASE
-    ).strip()
-    compact = re.sub(
-        r"\s+(satılık|satilik|kiralık|kiralik)\b.*$", "", compact, flags=re.IGNORECASE
-    ).strip()
-    compact = re.sub(r"\s*[-–|•]+\s*$", "", compact).strip()
-    return compact
-
-
-def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> str | None:
-    """Extract listing type/category slug from Emlakjet URL."""
-    if not listing_url:
-        return None
-
-    try:
-        parsed = urlparse(listing_url)
-        host = (parsed.netloc or "").lower()
-        if host and "emlakjet.com" not in host:
-            return None
-
-        parts = [
-            _normalize_emlakjet_slug(part) for part in parsed.path.split("/") if part
-        ]
-        if not parts:
-            return None
-
-        # Listing URLs are often /ilan/... and category slug may appear in later segments.
-        for part in parts:
-            if re.match(r"^(satilik|kiralik)-[a-z0-9-]+$", part):
-                return part
-
-        path_slug = _normalize_emlakjet_slug(parsed.path)
-        embedded_match = re.search(r"(satilik|kiralik)-[a-z0-9-]+", path_slug)
-        if embedded_match:
-            return embedded_match.group(0)
-
-        return parts[0]
-    except Exception:
-        return None
-
-
-def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> set[str]:
-    """Build expected first-path slugs for a listing_type/category combo."""
-    expected: set[str] = set()
-    cfg = get_emlakjet_config()
-    category_map = cfg.categories.get(listing_type or "", {})
-    category_path = str(category_map.get(category or "", "")).strip("/")
-    if category_path:
-        expected.add(_normalize_emlakjet_slug(category_path.split("/")[0]))
-
-    try:
-        from .subtype_fetcher import fetch_subtypes
-
-        for subtype in fetch_subtypes(listing_type, category):
-            subtype_path = str(subtype.get("path", "")).strip("/")
-            subtype_id = _normalize_emlakjet_slug(str(subtype.get("id", "")))
-            if subtype_path:
-                expected.add(_normalize_emlakjet_slug(subtype_path.split("/")[0]))
-            if subtype_id:
-                expected.add(subtype_id)
-                listing_prefix = _normalize_emlakjet_slug(listing_type)
-                if listing_prefix:
-                    expected.add(f"{listing_prefix}-{subtype_id}")
-    except Exception:  # nosec
-        pass
-
-    return {slug for slug in expected if slug}
-
-
-def _get_disallowed_emlakjet_primary_slugs(
-    listing_type: str, category: str
-) -> set[str]:
-    """Collect known primary slugs of other categories to avoid false positives."""
-    disallowed: set[str] = set()
-    cfg = get_emlakjet_config()
-    category_map = cfg.categories.get(listing_type or "", {})
-    for cat_key, cat_path in category_map.items():
-        if cat_key == category:
-            continue
-        path = str(cat_path or "").strip("/")
-        if not path:
-            continue
-        disallowed.add(_normalize_emlakjet_slug(path.split("/")[0]))
-    return disallowed
-
-
-def _matches_emlakjet_filters(
-    listing_url: str,
-    listing_type: str,
-    category: str,
-    alt_kategori: str | None,
-    expected_primary_slugs: set[str],
-    disallowed_primary_slugs: set[str],
-) -> bool:
-    """URL based listing_type/category/subtype guard for Emlakjet."""
-    extracted = _extract_emlakjet_primary_slug_from_url(listing_url)
-    if extracted is None:
-        return False
-
-    selected_subtype = _normalize_emlakjet_slug(alt_kategori)
-    if selected_subtype:
-        return extracted == selected_subtype or extracted.endswith(
-            f"-{selected_subtype}"
-        )
-
-    if expected_primary_slugs and extracted in expected_primary_slugs:
-        return True
-
-    listing_prefix = _normalize_emlakjet_slug(listing_type)
-    category_slug = _normalize_emlakjet_slug(category)
-
-    # Konut has many subtype slugs (satilik-daire, satilik-villa, ...).
-    if (
-        category_slug == "konut"
-        and listing_prefix
-        and extracted.startswith(f"{listing_prefix}-")
-    ):
-        return extracted not in disallowed_primary_slugs
-
-    if category_slug and category_slug in extracted:
-        return True
-
-    if disallowed_primary_slugs and extracted in disallowed_primary_slugs:
-        return False
-
-    return not expected_primary_slugs
-
-
-def save_listings_to_db(
-    db,
-    listings: list[dict],
-    platform: str,
-    kategori: str,
-    ilan_tipi: str,
-    alt_kategori: str | None = None,
-    scrape_session_id: int | None = None,
-    log_db_save: bool = True,
-):
-    """Save listing rows with URL-level listing_type/category/subtype validation."""
-    if not db:
-        return 0, 0, 0
-
-    try:
-        from database import crud
-
-        records_to_save = listings
-        new_count = 0
-        updated_count = 0
-        unchanged_count = 0
-
-        if platform == "emlakjet":
-            expected_primary_slugs = _get_expected_emlakjet_primary_slugs(
-                ilan_tipi, kategori
-            )
-            disallowed_primary_slugs = _get_disallowed_emlakjet_primary_slugs(
-                ilan_tipi, kategori
-            )
-            filtered_records: list[dict] = []
-            filtered_out = 0
-
-            for data in listings:
-                listing_url = data.get("ilan_url") or data.get("ilan_linki")
-                if _matches_emlakjet_filters(
-                    listing_url=str(listing_url or ""),
-                    listing_type=ilan_tipi,
-                    category=kategori,
-                    alt_kategori=alt_kategori,
-                    expected_primary_slugs=expected_primary_slugs,
-                    disallowed_primary_slugs=disallowed_primary_slugs,
-                ):
-                    filtered_records.append(data)
-                else:
-                    filtered_out += 1
-
-            if filtered_out > 0 and filtered_records:
-                logger.info(
-                    "URL filter skipped %s/%s listings (kept=%s) "
-                    "(listing_type=%s, kategori=%s, alt_kategori=%s)",
-                    filtered_out,
-                    len(listings),
-                    len(filtered_records),
-                    ilan_tipi,
-                    kategori,
-                    alt_kategori,
-                )
-
-            if listings and not filtered_records:
-                fallback_log_key = (
-                    scrape_session_id,
-                    ilan_tipi,
-                    kategori,
-                    alt_kategori,
-                )
-                if fallback_log_key not in _URL_FILTER_FALLBACK_LOGGED:
-                    logger.info(
-                        "URL filter matched none; using unfiltered fallback save "
-                        "(listings=%s, listing_type=%s, kategori=%s, alt_kategori=%s)",
-                        len(listings),
-                        ilan_tipi,
-                        kategori,
-                        alt_kategori,
-                    )
-                    _URL_FILTER_FALLBACK_LOGGED.add(fallback_log_key)
-                records_to_save = listings
-            else:
-                records_to_save = filtered_records
-
-        for data in records_to_save:
-            _, status = crud.upsert_listing(
-                db,
-                data=data,
-                platform=platform,
-                kategori=kategori,
-                ilan_tipi=ilan_tipi,
-                alt_kategori=alt_kategori,
-                scrape_session_id=scrape_session_id,
-            )
-            if status == "created":
-                new_count += 1
-            elif status == "updated":
-                updated_count += 1
-            elif status == "unchanged":
-                unchanged_count += 1
-
-        db.commit()
-        if log_db_save:
-            logger.info(
-                "DB save: %s new, %s updated, %s unchanged",
-                new_count,
-                updated_count,
-                unchanged_count,
-            )
-        return new_count, updated_count, unchanged_count
-    except Exception as exc:
-        logger.error(f"DB save error: {exc}")
-        db.rollback()
-        return 0, 0, 0
 
 
 class EmlakJetScraper(BaseScraper):
     """EmlakJet platformu ana scraper sınıfı"""
 
-    CATEGORY_PARSERS = {
-        "konut": KonutParser,
-        "arsa": ArsaParser,
-        "isyeri": IsyeriParser,
-        "turistik_tesis": TuristikTesisParser,
-        "kat_karsiligi_arsa": ArsaParser,  # Arsa parser'ı kullanır
-        "devren_isyeri": IsyeriParser,  # İşyeri parser'ı kullanır
-        "gunluk_kiralik": KonutParser,  # Konut parser'ı kullanır
-    }
+    CATEGORY_PARSERS = CATEGORY_PARSERS
 
     def __init__(
         self,
@@ -329,8 +53,14 @@ class EmlakJetScraper(BaseScraper):
         self.parser = parser_class()
 
     def extract_listing_data(self, container) -> dict[str, Any] | None:
-        """Kategori parser'ı ile ilan verisini çıkar"""
-        return self.parser.extract_listing_data(container)
+        html = container.get_attribute("outerHTML") if container is not None else ""
+        listings = extract_listings_from_html(
+            html,
+            page_url=getattr(self.driver, "current_url", ""),
+            category=self.category,
+            scraping_method="selenium",
+        )
+        return listings[0] if listings else None
 
     def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Kategori parser'ı ile detayları parse et"""
@@ -396,51 +126,19 @@ class EmlakJetScraper(BaseScraper):
         )
 
     def scrape_current_page(self) -> list[dict[str, Any]]:
-        """Mevcut sayfadaki tüm ilanları tara"""
-        from datetime import datetime
-
-        listings = []
         try:
-            container_selector = self.common_selectors.get("listing_container")
-            if not container_selector:
+            if not self.common_selectors.get("listing_container"):
                 task_log.line("No listing_container selector defined", level="error")
                 return []
-
-            containers = self.find_elements_safe(container_selector)
-
-            # EmlakJet: "Benzer İlanlar" bölümündeki kartları hariç tut
-            if containers:
-                filtered = []
-                for c in containers:
-                    try:
-                        is_similar = self.driver.execute_script(
-                            'return arguments[0].closest(\'[class*="similarListing"], [class*="similarlisting"]\') !== null;',
-                            c,
-                        )
-                        if not is_similar:
-                            filtered.append(c)
-                    except Exception:
-                        filtered.append(c)
-                if len(filtered) < len(containers):
-                    logger.debug(
-                        f"Filtered out {len(containers) - len(filtered)} 'Benzer İlanlar' listings"
-                    )
-                containers = filtered
-
-            for container in containers:
-                try:
-                    data = self.extract_listing_data(container)
-                    if data:
-                        data["tarih"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        listings.append(data)
-                except Exception as e:
-                    logger.debug(f"İlan çıkarma hatası: {e}")
-                    continue
-
+            return extract_listings_from_html(
+                self.driver.page_source,
+                page_url=self.driver.current_url,
+                category=self.category,
+                scraping_method="selenium",
+            )
         except Exception as e:
             task_log.line(f"Sayfa tarama hatası: {e}", level="error")
-
-        return listings
+            return []
 
     def get_location_options(self, location_type: str, current_url: str) -> tuple:
         """Mevcut sayfadan lokasyon seçeneklerini ve ilan sayısını al"""
@@ -1429,56 +1127,37 @@ class EmlakJetScraper(BaseScraper):
                             retry_driver.get(page_info.url)
                             time.sleep(self.config.wait_between_pages + 1)
 
-                            # İlanları tara
-                            container_selector = self.common_selectors.get(
-                                "listing_container"
+                            listings = extract_listings_from_html(
+                                retry_driver.page_source,
+                                page_url=retry_driver.current_url,
+                                category=self.category,
+                                city=page_info.city,
+                                district=page_info.district,
+                                scraping_method="selenium",
                             )
-                            containers = retry_driver.find_elements(
-                                By.CSS_SELECTOR, container_selector
-                            )
 
-                            if containers:
-                                listings = []
-                                for container in containers:
-                                    try:
-                                        data = self.extract_listing_data(container)
-                                        if data:
-                                            listings.append(data)
-                                    except Exception:  # nosec
-                                        continue
-
-                                if listings:
-                                    print(f"   ✅ {len(listings)} ilan bulundu!")
-                                    self.all_listings.extend(listings)
-
-                                    # DB'ye kaydet
-                                    if self.db:
-                                        save_listings_to_db(
-                                            self.db,
-                                            listings,
-                                            platform="emlakjet",
-                                            kategori=self.category,
-                                            ilan_tipi=self.listing_type,
-                                            alt_kategori=self.subtype_name,
-                                            scrape_session_id=self.scrape_session_id,
-                                            log_db_save=False,
-                                        )
-
-                                    failed_pages_tracker.mark_as_success(
-                                        page_info.city,
-                                        page_info.district,
-                                        page_info.page_number,
+                            if listings:
+                                print(f"   ✅ {len(listings)} ilan bulundu!")
+                                self.all_listings.extend(listings)
+                                if self.db:
+                                    save_listings_to_db(
+                                        self.db,
+                                        listings,
+                                        platform="emlakjet",
+                                        kategori=self.category,
+                                        ilan_tipi=self.listing_type,
+                                        alt_kategori=self.subtype_name,
+                                        scrape_session_id=self.scrape_session_id,
+                                        log_db_save=False,
                                     )
-                                    successful_retries += 1
-                                else:
-                                    print("   ⚠️ 0 ilan - devam ediliyor")
-                                    failed_pages_tracker.increment_retry_count(
-                                        page_info.city,
-                                        page_info.district,
-                                        page_info.page_number,
-                                    )
+                                failed_pages_tracker.mark_as_success(
+                                    page_info.city,
+                                    page_info.district,
+                                    page_info.page_number,
+                                )
+                                successful_retries += 1
                             else:
-                                print("   ⚠️ Element bulunamadı")
+                                print("   ⚠️ 0 ilan - devam ediliyor")
                                 failed_pages_tracker.increment_retry_count(
                                     page_info.city,
                                     page_info.district,
