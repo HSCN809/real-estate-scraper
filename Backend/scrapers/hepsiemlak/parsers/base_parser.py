@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak ilanları için temel parser"""
 
-from typing import Dict, Any, Optional, List
+import os
+import sys
+from typing import Any
+
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException
-
-import sys
-import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from core.selectors import get_selectors, get_common_selectors
+from core.selectors import get_common_selectors, get_selectors
 
 
 class BaseHepsiemlakParser:
@@ -43,7 +42,7 @@ class BaseHepsiemlakParser:
         except NoSuchElementException:
             return ""
 
-    def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
+    def extract_common_data(self, container: WebElement) -> dict[str, Any]:
         """İlan konteynerinden ortak veri alanlarını çıkar"""
         price_sel = self.common_selectors.get("price", "p.listingCard__price")
         title_sel = self.common_selectors.get("title", "h3.listingCard__title")
@@ -88,9 +87,9 @@ class BaseHepsiemlakParser:
             "emlak_ofisi": firm or "Belirtilmemiş",
         }
 
-    def extract_spec_values(self, container: WebElement) -> Dict[str, str]:
+    def extract_spec_values(self, container: WebElement) -> dict[str, str]:
         """dl/dt/dd yapısındaki özellikleri label->value haritası olarak çıkar"""
-        values: Dict[str, str] = {}
+        values: dict[str, str] = {}
         try:
             spec_items = container.find_elements(
                 By.CSS_SELECTOR,
@@ -118,13 +117,13 @@ class BaseHepsiemlakParser:
             pass
         return values
 
-    def extract_spec_map_data(self, container: WebElement) -> Dict[str, Any]:
+    def extract_spec_map_data(self, container: WebElement) -> dict[str, Any]:
         """spec_map yapılandırmasına göre kategori alanlarını çıkar"""
         spec_map = self.selectors.get("spec_map")
         if not spec_map:
             return {}
         values = self.extract_spec_values(container)
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         for field, labels in spec_map.items():
             data[field] = next(
                 (values[label] for label in labels if label in values),
@@ -132,11 +131,11 @@ class BaseHepsiemlakParser:
             )
         return data
 
-    def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
+    def extract_category_data(self, container: WebElement) -> dict[str, Any]:
         """Kategoriye özel verileri çıkar; alt sınıflarda override edilmeli"""
         return {}
 
-    def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
+    def extract_listing_data(self, container: WebElement) -> dict[str, Any] | None:
         """Tam ilan verisini çıkar; geçersizse None döndürür"""
         try:
             # Ortak verileri al
@@ -151,7 +150,7 @@ class BaseHepsiemlakParser:
         except Exception:
             return None
 
-    def get_csv_fields(self) -> List[str]:
+    def get_csv_fields(self) -> list[str]:
         """Bu kategori için CSV alan adlarını getir"""
         return self.selectors.get(
             "csv_fields",

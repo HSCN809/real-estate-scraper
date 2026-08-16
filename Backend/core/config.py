@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Scraper konfigürasyon yönetimi"""
 
 import os

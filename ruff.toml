@@ -1,0 +1,14 @@
+target-version = "py312"
+extend-exclude = [".venv-test", ".venv", "venv"]
+
+[lint]
+ignore = [
+    "BLE001",
+    "S110",
+    "S112",
+    "B008",
+    "RUF012",
+    "DTZ003",
+    "DTZ005",
+    "DTZ007",
+]

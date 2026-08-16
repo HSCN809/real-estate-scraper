@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Task status store tests."""
 
 import os
@@ -6,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from core.task_status import (  # noqa: E402
+from core.task_status import (
     TASK_STATUS_COMPLETED,
     TASK_STATUS_FAILED,
     TASK_STATUS_QUEUED,

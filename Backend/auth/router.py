@@ -1,27 +1,27 @@
-# -*- coding: utf-8 -*-
 """Kimlik doğrulama API endpoint'leri"""
 
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, Response
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from datetime import datetime
 
 from database.connection import get_db
 from database.models import User
-from .security import (
-    verify_password,
-    get_password_hash,
-    create_access_token,
-    ACCESS_TOKEN_EXPIRE_DAYS,
-)
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
 from .dependencies import get_current_user
 from .schemas import (
+    ChangePasswordRequest,
+    UpdateProfileRequest,
     UserCreate,
     UserLogin,
     UserResponse,
-    ChangePasswordRequest,
-    UpdateProfileRequest,
+)
+from .security import (
+    ACCESS_TOKEN_EXPIRE_DAYS,
+    create_access_token,
+    get_password_hash,
+    verify_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])

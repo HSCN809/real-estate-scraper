@@ -1,24 +1,22 @@
-# -*- coding: utf-8 -*-
 """Celery görev destekli gelişmiş loglama araçları"""
 
-import os
-import sys
-import logging
 import json
-import tempfile
-from datetime import datetime
-from typing import Optional
-from logging.handlers import RotatingFileHandler
+import logging
+import os
+import os as _os
+import sys
 
 # Core modülünden içe aktarım
 import sys as _sys
-import os as _os
+import tempfile
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
 from core.config import get_config
 
 
-def resolve_writable_log_file(log_file: str) -> Optional[str]:
+def resolve_writable_log_file(log_file: str) -> str | None:
     """Yazilabilir bir log dosyasi yolu dondurur, gerekirse fallback kullanir."""
     fallback_dir = os.getenv(
         "LOG_FALLBACK_DIR", os.path.join(tempfile.gettempdir(), "scraper-logs")
@@ -99,7 +97,7 @@ class ColoredFormatter(logging.Formatter):
 class TaskContextFilter(logging.Filter):
     """Log kayıtlarına görev bağlamı ekleyen filtre"""
 
-    def __init__(self, task_id: Optional[str] = None):
+    def __init__(self, task_id: str | None = None):
         super().__init__()
         self.task_id = task_id
 
@@ -120,11 +118,11 @@ class TaskContextFilter(logging.Filter):
 
 def setup_logger(
     name: str = "scraper",
-    level: Optional[str] = None,
-    log_to_file: Optional[bool] = None,
-    log_file: Optional[str] = None,
+    level: str | None = None,
+    log_to_file: bool | None = None,
+    log_file: str | None = None,
     structured: bool = False,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
 ) -> logging.Logger:
     """Konsol ve isteğe bağlı dosya handler'ları ile logger yapılandırır ve döndürür."""
     config = get_config()
@@ -200,7 +198,7 @@ def setup_logger(
     return logger
 
 
-def get_logger(name: str = "scraper", task_id: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str = "scraper", task_id: str | None = None) -> logging.Logger:
     """Mevcut bir logger döndürür veya yoksa yeni bir tane oluşturur."""
     logger = logging.getLogger(name)
 
@@ -221,7 +219,7 @@ def get_logger(name: str = "scraper", task_id: Optional[str] = None) -> logging.
 class ScraperLogger:
     """Scraper işlemleri için Celery görev takibi destekli özel logger sınıfı."""
 
-    def __init__(self, name: str = "scraper", task_id: Optional[str] = None):
+    def __init__(self, name: str = "scraper", task_id: str | None = None):
         self.logger = get_logger(name, task_id)
         self.task_id = task_id
 
@@ -281,7 +279,7 @@ class ScraperLogger:
         """Veri kaydetmeyi logla"""
         self.logger.info(
             f"{count} kayit {filename} dosyasina kaydedildi",
-            extra={"filename": filename, "count": count, **(extra or {})},
+            extra={"saved_filename": filename, "count": count, **(extra or {})},
         )
 
     def task_progress(self, progress: int, message: str, **extra):
@@ -299,20 +297,20 @@ class TaskLogLayout:
         self.width = width
         self.level = level
 
-    def _write(self, message: str, level: Optional[str] = None):
+    def _write(self, message: str, level: str | None = None):
         getattr(self.logger, level or self.level)(message)
 
-    def line(self, message: str, level: Optional[str] = None):
+    def line(self, message: str, level: str | None = None):
         self._write(message, level=level)
 
-    def lines(self, *messages: str, level: Optional[str] = None):
+    def lines(self, *messages: str, level: str | None = None):
         for message in messages:
             self._write(message, level=level)
 
-    def divider(self, char: str = "=", level: Optional[str] = None):
+    def divider(self, char: str = "=", level: str | None = None):
         self._write(char * self.width, level=level)
 
-    def section(self, *messages: str, char: str = "=", level: Optional[str] = None):
+    def section(self, *messages: str, char: str = "=", level: str | None = None):
         self.divider(char=char, level=level)
         self.lines(*messages, level=level)
         self.divider(char=char, level=level)

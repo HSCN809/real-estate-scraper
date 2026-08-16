@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak Scrapling tabanli scraper."""
 
 import logging
@@ -8,7 +7,7 @@ import re
 import sys
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from scrapling.fetchers import (
@@ -26,6 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
+
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
 from .main import save_listings_to_db
@@ -54,7 +54,7 @@ SPIDER_METHOD_TO_SESSION = {
     "scrapling_spider_stealth_session": "stealth",
 }
 
-SPIDER_SESSION_CONFIG: Dict[str, Dict[str, Any]] = {
+SPIDER_SESSION_CONFIG: dict[str, dict[str, Any]] = {
     "fetcher": {
         "concurrent_requests": 3,
         "download_delay": 0.0,
@@ -89,14 +89,14 @@ class HepsiemlakScraplingScraper:
         self,
         listing_type: str = "satilik",
         category: str = "konut",
-        subtype_path: Optional[str] = None,
-        selected_cities: Optional[List[str]] = None,
-        selected_districts: Optional[Dict[str, List[str]]] = None,
+        subtype_path: str | None = None,
+        selected_cities: list[str] | None = None,
+        selected_districts: dict[str, list[str]] | None = None,
         use_stealth: bool = True,
         headless: bool = True,
-        scraping_method: Optional[str] = None,
+        scraping_method: str | None = None,
         proxy_enabled: bool = False,
-        proxy_url: Optional[str] = None,
+        proxy_url: str | None = None,
     ):
         base_config = get_hepsiemlak_config()
         category_path = subtype_path or base_config.categories.get(
@@ -135,7 +135,7 @@ class HepsiemlakScraplingScraper:
         self.new_listings_count = 0
         self.duplicate_count = 0
         self.total_new_listings = 0
-        self.metrics: Dict[str, Any] = {
+        self.metrics: dict[str, Any] = {
             "start_time": None,
             "end_time": None,
             "total_pages": 0,
@@ -147,7 +147,7 @@ class HepsiemlakScraplingScraper:
 
     @staticmethod
     def _resolve_scraping_method(
-        scraping_method: Optional[str], use_stealth: bool
+        scraping_method: str | None, use_stealth: bool
     ) -> str:
         if scraping_method is None:
             return (
@@ -160,7 +160,7 @@ class HepsiemlakScraplingScraper:
         return scraping_method
 
     @property
-    def subtype_name(self) -> Optional[str]:
+    def subtype_name(self) -> str | None:
         if self.subtype_path:
             parts = self.subtype_path.strip("/").split("/")
             if len(parts) >= 2:
@@ -289,7 +289,7 @@ class HepsiemlakScraplingScraper:
         self.session_context = None
         self.session = None
 
-    def fetch_page(self, url: str) -> Optional[Selector]:
+    def fetch_page(self, url: str) -> Selector | None:
         try:
             if self.proxy_enabled:
                 start_time = time.time()
@@ -311,7 +311,7 @@ class HepsiemlakScraplingScraper:
             if self.scraping_method == "scrapling_fetcher_session":
                 response = self.session.get(url)
             else:
-                fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+                fetch_kwargs: dict[str, Any] = {"timeout": self.request_timeout_ms}
                 if self.scraping_method == "scrapling_stealth_session":
                     fetch_kwargs["network_idle"] = True
                 wait_selector = self.common_selectors.get("listing_results")
@@ -394,7 +394,7 @@ class HepsiemlakScraplingScraper:
 
     def _extract_common_data(
         self, element: Selector, page_url: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         listing_link = self._extract_attribute(
             element, self.common_selectors.get("link", "a.card-link"), "href"
         )
@@ -437,8 +437,8 @@ class HepsiemlakScraplingScraper:
             ),
         }
 
-    def _extract_spec_values(self, element: Selector) -> Dict[str, str]:
-        values: Dict[str, str] = {}
+    def _extract_spec_values(self, element: Selector) -> dict[str, str]:
+        values: dict[str, str] = {}
         try:
             for item in element.css(
                 self.common_selectors.get(
@@ -461,12 +461,12 @@ class HepsiemlakScraplingScraper:
             pass
         return values
 
-    def _extract_category_specific_data(self, element: Selector) -> Dict[str, Any]:
+    def _extract_category_specific_data(self, element: Selector) -> dict[str, Any]:
         spec_map = self.selectors.get("spec_map")
         if not spec_map:
             return {}
         values = self._extract_spec_values(element)
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         for field, labels in spec_map.items():
             data[field] = next(
                 (values[label] for label in labels if label in values),
@@ -476,7 +476,7 @@ class HepsiemlakScraplingScraper:
 
     def _extract_from_scrapling_element(
         self, element: Selector, page_url: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         data = self._extract_common_data(element, page_url=page_url)
         data.update(self._extract_category_specific_data(element))
         return data
@@ -484,11 +484,11 @@ class HepsiemlakScraplingScraper:
     def extract_listings_from_page(
         self,
         selector: Selector,
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        city: str | None = None,
+        district: str | None = None,
         page_url: str = "",
-    ) -> List[Dict[str, Any]]:
-        listings: List[Dict[str, Any]] = []
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
         try:
             listing_selector = self.common_selectors.get(
                 "listing_container", "article.listingCard__box"
@@ -518,7 +518,7 @@ class HepsiemlakScraplingScraper:
             task_log.line(f"Error extracting listings from page: {exc}", level="error")
         return listings
 
-    def _persist_listings(self, listings: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+    def _persist_listings(self, listings: list[dict[str, Any]]) -> tuple[int, int, int]:
         if not listings:
             return 0, 0, 0
         self.total_scraped_count += len(listings)
@@ -597,7 +597,7 @@ class HepsiemlakScraplingScraper:
         return city_progress_callback
 
     def _resolve_page_limit(
-        self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]
+        self, detected_total_pages: int | None, requested_max_pages: int | None
     ) -> int:
         total_pages = max(1, detected_total_pages or 1)
         if requested_max_pages is None or requested_max_pages <= 0:
@@ -606,8 +606,8 @@ class HepsiemlakScraplingScraper:
 
     def _fetch_spider_seed_page(
         self, url: str, session_mode: str
-    ) -> Optional[Selector]:
-        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
+    ) -> Selector | None:
+        mode_settings: dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_results = self.common_selectors.get("listing_results")
 
         try:
@@ -669,12 +669,12 @@ class HepsiemlakScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
-        listings: List[Dict[str, Any]] = []
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
         self._log_location_start(location_name, location_url)
         first_page = self.fetch_page(location_url)
         if not first_page:
@@ -736,18 +736,18 @@ class HepsiemlakScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
-        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
+        mode_settings: dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_results = self.common_selectors.get("listing_results")
-        spider_errors: List[Dict[str, str]] = []
+        spider_errors: list[dict[str, str]] = []
         visited_pages: set[int] = set()
         processed_pages: set[int] = set()
-        collected_items: List[Dict[str, Any]] = []
+        collected_items: list[dict[str, Any]] = []
         outer = self
 
         self._log_location_start(location_name, location_url)
@@ -866,7 +866,7 @@ class HepsiemlakScraplingScraper:
 
                 if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
+                    follow_kwargs: dict[str, Any] = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_results:
                         follow_kwargs["wait_selector"] = listing_results
                     yield response.follow(next_url, **follow_kwargs)
@@ -892,11 +892,11 @@ class HepsiemlakScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         if self.proxy_enabled or self.scraping_method in SESSION_METHODS:
             return self._scrape_location_with_session(
                 location_name=location_name,
@@ -916,8 +916,8 @@ class HepsiemlakScraplingScraper:
         )
 
     def _run_scraping(
-        self, max_pages: Optional[int], progress_callback=None
-    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        self, max_pages: int | None, progress_callback=None
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         task_log.line(
             f"Starting _run_scraping with method={self.scraping_method}, "
             f"cities={self.selected_cities}, max_pages={max_pages}"
@@ -938,8 +938,8 @@ class HepsiemlakScraplingScraper:
         self.duplicate_count = 0
         self.total_new_listings = 0
 
-        all_results: Dict[str, Any] = {}
-        all_listings: List[Dict[str, Any]] = []
+        all_results: dict[str, Any] = {}
+        all_listings: list[dict[str, Any]] = []
         total_cities = len(self.selected_cities)
 
         if (not self.proxy_enabled) and self.scraping_method in SESSION_METHODS:
@@ -955,7 +955,7 @@ class HepsiemlakScraplingScraper:
                 )
 
                 if self.selected_districts and city in self.selected_districts:
-                    district_results: Dict[str, List[Dict[str, Any]]] = {}
+                    district_results: dict[str, list[dict[str, Any]]] = {}
                     districts = self.selected_districts[city]
                     for district_idx, district in enumerate(districts, 1):
                         district_listings = self._scrape_location(
@@ -999,7 +999,7 @@ class HepsiemlakScraplingScraper:
 
     def start_scraping(
         self, max_pages_per_city: int = 3, max_pages_per_district: int = 2
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         task_log.line(
             f"Starting Scrapling-based scraping with method={self.scraping_method}"
         )
@@ -1015,7 +1015,7 @@ class HepsiemlakScraplingScraper:
         }
 
     def start_scraping_api(
-        self, max_pages: Optional[int] = None, progress_callback=None
+        self, max_pages: int | None = None, progress_callback=None
     ):
         task_log.line(
             f"API: HepsiEmlak {self.listing_type.capitalize()} {self.category.capitalize()} Scraper ({self.scraping_method})",
@@ -1042,7 +1042,7 @@ class HepsiemlakScraplingScraper:
             task_log.section("HIC ILAN BULUNAMADI", level="warning")
         return results
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         total_requests = (
             self.metrics["successful_requests"] + self.metrics["failed_requests"]
         )

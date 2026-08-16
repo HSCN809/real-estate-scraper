@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Kazınan ilanlar için veri doğrulama araçları"""
 
 import re
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
+
 from .logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ class DataValidator:
             category, self.REQUIRED_FIELDS["default"]
         )
 
-    def validate_listing(self, data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def validate_listing(self, data: dict[str, Any]) -> tuple[bool, list[str]]:
         """Tek bir ilanı doğrular, geçerlilik durumu ve hata listesi döndürür."""
         errors = []
 
@@ -38,8 +38,8 @@ class DataValidator:
         return len(errors) == 0, errors
 
     def validate_listings(
-        self, listings: List[Dict[str, Any]]
-    ) -> Tuple[List[Dict], List[Dict]]:
+        self, listings: list[dict[str, Any]]
+    ) -> tuple[list[dict], list[dict]]:
         """İlan listesini doğrular, geçerli ve geçersiz ilanları ayrı ayrı döndürür."""
         valid = []
         invalid = []
@@ -59,7 +59,7 @@ class DataValidator:
 
         return valid, invalid
 
-    def is_valid(self, data: Dict[str, Any]) -> bool:
+    def is_valid(self, data: dict[str, Any]) -> bool:
         """İlanın geçerli olup olmadığını hızlıca kontrol eder"""
         is_valid, _ = self.validate_listing(data)
         return is_valid
@@ -69,7 +69,7 @@ class DataNormalizer:
     """Kazınan veri değerlerini normalleştirir."""
 
     @staticmethod
-    def normalize_price(price_str: str) -> Optional[float]:
+    def normalize_price(price_str: str) -> float | None:
         """Fiyat metnini float değere normalleştirir."""
         if not price_str:
             return None
@@ -113,7 +113,7 @@ class DataNormalizer:
         return None
 
     @staticmethod
-    def normalize_area(area_str: str) -> Optional[float]:
+    def normalize_area(area_str: str) -> float | None:
         """Alan/metrekare metnini float değere normalleştirir."""
         if not area_str:
             return None
@@ -139,7 +139,7 @@ class DataNormalizer:
         return None
 
     @staticmethod
-    def normalize_room_count(room_str: str) -> Optional[str]:
+    def normalize_room_count(room_str: str) -> str | None:
         """Oda sayısı metnini normalleştirir."""
         if not room_str:
             return None
@@ -156,7 +156,7 @@ class DataNormalizer:
         return cleaned if cleaned else None
 
     @staticmethod
-    def normalize_location(location_str: str) -> Dict[str, str]:
+    def normalize_location(location_str: str) -> dict[str, str]:
         """Lokasyon metnini il, ilce, mahalle bileşenlerine ayrıştırır."""
         result = {"il": "", "ilce": "", "mahalle": ""}
 
@@ -187,17 +187,17 @@ class DataNormalizer:
         return cleaned.strip()
 
 
-def validate_listing(data: Dict[str, Any], category: str = "default") -> bool:
+def validate_listing(data: dict[str, Any], category: str = "default") -> bool:
     """İlan doğrulamak için kısayol fonksiyonu"""
     validator = DataValidator(category)
     return validator.is_valid(data)
 
 
-def normalize_price(price_str: str) -> Optional[float]:
+def normalize_price(price_str: str) -> float | None:
     """Fiyat normalleştirmek için kısayol fonksiyonu"""
     return DataNormalizer.normalize_price(price_str)
 
 
-def normalize_area(area_str: str) -> Optional[float]:
+def normalize_area(area_str: str) -> float | None:
     """Alan normalleştirmek için kısayol fonksiyonu"""
     return DataNormalizer.normalize_area(area_str)

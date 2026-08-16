@@ -1,24 +1,23 @@
-# -*- coding: utf-8 -*-
 """Emlak Kazıyıcı - Backend API, FastAPI uygulama tanımı"""
 
-import sys
-import os
 import logging
+import os
+import sys
 import time
 from contextlib import asynccontextmanager
 
 # Import'lar için mevcut dizini yola ekle
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from api.endpoints import router as api_router
 from auth.router import router as auth_router
+from database import crud
 
 # Veritabani baslatma
 from database.connection import DATABASE_URL, SessionLocal, engine
-from database import crud
 from database.models import Base
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Loglama ayarla
 logging.basicConfig(level=logging.INFO)

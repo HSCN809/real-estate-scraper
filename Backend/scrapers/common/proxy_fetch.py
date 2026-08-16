@@ -1,16 +1,13 @@
-# -*- coding: utf-8 -*-
 """Shared proxy-backed fetch helpers for scrapling scrapers."""
 
 import os
 import time
-from typing import Optional
-
-from scrapling.parser import Selector
 
 from python_proxy.go_proxy_client import CloudflareBypassClient
+from scrapling.parser import Selector
 
 
-def resolve_go_proxy_url(proxy_url: Optional[str] = None) -> str:
+def resolve_go_proxy_url(proxy_url: str | None = None) -> str:
     if proxy_url:
         return proxy_url
 
@@ -26,8 +23,8 @@ class ProxyFetchClient:
     def __init__(
         self,
         enabled: bool = False,
-        proxy_url: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        proxy_url: str | None = None,
+        user_agent: str | None = None,
         max_retries: int = 5,
         initial_delay: float = 2.0,
     ):
@@ -67,7 +64,7 @@ class ProxyFetchClient:
             return
         getattr(task_log, level, task_log.info)(message)
 
-    def fetch_selector(self, url: str, task_log=None) -> Optional[Selector]:
+    def fetch_selector(self, url: str, task_log=None) -> Selector | None:
         if not self.enabled or self.client is None:
             raise RuntimeError("ProxyFetchClient is not enabled")
 

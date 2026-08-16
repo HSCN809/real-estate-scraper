@@ -1,23 +1,23 @@
-# -*- coding: utf-8 -*-
 """SQLAlchemy ORM modelleri"""
 
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
+
 from sqlalchemy import (
+    JSON,
+    Boolean,
     Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
     Integer,
     String,
-    Float,
     Text,
-    Boolean,
-    ForeignKey,
-    DateTime,
-    Date,
-    JSON,
-    Index,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 Base: Any = declarative_base()
 
@@ -109,7 +109,7 @@ class Listing(Base):
     def __repr__(self):
         return f"<Listing(id={self.id}, baslik='{self.baslik[:30]}...', fiyat={self.fiyat})>"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """API yanıtları için ilanı sözlüğe dönüştür"""
         return {
             "id": self.id,
@@ -176,7 +176,7 @@ class ScrapeSession(Base):
     def __repr__(self):
         return f"<ScrapeSession(id={self.id}, platform={self.platform}, status={self.status})>"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """API yanıtları için oturumu sözlüğe dönüştür"""
         return {
             "id": self.id,
@@ -227,7 +227,7 @@ class PriceHistory(Base):
     def __repr__(self):
         return f"<PriceHistory(listing_id={self.listing_id}, {self.old_price} -> {self.new_price})>"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "listing_id": self.listing_id,
@@ -292,7 +292,7 @@ class User(Base):
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}')>"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "username": self.username,

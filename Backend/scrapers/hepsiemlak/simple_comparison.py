@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """HepsiEmlak icin Selenium ve Scrapling modlari karsilastirmasi."""
 
 import json
 import logging
 import os
-import time
-from datetime import datetime
-from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-from typing import Any, Dict, List
 
 # Proje root'u ekle
 import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -61,7 +60,7 @@ def _count_listing_elements(response, container_selector: str) -> int:
 
 def _flatten_selenium_results(raw_result) -> list:
     """Selenium sonucunu sehir/ilce agacindan duz listeye cevir."""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     if not isinstance(raw_result, dict):
         return rows
 
@@ -183,8 +182,9 @@ def run_selenium_test(max_pages: int = MAX_PAGES):
     print(f"\n🔵 Selenium testi basliyor... (max_pages={max_pages})\n")
 
     try:
-        from scrapers.hepsiemlak import HepsiemlakScraper
         from core.driver_manager import DriverManager
+
+        from scrapers.hepsiemlak import HepsiemlakScraper
 
         driver_manager = DriverManager()
         driver = driver_manager.start()
@@ -387,7 +387,7 @@ def run_scrapling_dynamic_session_test(max_pages: int = MAX_PAGES):
 
 def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
     """Scrapling Spider API ile benchmark calistir (fetcher/async_dynamic/async_stealth)."""
-    session_cfg: Dict[str, Dict[str, Any]] = {
+    session_cfg: dict[str, dict[str, Any]] = {
         "fetcher": {
             "method": "scrapling_spider_fetcher_session",
             "label": "🟪 Scrapling (spider_fetcher_session)",
@@ -425,7 +425,7 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
 
     method_name = session_cfg[session_mode]["method"]
     label = session_cfg[session_mode]["label"]
-    mode_settings: Dict[str, Any] = session_cfg[session_mode]
+    mode_settings: dict[str, Any] = session_cfg[session_mode]
     print(f"\n{label} testi basliyor... (max_pages={max_pages})")
 
     try:
@@ -555,7 +555,7 @@ def run_scrapling_spider_test(session_mode: str, max_pages: int = MAX_PAGES):
 
                 if current_page < max_pages:
                     next_url = _build_page_url(city_url, current_page + 1)
-                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
+                    follow_kwargs: dict[str, Any] = {"callback": self.parse}
                     # wait_selector is browser-session specific; FetcherSession does not accept it.
                     if session_mode != "fetcher" and listing_results:
                         follow_kwargs["wait_selector"] = listing_results

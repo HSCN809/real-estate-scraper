@@ -1,19 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Database module for Real Estate Scraper
 """
 
-from .connection import get_db, engine, SessionLocal
-from .models import Base, Location, Listing, ScrapeSession, FailedPage, PriceHistory
+from .connection import SessionLocal, engine, get_db
+from .models import Base, FailedPage, Listing, Location, PriceHistory, ScrapeSession
 
 __all__ = [
-    "get_db",
-    "engine",
-    "SessionLocal",
     "Base",
-    "Location",
-    "Listing",
-    "ScrapeSession",
     "FailedPage",
+    "Listing",
+    "Location",
     "PriceHistory",
+    "ScrapeSession",
+    "SessionLocal",
+    "engine",
+    "get_db",
 ]

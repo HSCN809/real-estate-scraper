@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak Go Proxy Bypass Scraper - Cloudflare Bypass with uTLS"""
 
 import os
 import random
 import re
-import time
 import sys
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
@@ -16,9 +15,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
+from python_proxy.go_proxy_client import CloudflareBypassClient
 from utils.data_exporter import DataExporter
 from utils.logger import TaskLogLayout, get_logger
-from python_proxy.go_proxy_client import CloudflareBypassClient
 
 from .main import save_listings_to_db
 
@@ -33,11 +32,11 @@ class HepsiemlakGoProxyScraper:
         self,
         listing_type: str = "satilik",
         category: str = "konut",
-        subtype_path: Optional[str] = None,
-        selected_cities: Optional[List[str]] = None,
-        selected_districts: Optional[Dict[str, List[str]]] = None,
-        proxy_url: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        subtype_path: str | None = None,
+        selected_cities: list[str] | None = None,
+        selected_districts: dict[str, list[str]] | None = None,
+        proxy_url: str | None = None,
+        user_agent: str | None = None,
     ):
         base_config = get_hepsiemlak_config()
         category_path = subtype_path or base_config.categories.get(
@@ -75,7 +74,7 @@ class HepsiemlakGoProxyScraper:
         self.common_selectors = get_common_selectors("hepsiemlak")
 
         # Session state
-        self.session_cookies: Dict[str, str] = {}
+        self.session_cookies: dict[str, str] = {}
 
         # Database and export
         self.db = None
@@ -86,7 +85,7 @@ class HepsiemlakGoProxyScraper:
         self.total_new_listings = 0
 
         # Metrics
-        self.metrics: Dict[str, Any] = {
+        self.metrics: dict[str, Any] = {
             "start_time": None,
             "end_time": None,
             "total_pages": 0,
@@ -106,7 +105,7 @@ class HepsiemlakGoProxyScraper:
         )
 
     @property
-    def subtype_name(self) -> Optional[str]:
+    def subtype_name(self) -> str | None:
         if self.subtype_path:
             parts = self.subtype_path.strip("/").split("/")
             if len(parts) >= 2:
@@ -176,7 +175,7 @@ class HepsiemlakGoProxyScraper:
 
     def _fetch_page_with_retry(
         self, url: str, max_retries: int = 10
-    ) -> Optional[BeautifulSoup]:
+    ) -> BeautifulSoup | None:
         """
         Fetch page using Go proxy with intelligent retry logic for Cloudflare challenges
         """
@@ -341,9 +340,10 @@ class HepsiemlakGoProxyScraper:
                     max_page = max(max_page, int(text))
                     continue
 
-                href = link.get("href", "")
+                raw_href = link.get("href")
+                href = raw_href[0] if isinstance(raw_href, list) else raw_href
                 if href:
-                    parsed = urlparse(href)
+                    parsed = urlparse(str(href))
                     page_values = parse_qs(parsed.query).get("page", [])
                     if page_values and str(page_values[0]).isdigit():
                         max_page = max(max_page, int(page_values[0]))
@@ -395,7 +395,7 @@ class HepsiemlakGoProxyScraper:
         except Exception:
             return default
 
-    def _extract_common_data(self, element, page_url: str = "") -> Dict[str, Any]:
+    def _extract_common_data(self, element, page_url: str = "") -> dict[str, Any]:
         """Extract common listing data"""
         listing_link = self._extract_attribute(
             element, self.common_selectors.get("link", "a.card-link"), "href"
@@ -455,9 +455,9 @@ class HepsiemlakGoProxyScraper:
             ),
         }
 
-    def _extract_spec_values(self, element) -> Dict[str, str]:
+    def _extract_spec_values(self, element) -> dict[str, str]:
         """Extract dl/dt/dd spec items as label->value map"""
-        values: Dict[str, str] = {}
+        values: dict[str, str] = {}
         try:
             spec_items = element.select(
                 self.common_selectors.get(
@@ -482,13 +482,13 @@ class HepsiemlakGoProxyScraper:
             pass
         return values
 
-    def _extract_category_specific_data(self, element) -> Dict[str, Any]:
+    def _extract_category_specific_data(self, element) -> dict[str, Any]:
         """Extract category-specific data from dl/dt/dd spec items"""
         spec_map = self.selectors.get("spec_map")
         if not spec_map:
             return {}
         values = self._extract_spec_values(element)
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         for field, labels in spec_map.items():
             data[field] = next(
                 (values[label] for label in labels if label in values),
@@ -516,12 +516,12 @@ class HepsiemlakGoProxyScraper:
     def extract_listings_from_page(
         self,
         soup: BeautifulSoup,
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        city: str | None = None,
+        district: str | None = None,
         page_url: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Extract listings from a page"""
-        listings: List[Dict[str, Any]] = []
+        listings: list[dict[str, Any]] = []
         try:
             listing_elements = self._select_listing_elements(soup)
             source_url = page_url
@@ -560,7 +560,7 @@ class HepsiemlakGoProxyScraper:
 
         return listings
 
-    def _persist_listings(self, listings: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+    def _persist_listings(self, listings: list[dict[str, Any]]) -> tuple[int, int, int]:
         """Save listings to database"""
         if not listings:
             return 0, 0, 0
@@ -598,13 +598,13 @@ class HepsiemlakGoProxyScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Scrape a location (city or district)"""
-        listings: List[Dict[str, Any]] = []
+        listings: list[dict[str, Any]] = []
         self._log_location_start(location_name, location_url)
 
         # Fetch first page
@@ -675,7 +675,7 @@ class HepsiemlakGoProxyScraper:
         return listings
 
     def _resolve_page_limit(
-        self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]
+        self, detected_total_pages: int | None, requested_max_pages: int | None
     ) -> int:
         """Resolve the final page limit"""
         total_pages = max(1, detected_total_pages or 1)
@@ -716,8 +716,8 @@ class HepsiemlakGoProxyScraper:
         return city_progress_callback
 
     def start_scraping_api(
-        self, max_pages: Optional[int] = None, progress_callback=None
-    ) -> Dict[str, Any]:
+        self, max_pages: int | None = None, progress_callback=None
+    ) -> dict[str, Any]:
         """API-compatible entry point used by Celery tasks."""
         return self.start_scraping(
             max_pages_per_city=max_pages or 3,
@@ -730,7 +730,7 @@ class HepsiemlakGoProxyScraper:
         max_pages_per_city: int = 3,
         max_pages_per_district: int = 2,
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Start scraping process"""
         task_log.section(
             "GO PROXY CLOUDFLARE BYPASS SCRAPER STARTED",
@@ -742,7 +742,7 @@ class HepsiemlakGoProxyScraper:
         self.metrics["start_time"] = time.time()
 
         try:
-            all_listings: List[Dict[str, Any]] = []
+            all_listings: list[dict[str, Any]] = []
             total_cities = len(self.selected_cities)
 
             for city_idx, city in enumerate(self.selected_cities, 1):
@@ -811,7 +811,7 @@ class HepsiemlakGoProxyScraper:
             task_log.error(f"Scraping error: {exc}")
             return {"listings": [], "metrics": self.metrics, "error": str(exc)}
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get scraping summary"""
         total_requests = (
             self.metrics["successful_requests"] + self.metrics["failed_requests"]

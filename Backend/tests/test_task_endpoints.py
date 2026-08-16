@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Task endpoint tests for the canonical task contract."""
 
 import os
@@ -9,8 +8,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from api import endpoints  # noqa: E402
-from core.task_status import TaskStatusStore  # noqa: E402
+from api import endpoints
+from core.task_status import TaskStatusStore
 
 
 class FakeRedis:

@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """Platform ve kategori bazlı CSS/XPath seçiciler"""
 
-from typing import Dict, Any, Optional
-
+from typing import Any
 
 # ============================================================================
 # EmlakJet seçicileri
@@ -300,13 +298,13 @@ HEPSIEMLAK_SELECTORS = {
 # Ana seçici sözlüğü
 # ============================================================================
 
-SELECTORS: Dict[str, Dict[str, Any]] = {
+SELECTORS: dict[str, dict[str, Any]] = {
     "emlakjet": EMLAKJET_SELECTORS,
     "hepsiemlak": HEPSIEMLAK_SELECTORS,
 }
 
 
-def get_selectors(platform: str, category: Optional[str] = None) -> Dict[str, Any]:
+def get_selectors(platform: str, category: str | None = None) -> dict[str, Any]:
     """Platform ve kategori için seçicileri getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")
@@ -326,7 +324,7 @@ def get_selectors(platform: str, category: Optional[str] = None) -> Dict[str, An
     return result
 
 
-def get_common_selectors(platform: str) -> Dict[str, Any]:
+def get_common_selectors(platform: str) -> dict[str, Any]:
     """Platform ortak seçicilerini getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")
@@ -334,7 +332,7 @@ def get_common_selectors(platform: str) -> Dict[str, Any]:
     return SELECTORS[platform]["common"]
 
 
-def get_category_selectors(platform: str, category: str) -> Dict[str, Any]:
+def get_category_selectors(platform: str, category: str) -> dict[str, Any]:
     """Kategori seçicilerini getir"""
     if platform not in SELECTORS:
         raise ValueError(f"Unknown platform: {platform}")

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Validate the canonical Redis/API task status contract."""
 
 from __future__ import annotations
@@ -7,22 +6,22 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import requests
 from celery.result import AsyncResult
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from celery_app import celery_app  # noqa: E402
-from core.task_status import (  # noqa: E402
+from celery_app import celery_app
+from core.task_status import (
     TASK_STATUS_KEY_PREFIX,
     TASK_STATUS_VALUES,
     get_redis_client,
 )
 
 
-def validate_payload(payload: Dict[str, Any]) -> None:
+def validate_payload(payload: dict[str, Any]) -> None:
     required = {
         "task_id",
         "status",

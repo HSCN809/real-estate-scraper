@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """Başarısız sayfa takibi ve retry mekanizması"""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +15,16 @@ class FailedPageInfo:
     url: str
     page_number: int
     city: str
-    district: Optional[str] = None
+    district: str | None = None
     error: str = ""
     retry_count: int = 0
     timestamp: datetime = field(default_factory=datetime.now)
     max_pages: int = 1  # O şehir/ilçe için toplam sayfa sayısı
     listing_type: str = ""
     category: str = ""
-    subtype_path: Optional[str] = None
+    subtype_path: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "url": self.url,
             "page_number": self.page_number,
@@ -48,7 +47,7 @@ class FailedPagesTracker:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(FailedPagesTracker, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -56,8 +55,8 @@ class FailedPagesTracker:
         if self._initialized:
             return
         self._initialized = True
-        self._failed_pages: Dict[str, FailedPageInfo] = {}  # url -> FailedPageInfo
-        self._successful_retries: List[str] = []  # Başarılı retry URL'leri
+        self._failed_pages: dict[str, FailedPageInfo] = {}  # url -> FailedPageInfo
+        self._successful_retries: list[str] = []  # Başarılı retry URL'leri
 
     def reset(self):
         """Tracker'ı sıfırla"""
@@ -81,11 +80,11 @@ class FailedPagesTracker:
             f"⚠️ Başarısız sayfa eklendi: {page_info.city}/{page_info.district or 'tüm'} - Sayfa {page_info.page_number}"
         )
 
-    def get_all_failed(self) -> List[FailedPageInfo]:
+    def get_all_failed(self) -> list[FailedPageInfo]:
         """Tüm başarısız sayfaları getir"""
         return list(self._failed_pages.values())
 
-    def get_unretried(self, max_retry_count: int = 3) -> List[FailedPageInfo]:
+    def get_unretried(self, max_retry_count: int = 3) -> list[FailedPageInfo]:
         """Henüz maksimum deneme sayısına ulaşmamış sayfaları getir"""
         return [
             page
@@ -94,7 +93,7 @@ class FailedPagesTracker:
         ]
 
     def mark_as_success(
-        self, city: str, district: Optional[str], page_number: int
+        self, city: str, district: str | None, page_number: int
     ) -> None:
         """Sayfayı başarılı olarak işaretle ve listeden çıkar"""
         key = f"{city}_{district or 'all'}_{page_number}"
@@ -107,7 +106,7 @@ class FailedPagesTracker:
             )
 
     def increment_retry_count(
-        self, city: str, district: Optional[str], page_number: int
+        self, city: str, district: str | None, page_number: int
     ) -> None:
         """Sayfa için deneme sayısını artır"""
         key = f"{city}_{district or 'all'}_{page_number}"
@@ -128,7 +127,7 @@ class FailedPagesTracker:
         """Başarılı retry sayısı"""
         return len(self._successful_retries)
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Özet bilgi döndür"""
         return {
             "failed_count": len(self._failed_pages),

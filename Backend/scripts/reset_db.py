@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Database Reset Script - Interaktif Menu
 Veritabanindaki verileri yonetmek icin kullanilir.
@@ -8,14 +7,14 @@ Kullanim:
     docker-compose exec api python scripts/reset_db.py
 """
 
-import sys
 import os
+import sys
 
 # Backend klasorunu path'e ekle
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.connection import engine, SessionLocal, DATABASE_URL
-from database.models import Base, Listing, Location, ScrapeSession, PriceHistory
+from database.connection import DATABASE_URL, SessionLocal, engine
+from database.models import Base, Listing, Location, PriceHistory, ScrapeSession
 
 
 def get_table_counts(session) -> dict:

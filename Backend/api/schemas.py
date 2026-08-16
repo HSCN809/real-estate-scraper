@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -16,12 +16,12 @@ SUPPORTED_SCRAPING_METHODS = (
 class ScrapeRequest(BaseModel):
     category: str = "konut"
     listing_type: str = "satilik"
-    subtype: Optional[str] = None
-    subtype_path: Optional[str] = None
-    cities: Optional[List[str]] = None
-    districts: Optional[Dict[str, List[str]]] = None
-    max_pages: Optional[int] = None
-    max_listings: Optional[int] = None
+    subtype: str | None = None
+    subtype_path: str | None = None
+    cities: list[str] | None = None
+    districts: dict[str, list[str]] | None = None
+    max_pages: int | None = None
+    max_listings: int | None = None
     scraping_method: str = "selenium"
     proxy_enabled: bool = False
 
@@ -47,13 +47,13 @@ class TaskStatusResponse(BaseModel):
     total: int
     current: int
     details: str
-    error: Optional[str] = None
-    platform: Optional[str] = None
-    started_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    finished_at: Optional[str] = None
+    error: str | None = None
+    platform: str | None = None
+    started_at: str | None = None
+    updated_at: str | None = None
+    finished_at: str | None = None
 
 
 class ActiveTasksResponse(BaseModel):
-    active_tasks: List[TaskStatusResponse]
+    active_tasks: list[TaskStatusResponse]
     count: int

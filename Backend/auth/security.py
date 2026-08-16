@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """Şifre hashleme ve JWT token yönetimi"""
 
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from passlib.context import CryptContext
+from typing import Any
+
 import jwt
 from jwt import InvalidTokenError
+from passlib.context import CryptContext
 
 # Şifre hashleme konfigürasyonu
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -30,7 +30,7 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(
-    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+    data: dict[str, Any], expires_delta: timedelta | None = None
 ) -> str:
     """JWT erişim token'ı oluştur"""
     to_encode = data.copy()
@@ -44,7 +44,7 @@ def create_access_token(
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_token(token: str) -> dict[str, Any] | None:
     """JWT token'ı çöz ve doğrula"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

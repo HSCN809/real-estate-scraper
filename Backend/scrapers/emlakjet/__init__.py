@@ -1,15 +1,14 @@
-# -*- coding: utf-8 -*-
 """EmlakJet Scraper modülü"""
 
 from .main import EmlakJetScraper
+from .parsers import ArsaParser, IsyeriParser, KonutParser, TuristikTesisParser
 from .scrapling_scraper import EmlakJetScraplingScraper
-from .parsers import KonutParser, ArsaParser, IsyeriParser, TuristikTesisParser
 
 __all__ = [
+    "ArsaParser",
     "EmlakJetScraper",
     "EmlakJetScraplingScraper",
-    "KonutParser",
-    "ArsaParser",
     "IsyeriParser",
+    "KonutParser",
     "TuristikTesisParser",
 ]

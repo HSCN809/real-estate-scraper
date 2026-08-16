@@ -1,20 +1,18 @@
-# -*- coding: utf-8 -*-
 """Celery kazima gorevleri - ayri worker konteynerinde calisir."""
 
 import os
-from typing import Dict, List, Optional
+
+from api.schemas import SUPPORTED_SCRAPING_METHODS
 from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
-
 from celery_app import celery_app
-from api.schemas import SUPPORTED_SCRAPING_METHODS
 from core.task_status import TASK_STATUS_RUNNING, TaskStatusStore
 from utils.logger import get_logger
 
 logger = get_logger("celery.scraping")
 
 
-def _validate_scraping_method(scraping_method: str) -> Optional[str]:
+def _validate_scraping_method(scraping_method: str) -> str | None:
     if scraping_method == "go_proxy":
         return (
             "scraping_method='go_proxy' is deprecated. "
@@ -37,14 +35,14 @@ class TaskProgressManager:
 
     def update(
         self,
-        message: str = None,
-        progress: int = None,
-        current: int = None,
-        total: int = None,
-        details: str = None,
+        message: str | None = None,
+        progress: int | None = None,
+        current: int | None = None,
+        total: int | None = None,
+        details: str | None = None,
         status: str = TASK_STATUS_RUNNING,
-        error: Optional[str] = None,
-        platform: Optional[str] = None,
+        error: str | None = None,
+        platform: str | None = None,
     ):
         """Redis'teki görev ilerlemesini güncelle."""
         data = self.store.update(
@@ -91,9 +89,9 @@ def scrape_hepsiemlak_task(
     self,
     listing_type: str,
     category: str,
-    subtype_path: Optional[str],
-    cities: List[str],
-    districts: Optional[Dict[str, List[str]]],
+    subtype_path: str | None,
+    cities: list[str],
+    districts: dict[str, list[str]] | None,
     max_pages: int = 50,
     scraping_method: str = "selenium",
     proxy_enabled: bool = False,
@@ -116,8 +114,8 @@ def scrape_hepsiemlak_task(
     # Dongusel import'lari onlemek ve dogru baslatmayi saglamak icin burada import et
     from core.driver_manager import DriverManager
     from core.failed_pages_tracker import failed_pages_tracker
-    from database.connection import get_db_session
     from database import crud
+    from database.connection import get_db_session
 
     manager = None
     driver = None
@@ -232,7 +230,7 @@ def scrape_hepsiemlak_task(
         raise
 
     except Exception as e:
-        logger.error(f"[Task {task_id}] Task failed with error: {e}", exc_info=True)
+        logger.exception("[Task %s] Task failed with error", task_id)
         progress_manager.fail(str(e))
         _final_status = "failed"
         _error_msg = str(e)
@@ -286,9 +284,9 @@ def scrape_emlakjet_task(
     self,
     listing_type: str,
     category: str,
-    subtype_path: Optional[str],
-    cities: List[str],
-    districts: Optional[Dict[str, List[str]]],
+    subtype_path: str | None,
+    cities: list[str],
+    districts: dict[str, list[str]] | None,
     max_listings: int = 0,
     max_pages: int = 50,  # kullanim disi, geriye uyumluluk icin tutuldu
     scraping_method: str = "selenium",
@@ -309,10 +307,10 @@ def scrape_emlakjet_task(
         platform="emlakjet",
     )
 
-    from core.driver_manager import DriverManager
     from core.config import get_emlakjet_config
-    from database.connection import get_db_session
+    from core.driver_manager import DriverManager
     from database import crud
+    from database.connection import get_db_session
 
     manager = None
     db = None
@@ -426,7 +424,7 @@ def scrape_emlakjet_task(
         raise
 
     except Exception as e:
-        logger.error(f"[Task {task_id}] Task failed: {e}", exc_info=True)
+        logger.exception("[Task %s] Task failed", task_id)
         progress_manager.fail(str(e))
         _final_status = "failed"
         _error_msg = str(e)

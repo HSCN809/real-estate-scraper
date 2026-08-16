@@ -1,30 +1,28 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak Ana Scraper - gizli mod"""
 
-import time
+import os
 import random
-from typing import Dict, List, Any, Optional, Set
+import sys
+import time
+from typing import Any
 from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 
-import sys
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.base_scraper import BaseScraper
-from core.driver_manager import DriverManager
 from core.config import get_hepsiemlak_config
+from core.driver_manager import DriverManager
 from core.failed_pages_tracker import FailedPageInfo, failed_pages_tracker
-from utils.logger import get_logger, TaskLogLayout
+from utils.logger import TaskLogLayout, get_logger
 
 from .parsers import (
-    KonutParser,
     ArsaParser,
-    IsyeriParser,
     DevremulkParser,
+    IsyeriParser,
+    KonutParser,
     TuristikParser,
 )
 
@@ -34,9 +32,9 @@ task_log = TaskLogLayout(logger)
 
 def _get_expected_hepsiemlak_subtype_slugs(
     listing_type: str, category: str
-) -> Set[str]:
+) -> set[str]:
     """HepsiEmlak kategori filtresi icin beklenen subtype slug listesini don."""
-    expected_slugs: Set[str] = set()
+    expected_slugs: set[str] = set()
     if not listing_type or not category:
         return expected_slugs
 
@@ -66,7 +64,7 @@ def _get_expected_hepsiemlak_subtype_slugs(
 
 def _extract_hepsiemlak_subtype_slug_from_url(
     listing_url: str, listing_type: str
-) -> Optional[str]:
+) -> str | None:
     """Ilan URL'sinden subtype slug'i cikar."""
     if not listing_url:
         return None
@@ -102,8 +100,8 @@ def _matches_hepsiemlak_filters(
     listing_url: str,
     listing_type: str,
     category: str,
-    alt_kategori: Optional[str],
-    expected_subtypes: Set[str],
+    alt_kategori: str | None,
+    expected_subtypes: set[str],
 ) -> bool:
     """URL bazli listing_type/category/subtype filtre dogrulamasi."""
     extracted_slug = _extract_hepsiemlak_subtype_slug_from_url(
@@ -128,12 +126,12 @@ def _matches_hepsiemlak_filters(
 
 def save_listings_to_db(
     db,
-    listings: List[Dict],
+    listings: list[dict],
     platform: str,
     kategori: str,
     ilan_tipi: str,
-    alt_kategori: str = None,
-    scrape_session_id: int = None,
+    alt_kategori: str | None = None,
+    scrape_session_id: int | None = None,
     log_db_save: bool = True,
 ):
     """İlan listesini veritabanına kaydet (upsert mantığı ile)"""
@@ -152,7 +150,7 @@ def save_listings_to_db(
             expected_subtypes = _get_expected_hepsiemlak_subtype_slugs(
                 ilan_tipi, kategori
             )
-            filtered_records: List[Dict] = []
+            filtered_records: list[dict] = []
             filtered_out = 0
 
             for data in listings:
@@ -181,7 +179,7 @@ def save_listings_to_db(
             records_to_save = filtered_records
 
         for data in records_to_save:
-            listing, status = crud.upsert_listing(
+            _listing, status = crud.upsert_listing(
                 db,
                 data=data,
                 platform=platform,
@@ -225,11 +223,9 @@ class HepsiemlakScraper(BaseScraper):
         driver: WebDriver,
         listing_type: str = "satilik",  # 'satilik' veya 'kiralik'
         category: str = "konut",
-        subtype_path: Optional[str] = None,  # Alt kategori URL path'i
-        selected_cities: Optional[List[str]] = None,
-        selected_districts: Optional[
-            Dict[str, List[str]]
-        ] = None,  # İl -> [İlçeler] mapping
+        subtype_path: str | None = None,  # Alt kategori URL path'i
+        selected_cities: list[str] | None = None,
+        selected_districts: dict[str, list[str]] | None = None,  # İl -> [İlçeler] mapping
     ):
         base_config = get_hepsiemlak_config()
 
@@ -266,7 +262,7 @@ class HepsiemlakScraper(BaseScraper):
         self.parser = parser_class()
 
     @property
-    def subtype_name(self) -> Optional[str]:
+    def subtype_name(self) -> str | None:
         """Dosya adlandırma için subtype_path'inden alt kategori adını çıkar"""
         if self.subtype_path:
             # /satilik/daire -> daire
@@ -351,15 +347,15 @@ class HepsiemlakScraper(BaseScraper):
         else:
             task_log.section("HIC ILAN BULUNAMADI", level="warning")
 
-    def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
+    def extract_listing_data(self, container) -> dict[str, Any] | None:
         """Kategori parser'ı ile ilan verisini çıkar"""
         return self.parser.extract_listing_data(container)
 
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """HepsiEmlak için kullanılmaz - parse işlemi extract_category_data ile yapılır"""
         return {}
 
-    def get_cities(self) -> List[str]:
+    def get_cities(self) -> list[str]:
         """Tüm şehirleri al ve kullanıcının seçmesini sağla"""
         print(f"\n{self.category.capitalize()} sitesine gidiliyor...")
         self.driver.get(self.base_url)
@@ -453,13 +449,13 @@ class HepsiemlakScraper(BaseScraper):
             logger.error(f"Error getting cities: {e}")
             return []
 
-    def get_cities_api(self) -> List[str]:
+    def get_cities_api(self) -> list[str]:
         """API için şehir listesi al (etkileşimsiz)"""
         return self.get_cities()
 
-    def select_cities(self, cities: List[str]) -> List[str]:
+    def select_cities(self, cities: list[str]) -> list[str]:
         """Kullanıcının birden fazla şehir seçmesini sağla"""
-        selected: List[str] = []
+        selected: list[str] = []
 
         print("\n" + "=" * 50)
         print("ŞEHİR SEÇİM SEÇENEKLERİ")
@@ -524,8 +520,8 @@ class HepsiemlakScraper(BaseScraper):
         return selected
 
     def select_cities_api(
-        self, all_cities: List[str], target_cities: Optional[List[str]] = None
-    ) -> List[str]:
+        self, all_cities: list[str], target_cities: list[str] | None = None
+    ) -> list[str]:
         """API için şehir seç"""
         if not target_cities:
             return []
@@ -674,9 +670,9 @@ class HepsiemlakScraper(BaseScraper):
             text = text.replace(tr, en)
         return text.lower().replace(" ", "-")
 
-    def get_district_urls_from_dropdown(self, city_name: str) -> Dict[str, str]:
+    def get_district_urls_from_dropdown(self, city_name: str) -> dict[str, str]:
         """Şehir sayfasındaki ilçe dropdown'ından gerçek URL'leri çek ve {ilçe_adı: url} sözlüğü döndür"""
-        district_urls: Dict[str, str] = {}
+        district_urls: dict[str, str] = {}
 
         try:
             # Önce şehir sayfasına git
@@ -884,8 +880,8 @@ class HepsiemlakScraper(BaseScraper):
     def get_total_pages(self) -> int:
         """Sayfalamadan toplam sayfa sayısını al"""
         try:
-            from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.support.ui import WebDriverWait
 
             # Önce toplam ilan sayısını kontrol et - 24 veya daha az ise pagination olmaz
             try:
@@ -950,8 +946,7 @@ class HepsiemlakScraper(BaseScraper):
                 # "..." gibi break-view'ları atla
                 if text.isdigit():
                     page_num = int(text)
-                    if page_num > max_page:
-                        max_page = page_num
+                    max_page = max(max_page, page_num)
 
             print(f"DEBUG: max_page = {max_page}")
             return max_page
@@ -963,10 +958,10 @@ class HepsiemlakScraper(BaseScraper):
     def scrape_city(
         self,
         city: str,
-        max_pages: int = None,
+        max_pages: int | None = None,
         api_mode: bool = False,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Tek bir şehir için tüm ilanları tara"""
         self._log_location_start(city, self._build_location_url(city))
 
@@ -1018,8 +1013,7 @@ class HepsiemlakScraper(BaseScraper):
                             f"{city} için kaç sayfa taranacak? (1-{total_pages}): "
                         ).strip()
                         pages_to_scrape = min(int(user_input), total_pages)
-                        if pages_to_scrape < 1:
-                            pages_to_scrape = 1
+                        pages_to_scrape = max(pages_to_scrape, 1)
                     except ValueError:
                         pages_to_scrape = min(3, total_pages)
                         print(
@@ -1137,10 +1131,10 @@ class HepsiemlakScraper(BaseScraper):
     def scrape_city_with_districts(
         self,
         city: str,
-        districts: List[str],
-        max_pages: int = None,
+        districts: list[str],
+        max_pages: int | None = None,
         progress_callback=None,
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Bir şehir için belirtilen ilçeleri ayrı ayrı tara ve kaydet"""
         all_results = {}  # İlçe -> İlanlar mapping
         total_new_listings = 0  # Sadece yeni eklenen ilan sayısı
@@ -1373,7 +1367,7 @@ class HepsiemlakScraper(BaseScraper):
         return all_results
 
     def _save_district_data(
-        self, city: str, district: str, listings: List[Dict[str, Any]]
+        self, city: str, district: str, listings: list[dict[str, Any]]
     ):
         """İlçe istatistiklerini güncelle (DB kaydetme sayfa bazlı yapılıyor)"""
         if not listings:
@@ -1382,8 +1376,8 @@ class HepsiemlakScraper(BaseScraper):
         task_log.line(f"✅ {city}/{district} - {len(listings)} ilan işlendi")
 
     def scrape_current_page(
-        self, fallback_city: str = None, fallback_district: str = None
-    ) -> List[Dict[str, Any]]:
+        self, fallback_city: str | None = None, fallback_district: str | None = None
+    ) -> list[dict[str, Any]]:
         """Mevcut sayfadaki tüm ilanları tara; lokasyon bulunamazsa fallback_city ve fallback_district kullanılır"""
         listings = []
 
@@ -1428,7 +1422,7 @@ class HepsiemlakScraper(BaseScraper):
                 return
 
             # Her şehri tara
-            all_results: Dict[str, Any] = {}
+            all_results: dict[str, Any] = {}
             total_listings_count = 0
             total_cities = len(self.selected_cities)
 
@@ -1579,10 +1573,10 @@ class HepsiemlakScraper(BaseScraper):
                             time.sleep(5)  # Sayfa yüklensin
 
                             # Sonuçları bekle
-                            from selenium.webdriver.support.ui import WebDriverWait
                             from selenium.webdriver.support import (
                                 expected_conditions as EC,
                             )
+                            from selenium.webdriver.support.ui import WebDriverWait
 
                             wait = WebDriverWait(retry_driver, 30)
                             try:
@@ -1711,4 +1705,4 @@ class HepsiemlakScraper(BaseScraper):
 
         except Exception as e:
             task_log.line(f"❌ API tarama hatası: {e}", level="error")
-            raise e
+            raise

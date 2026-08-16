@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """api/schemas.py testleri."""
 
 import os

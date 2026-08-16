@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """Kimlik doğrulama bağımlılıkları"""
 
-from fastapi import Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
-from typing import Optional
 
 from database.connection import get_db
 from database.models import User
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
+
 from .security import decode_token
 
 COOKIE_NAME = "session_token"
@@ -68,7 +67,7 @@ async def get_current_active_admin(
 
 async def get_optional_user(
     request: Request, db: Session = Depends(get_db)
-) -> Optional[User]:
+) -> User | None:
     """Opsiyonel kimlik doğrulama - geçerli cookie yoksa None döner"""
     token = request.cookies.get(COOKIE_NAME)
     if not token:

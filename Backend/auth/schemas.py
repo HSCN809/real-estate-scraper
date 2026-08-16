@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """Kimlik doğrulama Pydantic şemaları"""
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
 import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -69,8 +68,8 @@ class ChangePasswordRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
-    email: Optional[EmailStr] = None
+    username: str | None = Field(None, min_length=3, max_length=50)
+    email: EmailStr | None = None
 
     @field_validator("username")
     @classmethod

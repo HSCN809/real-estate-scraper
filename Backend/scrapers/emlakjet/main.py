@@ -1,36 +1,34 @@
-# -*- coding: utf-8 -*-
 """EmlakJet Ana Scraper - gizli mod"""
 
-import time
+import os
 import random
 import re
+import sys
+import time
 import unicodedata
-from typing import Dict, List, Any, Optional, Set
+from typing import Any
 from urllib.parse import urlparse
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.remote.webdriver import WebDriver
-
-import sys
-import os
+from selenium.webdriver.support.ui import WebDriverWait
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.base_scraper import BaseScraper
-from core.driver_manager import DriverManager
 from core.config import get_emlakjet_config
+from core.driver_manager import DriverManager
 from core.failed_pages_tracker import FailedPageInfo, failed_pages_tracker
-from utils.logger import get_logger, TaskLogLayout
+from utils.logger import TaskLogLayout, get_logger
 
-from .parsers import KonutParser, ArsaParser, IsyeriParser, TuristikTesisParser
+from .parsers import ArsaParser, IsyeriParser, KonutParser, TuristikTesisParser
 
 logger = get_logger(__name__)
 task_log = TaskLogLayout(logger)
-_URL_FILTER_FALLBACK_LOGGED: Set[tuple] = set()
+_URL_FILTER_FALLBACK_LOGGED: set[tuple] = set()
 
 
-def _normalize_emlakjet_slug(value: Optional[str]) -> str:
+def _normalize_emlakjet_slug(value: str | None) -> str:
     """Normalize slug-like values for robust filter matching."""
     text = str(value or "").strip().lower().replace("_", "-")
     normalized = unicodedata.normalize("NFKD", text)
@@ -48,7 +46,7 @@ def _normalize_emlakjet_slug(value: Optional[str]) -> str:
     return ascii_only
 
 
-def _normalize_location_token(value: Optional[str]) -> str:
+def _normalize_location_token(value: str | None) -> str:
     text = unicodedata.normalize("NFKD", str(value or ""))
     ascii_only = "".join(ch for ch in text if not unicodedata.combining(ch))
     ascii_only = ascii_only.translate(str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc"))
@@ -68,7 +66,7 @@ def _extract_location_name(raw_text: str) -> str:
     return compact
 
 
-def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> Optional[str]:
+def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> str | None:
     """Extract listing type/category slug from Emlakjet URL."""
     if not listing_url:
         return None
@@ -100,9 +98,9 @@ def _extract_emlakjet_primary_slug_from_url(listing_url: str) -> Optional[str]:
         return None
 
 
-def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> Set[str]:
+def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> set[str]:
     """Build expected first-path slugs for a listing_type/category combo."""
-    expected: Set[str] = set()
+    expected: set[str] = set()
     cfg = get_emlakjet_config()
     category_map = cfg.categories.get(listing_type or "", {})
     category_path = str(category_map.get(category or "", "")).strip("/")
@@ -130,9 +128,9 @@ def _get_expected_emlakjet_primary_slugs(listing_type: str, category: str) -> Se
 
 def _get_disallowed_emlakjet_primary_slugs(
     listing_type: str, category: str
-) -> Set[str]:
+) -> set[str]:
     """Collect known primary slugs of other categories to avoid false positives."""
-    disallowed: Set[str] = set()
+    disallowed: set[str] = set()
     cfg = get_emlakjet_config()
     category_map = cfg.categories.get(listing_type or "", {})
     for cat_key, cat_path in category_map.items():
@@ -149,9 +147,9 @@ def _matches_emlakjet_filters(
     listing_url: str,
     listing_type: str,
     category: str,
-    alt_kategori: Optional[str],
-    expected_primary_slugs: Set[str],
-    disallowed_primary_slugs: Set[str],
+    alt_kategori: str | None,
+    expected_primary_slugs: set[str],
+    disallowed_primary_slugs: set[str],
 ) -> bool:
     """URL based listing_type/category/subtype guard for Emlakjet."""
     extracted = _extract_emlakjet_primary_slug_from_url(listing_url)
@@ -189,12 +187,12 @@ def _matches_emlakjet_filters(
 
 def save_listings_to_db(
     db,
-    listings: List[Dict],
+    listings: list[dict],
     platform: str,
     kategori: str,
     ilan_tipi: str,
-    alt_kategori: str = None,
-    scrape_session_id: int = None,
+    alt_kategori: str | None = None,
+    scrape_session_id: int | None = None,
     log_db_save: bool = True,
 ):
     """Save listing rows with URL-level listing_type/category/subtype validation."""
@@ -216,7 +214,7 @@ def save_listings_to_db(
             disallowed_primary_slugs = _get_disallowed_emlakjet_primary_slugs(
                 ilan_tipi, kategori
             )
-            filtered_records: List[Dict] = []
+            filtered_records: list[dict] = []
             filtered_out = 0
 
             for data in listings:
@@ -316,11 +314,9 @@ class EmlakJetScraper(BaseScraper):
         driver: WebDriver,
         base_url: str = "https://www.emlakjet.com",
         category: str = "konut",
-        selected_locations: Optional[Dict] = None,
-        listing_type: Optional[str] = None,  # satilik/kiralik
-        subtype_path: Optional[
-            str
-        ] = None,  # Alt kategori URL path'i (örn: /satilik-daire)
+        selected_locations: dict | None = None,
+        listing_type: str | None = None,  # satilik/kiralik
+        subtype_path: str | None = None,  # Alt kategori URL path'i (örn: /satilik-daire)
     ):
         super().__init__(driver, base_url, "emlakjet", category, selected_locations)
 
@@ -332,16 +328,16 @@ class EmlakJetScraper(BaseScraper):
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
         self.parser = parser_class()
 
-    def extract_listing_data(self, container) -> Optional[Dict[str, Any]]:
+    def extract_listing_data(self, container) -> dict[str, Any] | None:
         """Kategori parser'ı ile ilan verisini çıkar"""
         return self.parser.extract_listing_data(container)
 
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Kategori parser'ı ile detayları parse et"""
         return self.parser.parse_category_details(quick_info, title)
 
     @property
-    def subtype_name(self) -> Optional[str]:
+    def subtype_name(self) -> str | None:
         """Dosya adlandırma için subtype_path'inden alt kategori adını çıkar"""
         if self.subtype_path:
             # /satilik-daire -> daire
@@ -399,7 +395,7 @@ class EmlakJetScraper(BaseScraper):
             f"   ❌ Kalan başarısız: {failed_count}",
         )
 
-    def scrape_current_page(self) -> List[Dict[str, Any]]:
+    def scrape_current_page(self) -> list[dict[str, Any]]:
         """Mevcut sayfadaki tüm ilanları tara"""
         from datetime import datetime
 
@@ -484,8 +480,7 @@ class EmlakJetScraper(BaseScraper):
                         continue
                     href_path = _urlparse(location_url).path.rstrip("/")
                     if href_path == base_path or not (
-                        href_path.startswith(base_path + "/")
-                        or href_path.startswith(base_path + "-")
+                        href_path.startswith((base_path + "/", base_path + "-"))
                     ):
                         continue
                     if href_path.rsplit("/", 1)[-1] in excluded_segments:
@@ -532,7 +527,7 @@ class EmlakJetScraper(BaseScraper):
             logger.error(f"Error getting {location_type} options: {e}")
             return [], 0
 
-    def get_max_pages(self, target_url: Optional[str] = None) -> int:
+    def get_max_pages(self, target_url: str | None = None) -> int:
         """URL için binary search ile maksimum sayfa sayısını al"""
         try:
             if target_url:
@@ -604,8 +599,7 @@ class EmlakJetScraper(BaseScraper):
                     By.CSS_SELECTOR, "span[aria-current='page']"
                 )
                 selected_num = int(selected_page.text)
-                if selected_num > max_page:
-                    max_page = selected_num
+                max_page = max(max_page, selected_num)
             except Exception:  # nosec
                 pass
 
@@ -685,9 +679,9 @@ class EmlakJetScraper(BaseScraper):
 
     def select_provinces(
         self,
-        api_indices: Optional[List[int]] = None,
-        provinces: Optional[List[Dict]] = None,
-    ) -> List[Dict]:
+        api_indices: list[int] | None = None,
+        provinces: list[dict] | None = None,
+    ) -> list[dict]:
         """Taranacak illeri seç"""
         print("\n🏙️  İL SEÇİMİ")
         if provinces is None:
@@ -729,9 +723,9 @@ class EmlakJetScraper(BaseScraper):
 
     def select_districts_for_province(
         self,
-        province: Dict,
+        province: dict,
         api_mode: bool = False,
-        api_districts: Optional[List[str]] = None,
+        api_districts: list[str] | None = None,
     ) -> tuple:
         """Belirli bir il için ilçeleri seç"""
         print(f"\n🏘️  {province['name']} İLÇELERİ")
@@ -794,8 +788,8 @@ class EmlakJetScraper(BaseScraper):
             return ([province], False)
 
     def select_neighborhoods_for_district(
-        self, district: Dict, api_mode: bool = False
-    ) -> List[Dict]:
+        self, district: dict, api_mode: bool = False
+    ) -> list[dict]:
         """Belirli bir ilçe için mahalleleri seç"""
         province_name = district.get("il", "")
         district_name = district["name"]
@@ -848,9 +842,9 @@ class EmlakJetScraper(BaseScraper):
         self,
         prov_name: str,
         dist_name: str,
-        tgt: Dict,
-        page_num_ref: List[int],
-        new_listings_count_ref: List[int],
+        tgt: dict,
+        page_num_ref: list[int],
+        new_listings_count_ref: list[int],
     ):
         """Her sayfa sonrası ilanları DB'ye kaydetmek için callback oluştur"""
 
@@ -894,7 +888,7 @@ class EmlakJetScraper(BaseScraper):
         location_label: str = "",
         province: str = "",
         district: str = "",
-        new_listings_count_ref: List[int] = None,
+        new_listings_count_ref: list[int] | None = None,
     ) -> bool:
         """Başarısız sayfa takibi ile sayfa tarama"""
         first_page_count = 0
@@ -1007,7 +1001,7 @@ class EmlakJetScraper(BaseScraper):
         return first_page_count == 0 and max_pages == 1
 
     def _scrape_target(
-        self, target: Dict, province_name: str, district_name: str
+        self, target: dict, province_name: str, district_name: str
     ) -> tuple[bool, int]:
         """Tek bir hedefi (il/ilçe/mahalle) tara"""
         print = task_log.line
@@ -1041,10 +1035,10 @@ class EmlakJetScraper(BaseScraper):
 
     def start_scraping_api(
         self,
-        cities: Optional[List[str]] = None,
-        districts: Optional[Dict[str, List[str]]] = None,
+        cities: list[str] | None = None,
+        districts: dict[str, list[str]] | None = None,
         max_listings: int = 0,
-        max_pages: Optional[int] = None,
+        max_pages: int | None = None,
         progress_callback=None,
     ):
         """İki katmanlı optimizasyonla API tarama giriş noktası"""
@@ -1517,4 +1511,4 @@ class EmlakJetScraper(BaseScraper):
 
         except Exception as e:
             logger.error(f"API tarama hatası: {e}")
-            raise e
+            raise

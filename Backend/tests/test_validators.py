@@ -1,19 +1,19 @@
-# -*- coding: utf-8 -*-
 """utils/validators.py birim testleri"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 # Üst dizini import yoluna ekle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.validators import (
-    DataValidator,
     DataNormalizer,
-    validate_listing,
-    normalize_price,
+    DataValidator,
     normalize_area,
+    normalize_price,
+    validate_listing,
 )
 
 

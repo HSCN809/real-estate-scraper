@@ -1,17 +1,17 @@
-# -*- coding: utf-8 -*-
 """core/config.py birim testleri"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 # Üst dizini import yoluna ekle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.config import (
-    ScraperConfig,
     EmlakJetConfig,
     HepsiemlakConfig,
+    ScraperConfig,
     get_config,
     get_emlakjet_config,
     get_hepsiemlak_config,

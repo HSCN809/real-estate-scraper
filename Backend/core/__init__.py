@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """Çekirdek modül başlatma"""
 
 from .config import (
-    ScraperConfig,
     EmlakJetConfig,
     HepsiemlakConfig,
+    ScraperConfig,
     get_config,
     get_emlakjet_config,
     get_hepsiemlak_config,
@@ -26,14 +25,14 @@ def get_base_scraper():
 
 
 __all__ = [
-    "ScraperConfig",
+    "SELECTORS",
     "EmlakJetConfig",
     "HepsiemlakConfig",
+    "ScraperConfig",
+    "get_base_scraper",
     "get_config",
+    "get_driver_manager",
     "get_emlakjet_config",
     "get_hepsiemlak_config",
-    "SELECTORS",
     "get_selectors",
-    "get_driver_manager",
-    "get_base_scraper",
 ]

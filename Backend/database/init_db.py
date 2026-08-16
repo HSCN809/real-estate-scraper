@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Veritabanı başlatma scripti"""
 
 import os
@@ -9,7 +8,7 @@ if __name__ == "__main__":
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, backend_dir)
 
-from database.connection import engine, DATABASE_PATH
+from database.connection import DATABASE_PATH, engine
 from database.models import Base
 
 
@@ -22,7 +21,7 @@ def init_database():
 
     print("Database tables created successfully!")
     print("\nTables created:")
-    for table_name in Base.metadata.tables.keys():
+    for table_name in Base.metadata.tables:
         print(f"  - {table_name}")
 
 

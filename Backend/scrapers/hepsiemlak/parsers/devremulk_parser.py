@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak Devremülk parser'ı"""
 
-from typing import Dict, Any
+from typing import Any
+
 from selenium.webdriver.remote.webelement import WebElement
+
 from .base_parser import BaseHepsiemlakParser
 
 
@@ -12,7 +13,7 @@ class DevremulkParser(BaseHepsiemlakParser):
     def __init__(self):
         super().__init__("devremulk")
 
-    def extract_category_data(self, container: WebElement) -> Dict[str, Any]:
+    def extract_category_data(self, container: WebElement) -> dict[str, Any]:
         """Devremülke özel verileri çıkar"""
         data = {
             "oda_sayisi": "Belirtilmemiş",

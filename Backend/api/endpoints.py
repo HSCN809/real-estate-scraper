@@ -1,35 +1,34 @@
-# -*- coding: utf-8 -*-
-from uuid import uuid4
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-
-from api.schemas import (
-    ActiveTasksResponse,
-    ScrapeRequest,
-    ScrapeStartResponse,
-    SUPPORTED_SCRAPING_METHODS,
-    TaskStatusResponse,
-)
-from core.config import get_emlakjet_config, get_hepsiemlak_config
-from core.task_status import get_task_status_store
-from database.connection import get_db
-from database import crud
-from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
-from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
 import io
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
+from uuid import uuid4
+
+from core.config import get_emlakjet_config, get_hepsiemlak_config
+from core.task_status import get_task_status_store
+from database import crud
+from database.connection import get_db
+from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
+
+from api.schemas import (
+    SUPPORTED_SCRAPING_METHODS,
+    ActiveTasksResponse,
+    ScrapeRequest,
+    ScrapeStartResponse,
+    TaskStatusResponse,
+)
 
 # İlçe verileri dizini
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
 
 # İlçe GeoJSON verileri için bellek içi önbellek
-_districts_cache: Dict[str, Any] = {}
-_districts_index: Optional[Dict[str, Any]] = None
+_districts_cache: dict[str, Any] = {}
+_districts_index: dict[str, Any] | None = None
 
 router = APIRouter()
 logger = logging.getLogger("api")
@@ -78,7 +77,7 @@ def _require_task_status_store():
 
 
 def _enqueue_scrape_task(
-    task_callable, *, kwargs: Dict[str, Any], message: str, platform: str
+    task_callable, *, kwargs: dict[str, Any], message: str, platform: str
 ) -> TaskStatusResponse:
     store = _require_task_status_store()
     task_id = uuid4().hex
@@ -96,7 +95,7 @@ async def get_categories():
     def format_categories(categories_dict):
         return [
             {"id": k, "name": CATEGORY_NAMES.get(k, k.replace("_", " ").title())}
-            for k in categories_dict.keys()
+            for k in categories_dict
         ]
 
     return {
@@ -173,7 +172,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
         raise HTTPException(status_code=400, detail="En az bir şehir seçmelisiniz")
 
     if request.districts:
-        for city, districts in request.districts.items():
+        for city in request.districts:
             if city not in request.cities:
                 raise HTTPException(
                     status_code=400,
@@ -223,9 +222,9 @@ async def get_task_status(task_id: str):
 
 @router.get("/analytics/prices")
 async def get_price_analytics(
-    platform: str = None,
-    category: str = None,
-    listing_type: str = None,
+    platform: str | None = None,
+    category: str | None = None,
+    listing_type: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Veritabanından fiyat verilerini çek - grafikler için (filtrelenebilir)"""
@@ -296,10 +295,10 @@ async def get_price_analytics(
 @router.get("/analytics/city/{city_name}")
 async def get_city_analytics(
     city_name: str,
-    platform: str = None,
-    category: str = None,
-    listing_type: str = None,
-    subtype: str = None,
+    platform: str | None = None,
+    category: str | None = None,
+    listing_type: str | None = None,
+    subtype: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Veritabanindan belirli bir sehrin ilanlarini ve istatistiklerini dondur."""
@@ -340,11 +339,11 @@ async def get_city_analytics(
 
 @router.get("/analytics/stats")
 async def get_listing_statistics(
-    platform: str = None,
-    kategori: str = None,
-    ilan_tipi: str = None,
-    city: str = None,
-    district: str = None,
+    platform: str | None = None,
+    kategori: str | None = None,
+    ilan_tipi: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
@@ -483,7 +482,7 @@ async def clear_results(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=500, detail=f"Veritabani temizleme hatasi: {str(e)}"
+            status_code=500, detail=f"Veritabani temizleme hatasi: {e!s}"
         )
 
     # 2. Outputs klasorundeki dosyalari da sil
@@ -532,11 +531,11 @@ async def get_results(db: Session = Depends(get_db)):
 
 @router.get("/listings/preview")
 async def get_listings_preview(
-    platform: str = None,
-    kategori: str = None,
-    ilan_tipi: str = None,
-    city: str = None,
-    district: str = None,
+    platform: str | None = None,
+    kategori: str | None = None,
+    ilan_tipi: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
@@ -567,14 +566,14 @@ async def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/listings")
 async def get_listings(
-    platform: str = None,
-    kategori: str = None,
-    ilan_tipi: str = None,
-    alt_kategori: str = None,
-    city: str = None,
-    district: str = None,
-    min_price: float = None,
-    max_price: float = None,
+    platform: str | None = None,
+    kategori: str | None = None,
+    ilan_tipi: str | None = None,
+    alt_kategori: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
+    min_price: float | None = None,
+    max_price: float | None = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -614,8 +613,8 @@ async def get_listing(listing_id: int, db: Session = Depends(get_db)):
 
 @router.get("/sessions")
 async def get_scrape_sessions(
-    platform: str = None,
-    status: str = None,
+    platform: str | None = None,
+    status: str | None = None,
     page: int = 1,
     limit: int = 20,
     db: Session = Depends(get_db),
@@ -649,19 +648,20 @@ async def get_districts(city: str, db: Session = Depends(get_db)):
 
 @router.post("/export/excel")
 async def export_to_excel(
-    platform: str = None,
-    kategori: str = None,
-    ilan_tipi: str = None,
-    city: str = None,
-    district: str = None,
+    platform: str | None = None,
+    kategori: str | None = None,
+    ilan_tipi: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Filtrelere göre verileri Excel'e aktar ve indir"""
-    import pandas as pd
     from datetime import datetime as dt
 
+    import pandas as pd
+
     # Ilanlari al (disa aktarim icin maks 10000)
-    listings, total = crud.get_listings(
+    listings, _total = crud.get_listings(
         db,
         platform=platform,
         kategori=kategori,
@@ -808,7 +808,7 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
 # ==================== ILCE GEOJSON ENDPOINTLER ====================
 
 
-def _load_districts_index() -> Dict[str, Any]:
+def _load_districts_index() -> dict[str, Any]:
     """Ilce index.json dosyasini yukle ve onbellege al."""
     global _districts_index
     if _districts_index is not None:
@@ -824,7 +824,7 @@ def _load_districts_index() -> Dict[str, Any]:
     return _districts_index
 
 
-def _load_district_geojson(province_name: str) -> Dict[str, Any]:
+def _load_district_geojson(province_name: str) -> dict[str, Any]:
     """Il GeoJSON verisini yukle ve onbellege al."""
     # Once onbellekte kontrol et
     if province_name in _districts_cache:

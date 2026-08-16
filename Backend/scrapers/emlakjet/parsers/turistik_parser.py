@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """EmlakJet Turistik Tesis parser'ı"""
 
 import re
-from typing import Dict, Any
+from typing import Any
+
 from .base_parser import BaseEmlakJetParser
 
 
@@ -12,7 +12,7 @@ class TuristikTesisParser(BaseEmlakJetParser):
     def __init__(self):
         super().__init__("turistik_tesis")
 
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Turistik tesis detaylarını quick info'dan parse et"""
         details = {"tesis_tipi": "", "oda_sayisi": "", "yatak_sayisi": ""}
 

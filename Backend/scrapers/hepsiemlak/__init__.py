@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
 """HepsiEmlak Scraper modülü"""
 
 from .main import HepsiemlakScraper
-from .scrapling_scraper import HepsiemlakScraplingScraper
 from .parsers import (
-    KonutParser,
     ArsaParser,
-    IsyeriParser,
     DevremulkParser,
+    IsyeriParser,
+    KonutParser,
     TuristikParser,
 )
+from .scrapling_scraper import HepsiemlakScraplingScraper
 
 __all__ = [
+    "ArsaParser",
+    "DevremulkParser",
     "HepsiemlakScraper",
     "HepsiemlakScraplingScraper",
-    "KonutParser",
-    "ArsaParser",
     "IsyeriParser",
-    "DevremulkParser",
+    "KonutParser",
     "TuristikParser",
 ]

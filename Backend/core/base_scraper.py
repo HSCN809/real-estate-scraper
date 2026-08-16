@@ -1,26 +1,25 @@
-# -*- coding: utf-8 -*-
 """Tüm scraper'lar için ortak işlevsellik sağlayan temel sınıf - gizli mod"""
 
-import time
-import random
 import logging
+import random
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Set
 from datetime import datetime
+from typing import Any
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import (
-    TimeoutException,
     NoSuchElementException,
     StaleElementReferenceException,
+    TimeoutException,
 )
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import get_config
-from .selectors import get_selectors, get_common_selectors
+from .selectors import get_common_selectors, get_selectors
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class BaseScraper(ABC):
         base_url: str,
         platform: str,
         category: str,
-        selected_locations: Optional[Dict] = None,
+        selected_locations: dict | None = None,
     ):
         """Scraper'ı başlat"""
         self.driver = driver
@@ -55,7 +54,7 @@ class BaseScraper(ABC):
         }
 
         # Veri deposu
-        self.all_listings: List[Dict[str, Any]] = []
+        self.all_listings: list[dict[str, Any]] = []
 
         # Bekleme nesnesi
         self.wait = WebDriverWait(driver, self.config.element_wait_timeout)
@@ -93,14 +92,12 @@ class BaseScraper(ABC):
     # Alt sınıflar tarafından uygulanması gereken metotlar
 
     @abstractmethod
-    def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
+    def extract_listing_data(self, container: WebElement) -> dict[str, Any] | None:
         """Tek bir ilan elementinden veri çıkar"""
-        pass
 
     @abstractmethod
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Kategori detaylarını parse et"""
-        pass
 
     # =========================================================================
     # Ortak element çıkarma metotları
@@ -124,7 +121,7 @@ class BaseScraper(ABC):
         except (NoSuchElementException, StaleElementReferenceException):
             return ""
 
-    def find_elements_safe(self, selector: str) -> List[WebElement]:
+    def find_elements_safe(self, selector: str) -> list[WebElement]:
         """Element listesini güvenli şekilde bul"""
         try:
             return self.driver.find_elements(By.CSS_SELECTOR, selector)
@@ -133,8 +130,8 @@ class BaseScraper(ABC):
             return []
 
     def wait_for_element(
-        self, selector: str, timeout: Optional[int] = None
-    ) -> Optional[WebElement]:
+        self, selector: str, timeout: int | None = None
+    ) -> WebElement | None:
         """Elementin sayfada görünmesini bekle"""
         try:
             wait = WebDriverWait(
@@ -148,8 +145,8 @@ class BaseScraper(ABC):
             return None
 
     def wait_for_clickable(
-        self, selector: str, timeout: Optional[int] = None
-    ) -> Optional[WebElement]:
+        self, selector: str, timeout: int | None = None
+    ) -> WebElement | None:
         """Elementin tıklanabilir olmasını bekle"""
         try:
             wait = WebDriverWait(
@@ -164,7 +161,7 @@ class BaseScraper(ABC):
     # Kullanıcı girdi metotları
     # =========================================================================
 
-    def get_user_choice(self, max_option: int) -> Optional[int]:
+    def get_user_choice(self, max_option: int) -> int | None:
         """Kullanıcıdan tek seçim al"""
         try:
             user_input = input(f"\nSeçiminiz (1-{max_option}): ").strip()
@@ -185,7 +182,7 @@ class BaseScraper(ABC):
             print("❌ Geçersiz giriş! Lütfen bir sayı girin.")
             return None
 
-    def get_user_page_count(self) -> Optional[int]:
+    def get_user_page_count(self) -> int | None:
         """Kullanıcıdan sayfa sayısı al"""
         max_pages = self.config.max_pages_per_location
 
@@ -219,7 +216,7 @@ class BaseScraper(ABC):
                 return None
 
     def multiple_selection_menu(
-        self, items: List[Dict], selected_items: List[Dict], item_type: str
+        self, items: list[dict], selected_items: list[dict], item_type: str
     ) -> None:
         """Çoklu seçim menüsü"""
         print(f"\n🎯 ÇOKLU {item_type.upper()} SEÇİMİ")
@@ -255,9 +252,9 @@ class BaseScraper(ABC):
             except Exception as e:
                 print(f"❌ Hata: {e}")
 
-    def _parse_selection_input(self, user_input: str, max_value: int) -> List[int]:
+    def _parse_selection_input(self, user_input: str, max_value: int) -> list[int]:
         """Çoklu seçim girdisini parse et"""
-        selections: Set[int] = set()
+        selections: set[int] = set()
 
         # Virgülle ayrılmış
         if "," in user_input:
@@ -301,7 +298,7 @@ class BaseScraper(ABC):
                 if 1 <= num <= max_value:
                     selections.add(num)
 
-        return sorted(list(selections))
+        return sorted(selections)
 
     # =========================================================================
     # Görüntüleme metotları
@@ -310,10 +307,10 @@ class BaseScraper(ABC):
     def display_menu(
         self,
         title: str,
-        items: List,
+        items: list,
         show_back: bool = True,
         show_exit: bool = True,
-        selected_items: Optional[List] = None,
+        selected_items: list | None = None,
     ) -> int:
         """Menü görüntüle ve sonraki seçenek numarasını döndür"""
         print("\n" + "=" * 50)
@@ -321,7 +318,7 @@ class BaseScraper(ABC):
         print("=" * 50)
 
         # Seçili öğe isimlerinin kümesini oluştur
-        selected_names: Set[str] = set()
+        selected_names: set[str] = set()
         if selected_items:
             for item in selected_items:
                 if isinstance(item, dict) and "name" in item:
@@ -401,7 +398,7 @@ class BaseScraper(ABC):
     # Navigasyon metotları
     # =========================================================================
 
-    def navigate_to(self, url: str, wait_time: Optional[float] = None) -> bool:
+    def navigate_to(self, url: str, wait_time: float | None = None) -> bool:
         """Belirtilen URL'ye git"""
         try:
             wait = wait_time or self.config.wait_between_pages
@@ -423,7 +420,7 @@ class BaseScraper(ABC):
     # Tarama metotları
     # =========================================================================
 
-    def scrape_current_page(self) -> List[Dict[str, Any]]:
+    def scrape_current_page(self) -> list[dict[str, Any]]:
         """Mevcut sayfadaki tüm ilanları tara"""
         listings = []
 

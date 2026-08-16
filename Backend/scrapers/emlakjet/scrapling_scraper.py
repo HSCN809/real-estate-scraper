@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """EmlakJet Scrapling tabanli scraper."""
 
 import logging
@@ -9,7 +8,7 @@ import sys
 import time
 import unicodedata
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from scrapling.fetchers import (
@@ -26,8 +25,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.config import get_emlakjet_config
 from core.selectors import get_common_selectors, get_selectors
-from scrapers.common.proxy_fetch import ProxyFetchClient
 from utils.logger import TaskLogLayout, get_logger
+
+from scrapers.common.proxy_fetch import ProxyFetchClient
 
 from .main import EmlakJetScraper, save_listings_to_db
 
@@ -55,7 +55,7 @@ SPIDER_METHOD_TO_SESSION = {
     "scrapling_spider_stealth_session": "stealth",
 }
 
-SPIDER_SESSION_CONFIG: Dict[str, Dict[str, Any]] = {
+SPIDER_SESSION_CONFIG: dict[str, dict[str, Any]] = {
     "fetcher": {
         "concurrent_requests": 3,
         "download_delay": 0.0,
@@ -92,14 +92,14 @@ class EmlakJetScraplingScraper:
         self,
         listing_type: str = "satilik",
         category: str = "konut",
-        subtype_path: Optional[str] = None,
-        selected_cities: Optional[List[str]] = None,
-        selected_districts: Optional[Dict[str, List[str]]] = None,
+        subtype_path: str | None = None,
+        selected_cities: list[str] | None = None,
+        selected_districts: dict[str, list[str]] | None = None,
         use_stealth: bool = True,
         headless: bool = True,
-        scraping_method: Optional[str] = None,
+        scraping_method: str | None = None,
         proxy_enabled: bool = False,
-        proxy_url: Optional[str] = None,
+        proxy_url: str | None = None,
     ):
         base_config = get_emlakjet_config()
         category_path = subtype_path or base_config.categories.get(
@@ -139,12 +139,12 @@ class EmlakJetScraplingScraper:
 
         self.db = None
         self.scrape_session_id = None
-        self.all_listings: List[Dict[str, Any]] = []
+        self.all_listings: list[dict[str, Any]] = []
         self.total_scraped_count = 0
         self.new_listings_count = 0
         self.duplicate_count = 0
         self.total_new_listings = 0
-        self.metrics: Dict[str, Any] = {
+        self.metrics: dict[str, Any] = {
             "start_time": None,
             "end_time": None,
             "total_pages": 0,
@@ -156,7 +156,7 @@ class EmlakJetScraplingScraper:
 
     @staticmethod
     def _resolve_scraping_method(
-        scraping_method: Optional[str], use_stealth: bool
+        scraping_method: str | None, use_stealth: bool
     ) -> str:
         if scraping_method is None:
             return (
@@ -169,7 +169,7 @@ class EmlakJetScraplingScraper:
         return scraping_method
 
     @property
-    def subtype_name(self) -> Optional[str]:
+    def subtype_name(self) -> str | None:
         if self.subtype_path:
             parts = self.subtype_path.strip("/").split("-")
             if len(parts) >= 2:
@@ -210,7 +210,7 @@ class EmlakJetScraplingScraper:
 
     def _build_city_url(self, city_name: str) -> str:
         base_path = (self.subtype_path or self.base_url).strip()
-        if base_path.startswith("http://") or base_path.startswith("https://"):
+        if base_path.startswith(("http://", "https://")):
             parsed = urlparse(base_path)
             path_part = parsed.path.strip("/")
         else:
@@ -303,7 +303,7 @@ class EmlakJetScraplingScraper:
         if effective_method == "scrapling_fetcher_session":
             return self.session.get(url)
 
-        fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+        fetch_kwargs: dict[str, Any] = {"timeout": self.request_timeout_ms}
         if effective_method == "scrapling_stealth_session":
             fetch_kwargs["network_idle"] = True
         wait_selector = self.common_selectors.get("listing_container")
@@ -329,7 +329,7 @@ class EmlakJetScraplingScraper:
                 timeout=self.request_timeout_ms,
                 network_idle=False,
             ) as session:
-                fetch_kwargs: Dict[str, Any] = {"timeout": self.request_timeout_ms}
+                fetch_kwargs: dict[str, Any] = {"timeout": self.request_timeout_ms}
                 if wait_selector:
                     fetch_kwargs["wait_selector"] = wait_selector
                 return session.fetch(url, **fetch_kwargs)
@@ -347,7 +347,7 @@ class EmlakJetScraplingScraper:
                 fetch_kwargs["wait_selector"] = wait_selector
             return session.fetch(url, **fetch_kwargs)
 
-    def fetch_page(self, url: str) -> Optional[Selector]:
+    def fetch_page(self, url: str) -> Selector | None:
         try:
             if self.proxy_enabled:
                 start_time = time.time()
@@ -421,7 +421,7 @@ class EmlakJetScraplingScraper:
 
     def _extract_common_data(
         self, element: Selector, page_url: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         title = self._extract_text(
             element,
             self.common_selectors.get("title", "h3[data-listing-title] a"),
@@ -480,11 +480,11 @@ class EmlakJetScraplingScraper:
         self,
         selector: Selector,
         page_url: str = "",
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        listings: List[Dict[str, Any]] = []
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
         try:
             listing_selector = self.common_selectors.get(
                 "listing_container", "a.styles_wrapper__587DT"
@@ -516,7 +516,7 @@ class EmlakJetScraplingScraper:
             task_log.line(f"Error extracting listings from page: {exc}", level="error")
         return listings
 
-    def _persist_listings(self, listings: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+    def _persist_listings(self, listings: list[dict[str, Any]]) -> tuple[int, int, int]:
         if not listings:
             return 0, 0, 0
         self.total_scraped_count += len(listings)
@@ -566,7 +566,7 @@ class EmlakJetScraplingScraper:
 
     def get_total_pages(self, selector: Selector) -> int:
         try:
-            page_numbers: List[int] = []
+            page_numbers: list[int] = []
             for link in selector.css(
                 self.common_selectors.get("pagination_list", "a[href*='sayfa=']")
             ):
@@ -589,7 +589,7 @@ class EmlakJetScraplingScraper:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1
 
-    def _parse_listing_count(self, selector: Selector) -> Optional[int]:
+    def _parse_listing_count(self, selector: Selector) -> int | None:
         if not selector:
             return None
         try:
@@ -627,12 +627,12 @@ class EmlakJetScraplingScraper:
         except Exception:
             return None
 
-    def get_listing_count(self, url: str) -> Optional[int]:
+    def get_listing_count(self, url: str) -> int | None:
         selector = self.fetch_page(url)
         return self._parse_listing_count(selector) if selector else None
 
     @staticmethod
-    def _format_listing_count(listing_count: Optional[int]) -> str:
+    def _format_listing_count(listing_count: int | None) -> str:
         return str(listing_count) if listing_count is not None else "Bilinmiyor"
 
     def _clean_location_name(self, text: str) -> str:
@@ -652,14 +652,14 @@ class EmlakJetScraplingScraper:
 
     def get_location_options(
         self, location_type: str, current_url: str
-    ) -> Tuple[List[Dict[str, str]], Optional[int]]:
+    ) -> tuple[list[dict[str, str]], int | None]:
         task_log.line(f"Getting {location_type} options via {self.scraping_method}")
         selector = self.fetch_page(current_url)
         if not selector:
             return [], None
 
         listing_count = self._parse_listing_count(selector)
-        location_options: List[Dict[str, str]] = []
+        location_options: list[dict[str, str]] = []
         seen_names = set()
 
         # Yeni yapı: alt lokasyon linkleri mevcut yolun devamıdır
@@ -679,8 +679,7 @@ class EmlakJetScraplingScraper:
             absolute_url = urljoin(current_url, location_url)
             href_path = urlparse(absolute_url).path.rstrip("/")
             if href_path == base_path or not (
-                href_path.startswith(base_path + "/")
-                or href_path.startswith(base_path + "-")
+                href_path.startswith((base_path + "/", base_path + "-"))
             ):
                 continue
             if href_path.rsplit("/", 1)[-1] in excluded_segments:
@@ -705,8 +704,8 @@ class EmlakJetScraplingScraper:
         return location_options, listing_count
 
     def _match_requested_locations(
-        self, options: List[Dict[str, str]], requested: List[str]
-    ) -> List[Dict[str, str]]:
+        self, options: list[dict[str, str]], requested: list[str]
+    ) -> list[dict[str, str]]:
         requested_set = {self._normalize_text(name) for name in requested}
         return [
             option
@@ -715,8 +714,8 @@ class EmlakJetScraplingScraper:
         ]
 
     def _trim_page_listings(
-        self, page_listings: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, page_listings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         if self._max_listings <= 0:
             return page_listings
         remaining = self._max_listings - len(self.all_listings)
@@ -725,7 +724,7 @@ class EmlakJetScraplingScraper:
         return page_listings[:remaining]
 
     def _resolve_page_limit(
-        self, detected_total_pages: Optional[int], requested_max_pages: Optional[int]
+        self, detected_total_pages: int | None, requested_max_pages: int | None
     ) -> int:
         total_pages = max(1, detected_total_pages or 1)
         if requested_max_pages is None or requested_max_pages <= 0:
@@ -734,8 +733,8 @@ class EmlakJetScraplingScraper:
 
     def _fetch_spider_seed_page(
         self, url: str, session_mode: str
-    ) -> Optional[Selector]:
-        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
+    ) -> Selector | None:
+        mode_settings: dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_selector = self.common_selectors.get("listing_container")
 
         try:
@@ -797,13 +796,13 @@ class EmlakJetScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
-        listings: List[Dict[str, Any]] = []
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
         self._log_location_start(location_name, location_url)
 
         first_page = self.fetch_page(location_url)
@@ -890,19 +889,19 @@ class EmlakJetScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         session_mode = SPIDER_METHOD_TO_SESSION[self.scraping_method]
-        mode_settings: Dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
+        mode_settings: dict[str, Any] = SPIDER_SESSION_CONFIG[session_mode]
         listing_selector = self.common_selectors.get("listing_container")
-        spider_errors: List[Dict[str, str]] = []
+        spider_errors: list[dict[str, str]] = []
         visited_pages: set[int] = set()
         processed_pages: set[int] = set()
-        collected_items: List[Dict[str, Any]] = []
+        collected_items: list[dict[str, Any]] = []
         outer = self
 
         self._log_location_start(location_name, location_url)
@@ -1028,7 +1027,7 @@ class EmlakJetScraplingScraper:
                     return
                 if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs: Dict[str, Any] = {"callback": self.parse}
+                    follow_kwargs: dict[str, Any] = {"callback": self.parse}
                     if session_mode != "fetcher" and listing_selector:
                         follow_kwargs["wait_selector"] = listing_selector
                     yield response.follow(next_url, **follow_kwargs)
@@ -1061,12 +1060,12 @@ class EmlakJetScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         if self.proxy_enabled or self.scraping_method in SESSION_METHODS:
             return self._scrape_location_with_session(
                 location_name=location_name,
@@ -1091,12 +1090,12 @@ class EmlakJetScraplingScraper:
         self,
         location_name: str,
         location_url: str,
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
         progress_callback=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return self._scrape_location_with_session(
             location_name=location_name,
             location_url=location_url,
@@ -1106,7 +1105,7 @@ class EmlakJetScraplingScraper:
             neighborhood=neighborhood,
             progress_callback=progress_callback,
         )
-        listings: List[Dict[str, Any]] = []
+        listings: list[dict[str, Any]] = []
         self._log_location_start(location_name, location_url)
 
         first_page = self.fetch_page(location_url)
@@ -1187,13 +1186,13 @@ class EmlakJetScraplingScraper:
 
     def _scrape_target(
         self,
-        target: Dict[str, str],
-        max_pages: Optional[int],
-        city: Optional[str] = None,
-        district: Optional[str] = None,
-        neighborhood: Optional[str] = None,
+        target: dict[str, str],
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
         progress_callback=None,
-    ) -> Tuple[bool, int]:
+    ) -> tuple[bool, int]:
         before_new = self.total_new_listings
         listings = self._scrape_location(
             location_name=target["label"],
@@ -1225,10 +1224,10 @@ class EmlakJetScraplingScraper:
 
     def start_scraping_api(
         self,
-        cities: Optional[List[str]] = None,
-        districts: Optional[Dict[str, List[str]]] = None,
+        cities: list[str] | None = None,
+        districts: dict[str, list[str]] | None = None,
         max_listings: int = 0,
-        max_pages: Optional[int] = None,
+        max_pages: int | None = None,
         progress_callback=None,
     ):
         self.selected_cities = cities or self.selected_cities
@@ -1262,7 +1261,7 @@ class EmlakJetScraplingScraper:
 
         if (not self.proxy_enabled) and self.scraping_method in SESSION_METHODS:
             self._create_session()
-        scrape_stats: Dict[str, Dict[str, int]] = {}
+        scrape_stats: dict[str, dict[str, int]] = {}
         page_limit = max_pages
         stopped = False
 

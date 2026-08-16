@@ -1,19 +1,16 @@
-# -*- coding: utf-8 -*-
 """EmlakJet alt kategori çekici ve önbellek yöneticisi"""
 
 import json
 import os
-import time
-from typing import List, Dict, Optional
-from pathlib import Path
-
 import sys
+import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from core.driver_manager import DriverManager
-from utils.logger import get_logger
 from selenium.webdriver.common.by import By
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -40,7 +37,7 @@ MAIN_CATEGORIES = {
 }
 
 
-def load_subcategories_from_json() -> Dict[str, Dict[str, List[Dict]]]:
+def load_subcategories_from_json() -> dict[str, dict[str, list[dict]]]:
     """JSON dosyasından subcategories yükle"""
     if SUBCATEGORIES_JSON_PATH.exists():
         try:
@@ -51,7 +48,7 @@ def load_subcategories_from_json() -> Dict[str, Dict[str, List[Dict]]]:
     return {}
 
 
-def save_subcategories_to_json(data: Dict[str, Dict[str, List[Dict]]]):
+def save_subcategories_to_json(data: dict[str, dict[str, list[dict]]]):
     """Subcategories'i JSON dosyasına kaydet"""
     try:
         with open(SUBCATEGORIES_JSON_PATH, "w", encoding="utf-8") as f:
@@ -77,9 +74,9 @@ def extract_subtype_id(path: str) -> str:
     return path.replace("-", "_")
 
 
-def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
+def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
     """Selenium ile tüm alt kategorileri çek"""
-    all_subcategories: Dict[str, Dict[str, List[Dict]]] = {}
+    all_subcategories: dict[str, dict[str, list[dict]]] = {}
     base_url = "https://www.emlakjet.com"
 
     manager = DriverManager()
@@ -218,13 +215,13 @@ def fetch_all_subcategories_with_selenium() -> Dict[str, Dict[str, List[Dict]]]:
     return all_subcategories
 
 
-def fetch_subtypes(listing_type: str, category: str) -> List[Dict]:
+def fetch_subtypes(listing_type: str, category: str) -> list[dict]:
     """JSON dosyasından alt kategorileri oku"""
     data = load_subcategories_from_json()
     return data.get(listing_type, {}).get(category, [])
 
 
-def get_cached_subtypes(listing_type: str, category: str) -> Optional[List[Dict]]:
+def get_cached_subtypes(listing_type: str, category: str) -> list[dict] | None:
     """Cache kontrolü - JSON dosyası varsa veri döner"""
     if SUBCATEGORIES_JSON_PATH.exists():
         return fetch_subtypes(listing_type, category)

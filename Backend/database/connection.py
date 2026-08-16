@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 """Veritabanı bağlantı konfigürasyonu"""
 
 import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 

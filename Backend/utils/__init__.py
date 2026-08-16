@@ -1,32 +1,31 @@
-# -*- coding: utf-8 -*-
 """
 Utils module initialization
 """
 
-from .logger import setup_logger, get_logger, ScraperLogger, default_logger
-from .data_exporter import DataExporter, save_excel, default_exporter
+from .data_exporter import DataExporter, default_exporter, save_excel
+from .logger import ScraperLogger, default_logger, get_logger, setup_logger
 from .validators import (
-    DataValidator,
     DataNormalizer,
-    validate_listing,
-    normalize_price,
+    DataValidator,
     normalize_area,
+    normalize_price,
+    validate_listing,
 )
 
 __all__ = [
-    # Logger
-    "setup_logger",
-    "get_logger",
-    "ScraperLogger",
-    "default_logger",
     # Data exporter
     "DataExporter",
-    "save_excel",
-    "default_exporter",
+    "DataNormalizer",
     # Validators
     "DataValidator",
-    "DataNormalizer",
-    "validate_listing",
-    "normalize_price",
+    "ScraperLogger",
+    "default_exporter",
+    "default_logger",
+    "get_logger",
     "normalize_area",
+    "normalize_price",
+    "save_excel",
+    # Logger
+    "setup_logger",
+    "validate_listing",
 ]

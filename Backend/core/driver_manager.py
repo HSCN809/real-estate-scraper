@@ -1,22 +1,20 @@
-# -*- coding: utf-8 -*-
 """Chrome WebDriver yoneticisi."""
 
-import os
-import time
-import random
 import logging
+import os
+import random
 import subprocess  # nosec
-from typing import Optional
+import time
 from contextlib import contextmanager
 
 # Undetected Chromedriver - bot tespiti için tek seçenek
 import undetected_chromedriver as uc
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import get_config
 
@@ -36,10 +34,10 @@ def _kill_zombie_chrome():
     """Önceki Chrome/chromedriver process'lerini temizle"""
     try:
         subprocess.run(  # nosec
-            ["pkill", "-f", "chrome"], capture_output=True, timeout=5
+            ["pkill", "-f", "chrome"], capture_output=True, timeout=5, check=False
         )
         subprocess.run(  # nosec
-            ["pkill", "-f", "chromedriver"], capture_output=True, timeout=5
+            ["pkill", "-f", "chromedriver"], capture_output=True, timeout=5, check=False
         )
         time.sleep(1)
     except Exception:  # nosec
@@ -50,13 +48,13 @@ class DriverManager:
     """Chrome WebDriver yaşam döngüsünü yönetir"""
 
     def __init__(
-        self, headless: Optional[bool] = None, proxy_url: Optional[str] = None
+        self, headless: bool | None = None, proxy_url: str | None = None
     ):
         self.config = get_config()
         self.headless = headless if headless is not None else self.config.headless
         self.proxy_url = proxy_url
-        self.driver: Optional[WebDriver] = None
-        self.wait: Optional[WebDriverWait] = None
+        self.driver: WebDriver | None = None
+        self.wait: WebDriverWait | None = None
         self.user_agent = random.SystemRandom().choice(USER_AGENTS)
 
     def _create_options(self) -> Options:
@@ -113,7 +111,7 @@ class DriverManager:
             except Exception as e:
                 logger.debug(f"Stealth script warning: {e}")
 
-    def _resolve_binary_paths(self) -> tuple[Optional[str], Optional[str]]:
+    def _resolve_binary_paths(self) -> tuple[str | None, str | None]:
         chrome_path = "/usr/bin/google-chrome"
         chromedriver_path = "/usr/bin/chromedriver"
 
@@ -127,8 +125,8 @@ class DriverManager:
     def _start_standard_driver(
         self,
         options: Options,
-        chrome_path: Optional[str],
-        chromedriver_path: Optional[str],
+        chrome_path: str | None,
+        chromedriver_path: str | None,
     ) -> WebDriver:
         if chrome_path:
             options.binary_location = chrome_path
@@ -146,8 +144,8 @@ class DriverManager:
     def _start_undetected_driver(
         self,
         options: Options,
-        chrome_path: Optional[str],
-        chromedriver_path: Optional[str],
+        chrome_path: str | None,
+        chromedriver_path: str | None,
     ) -> WebDriver:
         driver_kwargs = {
             "options": options,
@@ -258,7 +256,7 @@ class DriverManager:
             raise RuntimeError("WebDriver wait is not initialized")
         return self.wait
 
-    def navigate(self, url: str, wait_time: Optional[float] = None) -> bool:
+    def navigate(self, url: str, wait_time: float | None = None) -> bool:
         try:
             wait = wait_time or 2.0
             driver = self.get_driver()

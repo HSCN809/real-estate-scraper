@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 """EmlakJet ilan parser'ı temel sınıfı"""
 
-from typing import Dict, Any, Optional, List
+import os
+import sys
+from typing import Any
+
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException
-
-import sys
-import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from core.selectors import get_selectors, get_common_selectors
+from core.selectors import get_common_selectors, get_selectors
 
 
 class BaseEmlakJetParser:
@@ -25,7 +24,7 @@ class BaseEmlakJetParser:
         self.selectors = get_selectors(self.PLATFORM, category)
         self.common_selectors = get_common_selectors(self.PLATFORM)
 
-    def get_elements_text(self, container: WebElement, selector: str) -> List[str]:
+    def get_elements_text(self, container: WebElement, selector: str) -> list[str]:
         """Elementlerin metinlerini güvenli şekilde liste olarak al"""
         try:
             elements = container.find_elements(By.CSS_SELECTOR, selector)
@@ -51,7 +50,7 @@ class BaseEmlakJetParser:
         except NoSuchElementException:
             return ""
 
-    def extract_badges(self, container: WebElement) -> List[str]:
+    def extract_badges(self, container: WebElement) -> list[str]:
         """İlan rozetlerini çıkar"""
         badges = []
         try:
@@ -67,7 +66,7 @@ class BaseEmlakJetParser:
             pass
         return badges
 
-    def extract_common_data(self, container: WebElement) -> Dict[str, Any]:
+    def extract_common_data(self, container: WebElement) -> dict[str, Any]:
         """İlan konteynerinden ortak verileri çıkar"""
         title_sel = self.common_selectors.get("title", "h3[data-listing-title] a")
         location_sel = self.common_selectors.get("location", "p.text-xs")
@@ -103,11 +102,11 @@ class BaseEmlakJetParser:
             "_quick_info": quick_info,  # Kategoriye özel parse işlemi için
         }
 
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Kategori detaylarını parse et, alt sınıflarda override edilmeli"""
         return {}
 
-    def extract_listing_data(self, container: WebElement) -> Optional[Dict[str, Any]]:
+    def extract_listing_data(self, container: WebElement) -> dict[str, Any] | None:
         """Tam ilan verisini çıkar"""
         try:
             # Ortak verileri al
@@ -129,7 +128,7 @@ class BaseEmlakJetParser:
         except Exception:
             return None
 
-    def get_csv_fields(self) -> List[str]:
+    def get_csv_fields(self) -> list[str]:
         """Bu kategori için CSV alan adlarını getir"""
         return self.selectors.get(
             "csv_fields",

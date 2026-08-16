@@ -5,7 +5,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 import redis
 
@@ -47,11 +47,11 @@ def build_task_status_key(task_id: str) -> str:
     return f"{TASK_STATUS_KEY_PREFIX}:{task_id}"
 
 
-def is_active_task_status(status: Optional[str]) -> bool:
+def is_active_task_status(status: str | None) -> bool:
     return status in ACTIVE_TASK_STATUSES
 
 
-def is_final_task_status(status: Optional[str]) -> bool:
+def is_final_task_status(status: str | None) -> bool:
     return status in FINAL_TASK_STATUSES
 
 
@@ -68,12 +68,12 @@ def create_task_status_payload(
     current: int = 0,
     total: int = 0,
     details: str = "",
-    error: Optional[str] = None,
-    platform: Optional[str] = None,
-    started_at: Optional[str] = None,
-    updated_at: Optional[str] = None,
-    finished_at: Optional[str] = None,
-) -> Dict[str, Any]:
+    error: str | None = None,
+    platform: str | None = None,
+    started_at: str | None = None,
+    updated_at: str | None = None,
+    finished_at: str | None = None,
+) -> dict[str, Any]:
     if status not in TASK_STATUS_VALUES:
         raise ValueError(f"Unsupported task status: {status}")
 
@@ -105,12 +105,12 @@ def get_redis_client() -> redis.Redis:
 
 
 class TaskStatusStore:
-    def __init__(self, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, redis_client: redis.Redis | None = None):
         self.redis_client = redis_client or get_redis_client()
 
     def create_queued_task(
-        self, task_id: str, *, message: str, platform: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, task_id: str, *, message: str, platform: str | None = None
+    ) -> dict[str, Any]:
         payload = create_task_status_payload(
             task_id,
             status=TASK_STATUS_QUEUED,
@@ -124,15 +124,15 @@ class TaskStatusStore:
         self,
         task_id: str,
         *,
-        status: Optional[str] = None,
-        message: Optional[str] = None,
-        progress: Optional[int] = None,
-        current: Optional[int] = None,
-        total: Optional[int] = None,
-        details: Optional[str] = None,
-        error: Optional[str] = None,
-        platform: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        status: str | None = None,
+        message: str | None = None,
+        progress: int | None = None,
+        current: int | None = None,
+        total: int | None = None,
+        details: str | None = None,
+        error: str | None = None,
+        platform: str | None = None,
+    ) -> dict[str, Any]:
         existing = self.get_task(task_id)
         if existing is None:
             if status is None:
@@ -179,9 +179,9 @@ class TaskStatusStore:
         task_id: str,
         *,
         message: str,
-        platform: Optional[str] = None,
+        platform: str | None = None,
         progress: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return self.update(
             task_id,
             status=TASK_STATUS_RUNNING,
@@ -196,7 +196,7 @@ class TaskStatusStore:
         *,
         message: str,
         details: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return self.update(
             task_id,
             status=TASK_STATUS_COMPLETED,
@@ -211,9 +211,9 @@ class TaskStatusStore:
         task_id: str,
         *,
         message: str,
-        error: Optional[str] = None,
+        error: str | None = None,
         details: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return self.update(
             task_id,
             status=TASK_STATUS_FAILED,
@@ -222,14 +222,14 @@ class TaskStatusStore:
             details=details,
         )
 
-    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
         data = self.redis_client.get(build_task_status_key(task_id))
         if not data:
             return None
         return json.loads(cast(str | bytes, data))
 
-    def get_active_tasks(self) -> List[Dict[str, Any]]:
-        tasks: List[Dict[str, Any]] = []
+    def get_active_tasks(self) -> list[dict[str, Any]]:
+        tasks: list[dict[str, Any]] = []
         for key in self.redis_client.scan_iter(f"{TASK_STATUS_KEY_PREFIX}:*"):
             data = self.redis_client.get(key)
             if not data:
@@ -240,7 +240,7 @@ class TaskStatusStore:
         tasks.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
         return tasks
 
-    def _write(self, payload: Dict[str, Any]) -> None:
+    def _write(self, payload: dict[str, Any]) -> None:
         self.redis_client.setex(
             build_task_status_key(payload["task_id"]),
             TASK_STATUS_TTL_SECONDS,

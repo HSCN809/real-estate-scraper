@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """EmlakJet Arsa parser'ı"""
 
 import re
-from typing import Dict, Any
+from typing import Any
+
 from .base_parser import BaseEmlakJetParser
 
 
@@ -12,7 +12,7 @@ class ArsaParser(BaseEmlakJetParser):
     def __init__(self):
         super().__init__("arsa")
 
-    def parse_category_details(self, quick_info: str, title: str) -> Dict[str, Any]:
+    def parse_category_details(self, quick_info: str, title: str) -> dict[str, Any]:
         """Arsa detaylarını quick info ve başlıktan parse et"""
         details = {"arsa_tipi": "", "metrekare": "", "imar_durumu": ""}
 

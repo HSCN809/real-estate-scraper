@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Celery uygulama yapılandırması"""
 
 from celery import Celery, Task

@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """JSON, CSV ve Excel formatları için veri dışa aktarma araçları"""
 
 import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 try:
     import pandas as pd
@@ -23,9 +22,9 @@ class DataExporter:
     def __init__(
         self,
         output_dir: str = "outputs",
-        listing_type: Optional[str] = None,  # satilik/kiralik
-        category: Optional[str] = None,  # konut/arsa/isyeri vb.
-        subtype: Optional[str] = None,  # daire/villa vb.
+        listing_type: str | None = None,  # satilik/kiralik
+        category: str | None = None,  # konut/arsa/isyeri vb.
+        subtype: str | None = None,  # daire/villa vb.
     ):
         """Hiyerarşik klasör yapısıyla dışa aktarıcıyı başlatır."""
         self.base_output_dir = output_dir
@@ -55,7 +54,7 @@ class DataExporter:
         prefix: str,
         extension: str,
         timestamp: bool = True,
-        subfolder: Optional[str] = None,
+        subfolder: str | None = None,
     ) -> str:
         """İsteğe bağlı zaman damgası ile dosya adı üretir ve tam yolunu döndürür."""
         self._ensure_output_dir()
@@ -75,10 +74,10 @@ class DataExporter:
 
     def save_excel(
         self,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         prefix: str = "data",
         timestamp: bool = True,
-        subfolder: Optional[str] = None,
+        subfolder: str | None = None,
         sheet_name: str = "Data",
     ) -> str:
         """Verileri Excel dosyasına kaydeder ve dosya yolunu döndürür."""
@@ -105,13 +104,11 @@ class DataExporter:
 
     def save_by_city(
         self,
-        data: Dict[str, List[Dict[str, Any]]],
+        data: dict[str, list[dict[str, Any]]],
         prefix: str = "data",
         format: str = "excel",
-        city_district_map: Optional[
-            Dict[str, List[str]]
-        ] = None,  # Şehir -> İlçeler mapping
-    ) -> Dict[str, str]:
+        city_district_map: dict[str, list[str]] | None = None,  # Şehir -> İlçeler mapping
+    ) -> dict[str, str]:
         """Şehre göre gruplandırılmış verileri hiyerarşik klasör yapısında ayrı dosyalara kaydeder."""
         results = {}
 
@@ -159,6 +156,6 @@ class DataExporter:
 default_exporter = DataExporter()
 
 
-def save_excel(data: List[Dict], prefix: str = "data", **kwargs) -> str:
+def save_excel(data: list[dict], prefix: str = "data", **kwargs) -> str:
     """Excel kaydetmek için kısayol fonksiyonu"""
     return default_exporter.save_excel(data, prefix, **kwargs)
