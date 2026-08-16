@@ -29,9 +29,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { getResults, exportToExcel } from '@/lib/api';
+import { getResults, getStats, exportToExcel } from '@/lib/api';
 import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
+import { formatAppDateTime, formatIstanbulDate } from '@/lib/datetime';
 
 
 // Animasyon varyantları
@@ -82,6 +83,7 @@ export default function ResultsPage() {
     const [results, setResults] = useState<RichResult[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [lastScrape, setLastScrape] = useState('-');
     const [viewMode, setViewMode] = useState<'table' | 'map' | 'charts'>(viewParam || 'map');
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -186,8 +188,9 @@ export default function ResultsPage() {
     const fetchResults = async () => {
         try {
             setLoading(true);
-            const data = await getResults();
+            const [data, stats] = await Promise.all([getResults(), getStats()]);
             setResults(Array.isArray(data) ? data : []);
+            setLastScrape(stats?.last_scrape || '-');
             setError(null);
         } catch {
             setError('Veriler alınırken bir hata oluştu');
@@ -355,7 +358,7 @@ export default function ResultsPage() {
     const totalFiles = results.length;
     const totalRecords = results.reduce((acc, curr) => acc + (curr.count || 0), 0);
     const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
-    const latestDate = results.length > 0 ? results[0].date : '-';
+    const latestDate = lastScrape;
 
     // Filtreler için benzersiz platformlar, kategoriler, ilan tipleri ve alt kategoriler
     const platforms = [...new Set(results.map(r => r.platform))];
@@ -498,7 +501,7 @@ export default function ResultsPage() {
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
-                                a.download = `export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                                a.download = `export_${formatIstanbulDate(new Date())}.xlsx`;
                                 document.body.appendChild(a);
                                 a.click();
                                 window.URL.revokeObjectURL(url);
@@ -979,7 +982,7 @@ export default function ResultsPage() {
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 text-right text-emerald-400 font-medium">{(result.count || 0).toLocaleString()}</td>
-                                        <td className="py-3 px-4 text-gray-500 text-sm">{result.date}</td>
+                                        <td className="py-3 px-4 text-gray-500 text-sm">{formatAppDateTime(result.date_iso || result.date)}</td>
                                         <td className="py-3 px-4 text-right">
                                             <div className="flex justify-end gap-2">
                                                 <button

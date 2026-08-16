@@ -656,9 +656,8 @@ async def export_to_excel(
     db: Session = Depends(get_db),
 ):
     """Filtrelere göre verileri Excel'e aktar ve indir"""
-    from datetime import datetime as dt
-
     import pandas as pd
+    from utils.timezone import format_istanbul, now_istanbul
 
     # Ilanlari al (disa aktarim icin maks 10000)
     listings, _total = crud.get_listings(
@@ -690,7 +689,7 @@ async def export_to_excel(
             "Mahalle": listing.location.mahalle if listing.location else "",
             "İlan URL": listing.ilan_url,
             "Emlak Ofisi": listing.emlak_ofisi,
-            "Tarih": listing.created_at.strftime("%Y-%m-%d %H:%M")
+            "Tarih": format_istanbul(listing.created_at)
             if listing.created_at
             else "",
         }
@@ -709,7 +708,7 @@ async def export_to_excel(
     df.to_excel(buffer, index=False, engine="openpyxl")
     buffer.seek(0)
 
-    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = now_istanbul().strftime("%Y%m%d_%H%M%S")
     filename = f"export_{timestamp}.xlsx"
 
     return StreamingResponse(

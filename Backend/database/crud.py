@@ -15,6 +15,7 @@ from core.task_status import (
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from utils.timezone import format_istanbul, latest_datetime, now_utc_naive, to_iso
 
 from .models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 
@@ -784,7 +785,7 @@ def get_stats_summary(db: Session) -> dict[str, Any]:
     """Kontrol paneli için genel istatistikleri getir"""
     from datetime import timedelta
 
-    now = datetime.utcnow()
+    now = now_utc_naive()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
@@ -798,12 +799,16 @@ def get_stats_summary(db: Session) -> dict[str, Any]:
         db.query(ScrapeSession).filter(ScrapeSession.started_at >= month_ago).count()
     )
 
+    last_listing_at = db.query(func.max(Listing.created_at)).scalar()
     last_session = (
         db.query(ScrapeSession).order_by(ScrapeSession.started_at.desc()).first()
     )
-    last_scrape = (
-        last_session.started_at.strftime("%d.%m.%Y %H:%M") if last_session else "-"
+    last_dt = latest_datetime(
+        last_listing_at,
+        last_session.started_at if last_session else None,
+        last_session.completed_at if last_session else None,
     )
+    last_scrape = format_istanbul(last_dt)
 
     return {
         "total_scrapes": total_sessions,
@@ -886,8 +891,8 @@ def get_results_for_frontend(db: Session) -> list[dict[str, Any]]:
         )
 
         # Tarihi biçimlendir
-        date_str = row.last_date.strftime("%d.%m.%Y %H:%M") if row.last_date else "-"
-        date_iso = row.last_date.isoformat() if row.last_date else None
+        date_str = format_istanbul(row.last_date)
+        date_iso = to_iso(row.last_date)
 
         # Benzersiz ID olustur
         result_id = f"db_{row.platform}_{row.kategori}_{row.ilan_tipi}_{city}_{district or 'all'}_{idx}"

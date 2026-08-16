@@ -1,8 +1,9 @@
 """JSON, CSV ve Excel formatları için veri dışa aktarma araçları"""
 
 import os
-from datetime import datetime
 from typing import Any
+
+from .timezone import now_istanbul
 
 try:
     import pandas as pd
@@ -59,7 +60,7 @@ class DataExporter:
         """İsteğe bağlı zaman damgası ile dosya adı üretir ve tam yolunu döndürür."""
         self._ensure_output_dir()
         if timestamp:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts = now_istanbul().strftime("%Y%m%d_%H%M%S")
             filename = f"{prefix}_{ts}.{extension}"
         else:
             filename = f"{prefix}.{extension}"

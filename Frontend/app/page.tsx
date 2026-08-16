@@ -12,6 +12,12 @@ import { useEffect, useState, useMemo } from 'react';
 import type { ScrapeResult } from '@/types';
 import type { TaskStatus } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  formatTimeAgo,
+  getIstanbulHour,
+  istanbulDayStart,
+  parseAppDate,
+} from '@/lib/datetime';
 
 const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
 
@@ -26,76 +32,30 @@ const item = {
 };
 
 function getGreeting(): string {
-  const hour = new Date().getHours();
+  const hour = getIstanbulHour();
   if (hour < 6) return 'İyi Geceler';
   if (hour < 12) return 'Günaydın';
   if (hour < 18) return 'İyi Günler';
   return 'İyi Akşamlar';
 }
 
-function parseScrapeDate(dateStr?: string | null): Date | null {
-  if (!dateStr) return null;
-
-  const raw = String(dateStr).trim();
-  if (!raw) return null;
-
-  const direct = new Date(raw);
-  if (!Number.isNaN(direct.getTime())) return direct;
-
-  const trDateMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
-  if (!trDateMatch) return null;
-
-  const [, dayStr, monthStr, yearStr, hourStr = '0', minuteStr = '0'] = trDateMatch;
-  return new Date(
-    Number(yearStr),
-    Number(monthStr) - 1,
-    Number(dayStr),
-    Number(hourStr),
-    Number(minuteStr),
-    0,
-    0
-  );
-}
-
 function parseResultDate(result: ScrapeResult): Date | null {
-  return parseScrapeDate(result.date_iso || result.date);
-}
-
-function formatTimeAgo(dateStr?: string | null): string {
-  const date = parseScrapeDate(dateStr);
-  if (!date) return '-';
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  if (diffMs < 0) return 'Az önce';
-
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'Az önce';
-  if (diffMins < 60) return `${diffMins} dk önce`;
-
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} saat önce`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return 'Dün';
-  return `${diffDays} gün önce`;
+  return parseAppDate(result.date_iso || result.date);
 }
 
 interface ChartDay { label: string; count: number; }
 
 function getChartData(results: ScrapeResult[]): ChartDay[] {
-  const now = new Date();
+  const todayStart = istanbulDayStart(new Date());
   const days: ChartDay[] = [];
 
   for (let i = 6; i >= 0; i--) {
-    const dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
-    dayStart.setDate(dayStart.getDate() - i);
-
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-
-    const dayLabel = dayStart.toLocaleDateString('tr-TR', { weekday: 'short' });
+    const dayStart = new Date(todayStart.getTime() - i * 24 * 60 * 60 * 1000);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const dayLabel = dayStart.toLocaleDateString('tr-TR', {
+      weekday: 'short',
+      timeZone: 'Europe/Istanbul',
+    });
     const dayCount = results
       .filter((result) => {
         const parsedDate = parseResultDate(result);

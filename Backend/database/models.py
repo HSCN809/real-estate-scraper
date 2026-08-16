@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
+from utils.timezone import to_iso
 
 Base: Any = declarative_base()
 
@@ -128,7 +129,7 @@ class Listing(Base):
             "emlak_ofisi": self.emlak_ofisi,
             "resim_url": self.resim_url,
             "details": self.details,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": to_iso(self.created_at),
         }
 
 
@@ -191,10 +192,8 @@ class ScrapeSession(Base):
             "duplicate_listings": self.duplicate_listings,
             "successful_pages": self.successful_pages,
             "failed_pages": self.failed_pages_count,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat()
-            if self.completed_at
-            else None,
+            "started_at": to_iso(self.started_at),
+            "completed_at": to_iso(self.completed_at),
             "duration_seconds": self.duration_seconds,
             "status": self.status,
             "error_message": self.error_message,
@@ -235,7 +234,7 @@ class PriceHistory(Base):
             "new_price": self.new_price,
             "price_change": self.price_change,
             "price_change_percent": self.price_change_percent,
-            "changed_at": self.changed_at.isoformat() if self.changed_at else None,
+            "changed_at": to_iso(self.changed_at),
         }
 
 
@@ -299,6 +298,6 @@ class User(Base):
             "email": self.email,
             "is_active": self.is_active,
             "is_admin": self.is_admin,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_login": self.last_login.isoformat() if self.last_login else None,
+            "created_at": to_iso(self.created_at),
+            "last_login": to_iso(self.last_login),
         }

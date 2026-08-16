@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, ExternalLink, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useScraping } from '@/contexts/ScrapingContext';
+import { formatIstanbulTime, parseAppDate } from '@/lib/datetime';
 
 const subscribe = () => () => {};
 const getClientSnapshot = () => true;
@@ -99,7 +100,10 @@ export function ProgressPanel() {
                                 <span>{status.current} / {status.total}</span>
                                 {status.started_at && (
                                     <span>
-                                        Başlangıç: {new Date(status.started_at).toLocaleTimeString('tr-TR')}
+                                        Başlangıç: {(() => {
+                                            const startedAt = parseAppDate(status.started_at);
+                                            return startedAt ? formatIstanbulTime(startedAt) : '-';
+                                        })()}
                                     </span>
                                 )}
                             </div>
