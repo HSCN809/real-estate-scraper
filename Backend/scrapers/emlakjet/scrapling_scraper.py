@@ -7,7 +7,6 @@ import re
 import sys
 import time
 from typing import Any
-from urllib.parse import urljoin, urlparse
 
 from scrapling.fetchers import (
     AsyncDynamicSession,
@@ -36,6 +35,7 @@ from .urls import (
     extract_location_name,
     normalize_text,
     page_number_from_url,
+    parse_location_options,
 )
 
 logger = get_logger(__name__)
@@ -520,49 +520,7 @@ class EmlakJetScraplingScraper:
             return [], None
 
         listing_count = self._parse_listing_count(selector)
-        location_options: list[dict[str, str]] = []
-        seen_names = set()
-
-        # Yeni yapı: alt lokasyon linkleri mevcut yolun devamıdır
-        #   /satilik-konut            -> /satilik-konut/istanbul (iller)
-        #   /satilik-konut/kirklareli -> /satilik-konut/kirklareli-merkez (ilçeler)
-        base_path = urlparse(current_url).path.rstrip("/")
-        last_segment = base_path.rsplit("/", 1)[-1]
-        excluded_segments = {"projeler", "emlakcidan", "sahibinden", "muteahhitten"}
-
-        link_selector = self.common_selectors.get("location_links", "a[href]")
-        for link in selector.css(link_selector):
-            location_url = str(link.attrib.get("href", "")).strip()
-            if not location_url:
-                continue
-            if "sayfa=" in location_url or "filtreler=" in location_url:
-                continue
-            absolute_url = urljoin(current_url, location_url)
-            href_path = urlparse(absolute_url).path.rstrip("/")
-            if href_path == base_path or not (
-                href_path.startswith((base_path + "/", base_path + "-"))
-            ):
-                continue
-            if href_path.rsplit("/", 1)[-1] in excluded_segments:
-                continue
-
-            location_name = self._clean_location_name(str(link.text).strip())
-            normalized_name = self._normalize_text(location_name)
-            normalized_segment = self._normalize_text(last_segment)
-            if normalized_segment and normalized_name.startswith(
-                normalized_segment + "-"
-            ):
-                location_name = location_name[len(last_segment) :].strip()
-            if not location_name:
-                continue
-
-            normalized = self._normalize_text(location_name)
-            if normalized in seen_names:
-                continue
-            seen_names.add(normalized)
-            location_options.append({"name": location_name, "url": absolute_url})
-
-        return location_options, listing_count
+        return parse_location_options(selector, current_url), listing_count
 
     def _match_requested_locations(
         self, options: list[dict[str, str]], requested: list[str]

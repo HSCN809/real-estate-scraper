@@ -5,6 +5,7 @@ from scrapers.emlakjet.urls import (
     build_page_url,
     extract_location_name,
     page_number_from_url,
+    parse_location_options,
     slugify_location,
 )
 
@@ -45,6 +46,16 @@ def test_emlakjet_url_builder():
         "https://www.emlakjet.com/satilik-konut/istanbul?sayfa=9"
     ) == 9
     assert extract_location_name("Kadıköy 1.234 ilan") == "Kadıköy"
+    cities = parse_location_options(
+        """
+        <a href="/satilik-konut/adana">Adana</a>
+        <a href="/satilik-konut/bayburt"></a>
+        """,
+        "https://www.emlakjet.com/satilik-konut",
+    )
+    names = {item["name"].casefold() for item in cities}
+    assert "adana" in names
+    assert "bayburt" in names
 
 
 def test_emlakjet_filters():
@@ -64,6 +75,19 @@ def test_emlakjet_filters():
         "konut",
         "villa",
         {"satilik-villa"},
+        {"satilik-isyeri"},
+    )
+
+
+def test_emlakjet_keeps_seo_ilan_urls():
+    url = "https://www.emlakjet.com/ilan/cumhuriyet-caddesinde-icerisi-yenilenmis-dubleks-17854427"
+    assert extract_primary_slug_from_url(url) == "ilan"
+    assert matches_filters(
+        url,
+        "satilik",
+        "konut",
+        None,
+        {"satilik-daire", "satilik-villa"},
         {"satilik-isyeri"},
     )
 

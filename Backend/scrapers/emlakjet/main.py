@@ -21,7 +21,7 @@ from utils.logger import TaskLogLayout, get_logger
 from .listings import CATEGORY_PARSERS, extract_listings_from_html
 from .parsers import KonutParser
 from .persist import save_listings_to_db
-from .urls import extract_location_name as _extract_location_name
+from .urls import build_city_url, parse_location_options
 from .urls import normalize_location_token as _normalize_location_token
 
 logger = get_logger(__name__)
@@ -151,52 +151,9 @@ class EmlakJetScraper(BaseScraper):
             # Sayfa zaten yüklü — ilan sayısını da aynı anda al
             listing_count = self._parse_listing_count()
 
-            location_options = []
-            location_selector = self.common_selectors.get("location_links")
-
-            location_links = self.driver.find_elements(
-                By.CSS_SELECTOR, location_selector
+            location_options = parse_location_options(
+                self.driver.page_source, current_url
             )
-
-            # Yeni yapı: alt lokasyon linkleri mevcut yolun devamıdır
-            from urllib.parse import urlparse as _urlparse
-
-            base_path = _urlparse(current_url).path.rstrip("/")
-            excluded_segments = {"projeler", "emlakcidan", "sahibinden", "muteahhitten"}
-
-            # Duplicate kontrolü için seen set
-            seen_names = set()
-
-            for link in location_links:
-                try:
-                    location_name = _extract_location_name(link.text)
-                    location_url = link.get_attribute("href")
-
-                    if not location_name or not location_url:
-                        continue
-                    if "sayfa=" in location_url or "filtreler=" in location_url:
-                        continue
-                    href_path = _urlparse(location_url).path.rstrip("/")
-                    if href_path == base_path or not (
-                        href_path.startswith((base_path + "/", base_path + "-"))
-                    ):
-                        continue
-                    if href_path.rsplit("/", 1)[-1] in excluded_segments:
-                        continue
-
-                    # Duplicate kontrolü
-                    normalized_name = _normalize_location_token(location_name)
-                    if normalized_name not in seen_names:
-                        seen_names.add(normalized_name)
-                        location_options.append(
-                            {"name": location_name, "url": location_url}
-                        )
-                    else:
-                        logger.debug(
-                            f"Duplicate {location_type} skipped: {location_name}"
-                        )
-                except Exception:  # nosec
-                    continue
 
             # Lokasyonları 4 sütunda göster
             if location_options:
@@ -775,22 +732,41 @@ class EmlakJetScraper(BaseScraper):
 
             # Adım 1: İlleri seç
             if cities:
-                api_indices = []
-                normalized_cities = {_normalize_location_token(c) for c in cities}
-                for idx, p in enumerate(all_provinces, 1):
-                    if _normalize_location_token(p["name"]) in normalized_cities:
-                        api_indices.append(idx)
-
-                if not api_indices:
+                provinces = []
+                seen = set()
+                for city in cities:
+                    matched = [
+                        p
+                        for p in all_provinces
+                        if _normalize_location_token(p["name"])
+                        == _normalize_location_token(city)
+                    ]
+                    if not matched:
+                        matched = [
+                            {
+                                "name": city,
+                                "url": build_city_url(
+                                    city,
+                                    base_url=start_url,
+                                    site_base=self.emlakjet_config.base_url,
+                                    subtype_path=self.subtype_path,
+                                ),
+                            }
+                        ]
+                        logger.info(
+                            "Il listesinde yok, URL ile devam: %s -> %s",
+                            city,
+                            matched[0]["url"],
+                        )
+                    for province in matched:
+                        key = _normalize_location_token(province["name"])
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        provinces.append(province)
+                if not provinces:
                     logger.error(f"Şehirler için eşleşen il bulunamadı: {cities}")
-                    logger.info(
-                        f"Mevcut iller: {[p['name'] for p in all_provinces[:5]]}..."
-                    )
                     return
-
-                provinces = self.select_provinces(
-                    api_indices=api_indices, provinces=all_provinces
-                )
             else:
                 logger.error("API taraması için şehir belirtilmedi")
                 return

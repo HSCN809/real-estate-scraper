@@ -44,6 +44,9 @@ def extract_primary_slug_from_url(listing_url: str) -> str | None:
         if embedded_match:
             return embedded_match.group(0)
 
+        if parts[0] == "ilan":
+            return "ilan"
+
         return parts[0]
     except Exception:
         return None
@@ -100,6 +103,8 @@ def matches_filters(
     extracted = extract_primary_slug_from_url(listing_url)
     if extracted is None:
         return False
+    if extracted == "ilan":
+        return True
 
     selected_subtype = normalize_slug(alt_kategori)
     if selected_subtype:

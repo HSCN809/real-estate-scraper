@@ -1,6 +1,15 @@
 import re
 import unicodedata
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+
+from scrapers.common.html import as_html
+
+_EXCLUDED_LOCATION_SEGMENTS = {
+    "projeler",
+    "emlakcidan",
+    "sahibinden",
+    "muteahhitten",
+}
 
 
 def normalize_text(text: str) -> str:
@@ -76,3 +85,44 @@ def page_number_from_url(url: str) -> int:
     except Exception:  # nosec
         pass
     return 1
+
+
+def parse_location_options(source, current_url: str) -> list[dict[str, str]]:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(as_html(source), "html.parser")
+    base_path = urlparse(current_url).path.rstrip("/")
+    last_segment = base_path.rsplit("/", 1)[-1]
+    options: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+
+    for link in soup.select("a[href]"):
+        raw_href = link.get("href") or ""
+        href = raw_href[0] if isinstance(raw_href, list) else raw_href
+        href = str(href).strip()
+        if not href or "sayfa=" in href or "filtreler=" in href:
+            continue
+        absolute_url = urljoin(current_url, href)
+        href_path = urlparse(absolute_url).path.rstrip("/")
+        if href_path == base_path or not href_path.startswith(
+            (base_path + "/", base_path + "-")
+        ):
+            continue
+        if href_path.rsplit("/", 1)[-1] in _EXCLUDED_LOCATION_SEGMENTS:
+            continue
+
+        location_name = extract_location_name(link.get_text(" ", strip=True))
+        normalized_segment = normalize_text(last_segment)
+        normalized_name = normalize_text(location_name)
+        if normalized_segment and normalized_name.startswith(normalized_segment + "-"):
+            location_name = location_name[len(last_segment) :].strip()
+        if not location_name:
+            location_name = href_path.rsplit("/", 1)[-1].replace("-", " ")
+        if not location_name:
+            continue
+        normalized = normalize_text(location_name)
+        if normalized in seen_names:
+            continue
+        seen_names.add(normalized)
+        options.append({"name": location_name, "url": absolute_url})
+    return options
