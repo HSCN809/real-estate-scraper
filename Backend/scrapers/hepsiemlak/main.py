@@ -18,6 +18,12 @@ from core.driver_manager import DriverManager
 from core.failed_pages_tracker import FailedPageInfo, failed_pages_tracker
 from utils.logger import TaskLogLayout, get_logger
 
+from scrapers.common.pagination import (
+    max_page_from_hrefs,
+    max_page_from_texts,
+    pages_from_listing_count,
+)
+
 from .parsers import (
     ArsaParser,
     DevremulkParser,
@@ -877,78 +883,60 @@ class HepsiemlakScraper(BaseScraper):
             logger.error(f"Search error: {e}")
             return False
 
+    def _listing_ready_selector(self) -> str:
+        parts = [
+            self.common_selectors.get("listing_container"),
+            self.common_selectors.get("listing_results"),
+            "article.listingCard__box",
+            "ul.list-items-container",
+        ]
+        return ", ".join(part for part in parts if part)
+
+    def _wait_for_listing_ready(self, timeout: int = 20) -> bool:
+        selector = self._listing_ready_selector()
+        if self.wait_for_element(selector, timeout=timeout):
+            return True
+        try:
+            self.driver.refresh()
+        except Exception:  # nosec
+            return False
+        return self.wait_for_element(selector, timeout=timeout) is not None
+
     def get_total_pages(self) -> int:
         """Sayfalamadan toplam sayfa sayısını al"""
         try:
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.webdriver.support.ui import WebDriverWait
+            if not self._wait_for_listing_ready():
+                logger.warning("Listing results not ready before pagination check")
+                return 1
 
-            # Önce toplam ilan sayısını kontrol et - 24 veya daha az ise pagination olmaz
+            count_text = ""
             try:
                 listing_count_element = self.driver.find_element(
                     By.CSS_SELECTOR, "span.applied-filters__count"
                 )
                 count_text = listing_count_element.text.strip()
-                # "için 2.972 ilan bulundu" -> 2972
-                # Türkçe binlik ayırıcı noktayı kaldır
-                import re
-
-                # Önce noktaları kaldır (binlik ayırıcı), sonra sayıyı bul
-                count_text_clean = count_text.replace(".", "")
-                match = re.search(r"(\d+)", count_text_clean)
-                if match:
-                    total_listings = int(match.group(1))
-                    if total_listings <= 24:
-                        print(
-                            f"📊 Toplam {total_listings} ilan - tek sayfa (pagination yok)"
-                        )
-                        return 1
-                    else:
-                        print(f"📊 Toplam {total_listings} ilan tespit edildi")
+                estimated = pages_from_listing_count(count_text, 24)
+                if estimated == 1:
+                    print(f"📊 {count_text} - tek sayfa")
+                    return 1
+                print(f"📊 {count_text}")
             except Exception:  # nosec
-                pass  # İlan sayısı bulunamazsa pagination kontrolüne geç
+                estimated = 1
 
-            # Sayfalama kontrolü - ul.he-pagination__links içindeki a elementleri
-            max_retries = 5
             page_links = []
+            for selector in self.common_selectors.get("pagination", []):
+                page_links = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if page_links:
+                    break
 
-            for retry in range(max_retries):
-                try:
-                    wait = WebDriverWait(self.driver, 10)
-                    wait.until(
-                        EC.presence_of_element_located(
-                            (By.CSS_SELECTOR, "ul.he-pagination__links")
-                        )
-                    )
-                    page_links = self.driver.find_elements(
-                        By.CSS_SELECTOR, "ul.he-pagination__links a"
-                    )
-                    if page_links:
-                        print(f"✓ Pagination bulundu: {len(page_links)} link")
-                        break
-                except Exception:  # nosec
-                    pass
-
-                if retry < max_retries - 1:
-                    print(
-                        f"⚠️ Pagination bulunamadı, tekrar deneniyor... ({retry + 1}/{max_retries})"
-                    )
-                    time.sleep(3)
-                else:
-                    print("⚠️ Pagination bulunamadı - tek sayfa varsayılıyor")
-
-            # Sayfa sayısını bul - en büyük sayıyı al
-            max_page = 1
-            for link in page_links:
-                text = link.text.strip()
-
-                # Sadece rakam olan linkleri kontrol et (1, 2, 3, ..., 421 gibi)
-                # "..." gibi break-view'ları atla
-                if text.isdigit():
-                    page_num = int(text)
-                    max_page = max(max_page, page_num)
-
-            print(f"DEBUG: max_page = {max_page}")
+            hrefs = [link.get_attribute("href") for link in page_links]
+            texts = [link.text for link in page_links]
+            max_page = max(
+                max_page_from_hrefs(hrefs, "page"),
+                max_page_from_texts(texts),
+                estimated,
+            )
+            print(f"✓ Pagination: {len(page_links)} link, max_page={max_page}")
             return max_page
 
         except Exception as e:
@@ -1051,11 +1039,9 @@ class HepsiemlakScraper(BaseScraper):
                     self.random_long_wait()  # Gizli mod: sayfa geçişi
 
                 # Sonuçları bekle - timeout hatalarını takip et
-                result_element = self.wait_for_element(
-                    self.common_selectors.get("listing_results")
-                )
+                result_element = self._wait_for_listing_ready()
 
-                if result_element is None:
+                if not result_element:
                     # Zaman aşımı - sayfa yüklenemedi, başarısız sayfa olarak kaydet
                     task_log.line(
                         f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi",
@@ -1266,11 +1252,9 @@ class HepsiemlakScraper(BaseScraper):
                         self.random_long_wait()
 
                     # Sonuçları bekle - timeout hatalarını takip et
-                    result_element = self.wait_for_element(
-                        self.common_selectors.get("listing_results")
-                    )
+                    result_element = self._wait_for_listing_ready()
 
-                    if result_element is None:
+                    if not result_element:
                         # Zaman aşımı - sayfa yüklenemedi, başarısız sayfa olarak kaydet
                         task_log.line(
                             f"   ⚠️ Sayfa {page} yüklenemedi - retry listesine eklendi",
@@ -1383,7 +1367,7 @@ class HepsiemlakScraper(BaseScraper):
 
         try:
             container_sel = self.common_selectors.get("listing_container")
-            self.wait_for_element(self.common_selectors.get("listing_results"))
+            self._wait_for_listing_ready()
 
             elements = self.driver.find_elements(By.CSS_SELECTOR, container_sel)
 
@@ -1642,6 +1626,8 @@ class HepsiemlakScraper(BaseScraper):
                                             page_info.page_number,
                                         )
                                         successful_retries += 1
+                                        self.total_scraped_count += len(listings)
+                                        total_listings_count += len(listings)
                                     else:
                                         task_log.line(
                                             "   ⚠️ 0 ilan - devam ediliyor",

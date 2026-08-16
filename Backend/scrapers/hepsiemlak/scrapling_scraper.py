@@ -3,7 +3,6 @@
 import logging
 import os
 import random
-import re
 import sys
 import time
 from datetime import datetime
@@ -27,6 +26,11 @@ from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
 
 from scrapers.common.http_status import is_failed_http_response, response_http_status
+from scrapers.common.pagination import (
+    max_page_from_hrefs,
+    max_page_from_texts,
+    pages_from_listing_count,
+)
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
 from .main import save_listings_to_db
@@ -340,21 +344,20 @@ class HepsiemlakScraplingScraper:
 
     def get_total_pages(self, selector: Selector) -> int:
         try:
+            count_text = ""
             count_elements = selector.css("span.applied-filters__count")
             if count_elements:
-                count_text_clean = str(count_elements[0].text).strip().replace(".", "")
-                match = re.search(r"(\d+)", count_text_clean)
-                if match and int(match.group(1)) <= 24:
-                    return 1
+                count_text = str(count_elements[0].text).strip()
             pagination_links = selector.css(
-                "ul.he-pagination__links a, ul.he-pagination a"
+                "ul.he-pagination__links a, ul.he-pagination a, a[href*='page=']"
             )
-            max_page = 1
-            for link in pagination_links:
-                text = str(link.text).strip()
-                if text.isdigit():
-                    max_page = max(max_page, int(text))
-            return max_page
+            hrefs = [str(link.attrib.get("href", "")) for link in pagination_links]
+            texts = [str(link.text) for link in pagination_links]
+            return max(
+                max_page_from_hrefs(hrefs, "page"),
+                max_page_from_texts(texts),
+                pages_from_listing_count(count_text, 24),
+            )
         except Exception as exc:
             task_log.line(f"Error detecting pagination: {exc}", level="warning")
             return 1

@@ -548,17 +548,21 @@ class EmlakJetScraper(BaseScraper):
             # Ekstra bekleme - pagination elementleri yüklenmesi için
             time.sleep(2)
 
-            # Sonraki ok (right arrow) var mı kontrol et - eğer yoksa son sayfadayız
-            # Eğer varsa, son sayfaya git ve oradaki pagination'dan max page bul
+            pagination_links = self.driver.find_elements(
+                By.CSS_SELECTOR, "a[href*='sayfa=']"
+            )
+            if pagination_links:
+                from scrapers.common.pagination import max_page_from_hrefs
+
+                hrefs = [link.get_attribute("href") for link in pagination_links]
+                max_from_links = max_page_from_hrefs(hrefs, "sayfa")
+                if max_from_links > 1:
+                    return max_from_links
+
             right_arrow = self.driver.find_elements(
                 By.CSS_SELECTOR, "a[aria-label='Sonraki Sayfa']"
             )
-            pagination_links = self.driver.find_elements(
-                By.XPATH, "//a[contains(@href, 'sayfa=')]"
-            )
-
             if not right_arrow or not pagination_links:
-                # Pagination yok veya son sayfadayız
                 return 1
 
             # Sonraki ok var - son sayfaya git

@@ -152,7 +152,7 @@ HEPSIEMLAK_SELECTORS = {
     "common": {
         # İlan seçicileri (yeni Vue yapısı - Ağustos 2026)
         "listing_container": "article.listingCard__box",
-        "listing_results": "ul.list-items-container, .search-results",
+        "listing_results": "article.listingCard__box, ul.list-items-container, .search-results",
         "title": "h3.listingCard__title",
         "price": "p.listingCard__price",
         "location": "span.listingCard__location address",
@@ -186,10 +186,11 @@ HEPSIEMLAK_SELECTORS = {
         ],
         # Sayfalama
         "pagination": [
-            "ul.he-pagination__links li.he-pagination__item a.he-pagination__link",
-            ".pagination a",
-            ".he-pagination a",
+            "ul.he-pagination__links a.he-pagination__link",
+            "ul.he-pagination__links a",
             "a[href*='page=']",
+            ".he-pagination a",
+            ".pagination a",
         ],
     },
     "konut": {
