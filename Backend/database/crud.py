@@ -632,6 +632,7 @@ def get_city_analytics(
     platform: str | None = None,
     kategori: str | None = None,
     ilan_tipi: str | None = None,
+    alt_kategori: str | None = None,
 ) -> dict[str, Any]:
     """Belirli bir sehrin detayli analizlerini getir."""
     import statistics
@@ -684,6 +685,8 @@ def get_city_analytics(
         query = query.filter(Listing.kategori == kategori)
     if ilan_tipi and ilan_tipi != "all":
         query = query.filter(Listing.ilan_tipi == ilan_tipi)
+    if alt_kategori and alt_kategori != "all":
+        query = query.filter(Listing.alt_kategori == alt_kategori)
 
     listings = query.all()
 

@@ -12,8 +12,6 @@ interface SearchableDropdownProps {
     placeholder?: string;
     icon?: React.ReactNode;
     focusRingColor?: string;
-    showClearButton?: boolean;
-    clearButtonLabel?: string;
 }
 
 export function SearchableDropdown({
@@ -25,8 +23,6 @@ export function SearchableDropdown({
     placeholder = 'Tümü',
     icon,
     focusRingColor = 'focus:ring-blue-500',
-    showClearButton = false,
-    clearButtonLabel = 'Temizle',
 }: SearchableDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -73,8 +69,7 @@ export function SearchableDropdown({
                 {label}
             </label>
 
-            <div className="flex items-center gap-2">
-                <div className="relative" ref={dropdownRef}>
+            <div className="relative" ref={dropdownRef}>
                     <button
                         type="button"
                         id={id}
@@ -136,18 +131,6 @@ export function SearchableDropdown({
                             </div>
                         </div>
                     )}
-                </div>
-
-                {showClearButton && value !== 'all' && (
-                    <button
-                        type="button"
-                        onClick={() => handleSelect('all')}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-red-500/30 text-red-300 bg-red-500/10 hover:bg-red-500/20 transition-colors"
-                        aria-label={`${label} filtresini temizle`}
-                    >
-                        {clearButtonLabel}
-                    </button>
-                )}
             </div>
         </fieldset>
     );

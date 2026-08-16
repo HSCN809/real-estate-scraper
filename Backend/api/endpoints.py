@@ -328,12 +328,17 @@ async def get_city_analytics(
         listing_map = {"Satılık": "satilik", "Kiralık": "kiralik"}
         db_listing_type = listing_map.get(listing_type, listing_type.lower())
 
+    db_subtype = None
+    if subtype and subtype != "all":
+        db_subtype = subtype.strip().lower().replace(" ", "_").replace("-", "_")
+
     return crud.get_city_analytics(
         db,
         city_name=city_name,
         platform=db_platform,
         kategori=db_category,
         ilan_tipi=db_listing_type,
+        alt_kategori=db_subtype,
     )
 
 

@@ -24,12 +24,28 @@ const ResultsMapInner = dynamic(() => import('./ResultsMapInner'), {
 
 interface ResultsMapProps {
     results: ScrapeResult[];
+    platformFilter?: string;
+    categoryFilter?: string;
+    listingTypeFilter?: string;
+    subtypeFilter?: string;
 }
 
-export function ResultsMap({ results }: ResultsMapProps) {
+export function ResultsMap({
+    results,
+    platformFilter = 'all',
+    categoryFilter = 'all',
+    listingTypeFilter = 'all',
+    subtypeFilter = 'all',
+}: ResultsMapProps) {
     return (
         <Suspense fallback={<MapLoadingSkeleton />}>
-            <ResultsMapInner results={results} />
+            <ResultsMapInner
+                results={results}
+                platformFilter={platformFilter}
+                categoryFilter={categoryFilter}
+                listingTypeFilter={listingTypeFilter}
+                subtypeFilter={subtypeFilter}
+            />
         </Suspense>
     );
 }

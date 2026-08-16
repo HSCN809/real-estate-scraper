@@ -606,7 +606,6 @@ export default function ResultsPage() {
                     options={platforms}
                     icon={<Filter className="w-3 h-3" aria-hidden="true" />}
                     focusRingColor="focus:ring-blue-500"
-                    showClearButton
                 />
 
                 {/* İlan Tipi Filtresi */}
@@ -617,7 +616,6 @@ export default function ResultsPage() {
                     onChange={setListingTypeFilter}
                     options={listingTypes.filter(Boolean) as string[]}
                     focusRingColor="focus:ring-amber-500"
-                    showClearButton
                 />
 
                 {/* Kategori Filtresi */}
@@ -628,7 +626,6 @@ export default function ResultsPage() {
                     onChange={setCategoryFilter}
                     options={categories}
                     focusRingColor="focus:ring-emerald-500"
-                    showClearButton
                 />
 
                 {/* Alt Kategori Filtresi */}
@@ -640,7 +637,6 @@ export default function ResultsPage() {
                         onChange={setSubtypeFilter}
                         options={subtypes}
                         focusRingColor="focus:ring-purple-500"
-                        showClearButton
                     />
                 )}
             </motion.form>
@@ -684,7 +680,13 @@ export default function ResultsPage() {
                 ) : viewMode === 'map' ? (
                     /* Harita Görünümü */
                     <motion.figure variants={itemVariants} aria-label="Sonuçlar haritası">
-                        <ResultsMap results={filteredResults} />
+                        <ResultsMap
+                            results={filteredResults}
+                            platformFilter={platformFilter}
+                            categoryFilter={categoryFilter}
+                            listingTypeFilter={listingTypeFilter}
+                            subtypeFilter={subtypeFilter}
+                        />
                     </motion.figure>
                 ) : viewMode === 'charts' ? (
                     /* Grafik Görünümü */

@@ -83,9 +83,19 @@ interface FileStats {
 
 interface ResultsMapProps {
     results: ScrapeResult[];
+    platformFilter?: string;
+    categoryFilter?: string;
+    listingTypeFilter?: string;
+    subtypeFilter?: string;
 }
 
-export default function ResultsMapInner({ results }: ResultsMapProps) {
+export default function ResultsMapInner({
+    results,
+    platformFilter = 'all',
+    categoryFilter = 'all',
+    listingTypeFilter = 'all',
+    subtypeFilter = 'all',
+}: ResultsMapProps) {
     const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
     const [hoveredCity, setHoveredCity] = useState<string | null>(null);
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -122,22 +132,27 @@ export default function ResultsMapInner({ results }: ResultsMapProps) {
             });
 
             const cityNameNormalized = normalizeTurkish(selectedCityName);
-            console.log('Fetching city analytics for:', selectedCityName, '-> normalized:', cityNameNormalized);
+            const params = new URLSearchParams();
+            if (platformFilter !== 'all') params.set('platform', platformFilter);
+            if (categoryFilter !== 'all') params.set('category', categoryFilter);
+            if (listingTypeFilter !== 'all') params.set('listing_type', listingTypeFilter);
+            if (subtypeFilter !== 'all') params.set('subtype', subtypeFilter);
+            const query = params.toString();
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-            fetch(`http://localhost:8000/api/v1/analytics/city/${cityNameNormalized}`)
+            fetch(`${apiBase}/analytics/city/${encodeURIComponent(cityNameNormalized)}${query ? `?${query}` : ''}`)
                 .then(res => res.json())
                 .then(data => {
-                    console.log('City analytics response:', data);
                     if (data.stats) {
                         setCityStats(data);
                     } else {
-                        console.warn('No stats in response:', data);
+                        setCityStats(data);
                     }
                 })
                 .catch(err => console.error('City stats yüklenemedi:', err))
                 .finally(() => setStatsLoading(false));
         }
-    }, [selectedCityName]);
+    }, [selectedCityName, platformFilter, categoryFilter, listingTypeFilter, subtypeFilter]);
 
     // Türkçe karakterleri normalize et
     const normalizeCity = (name: string): string => {
