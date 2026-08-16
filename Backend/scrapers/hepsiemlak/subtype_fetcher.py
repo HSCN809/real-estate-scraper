@@ -38,10 +38,48 @@ def save_subcategories_to_json(data: dict[str, dict[str, list[dict]]]):
         logger.error(f"JSON yazma hatası: {e}")
 
 
+def merge_subcategories(
+    new_data: dict[str, dict[str, list[dict]]],
+    old_data: dict[str, dict[str, list[dict]]],
+) -> dict[str, dict[str, list[dict]]]:
+    merged = {lt: dict(cats) for lt, cats in new_data.items()}
+    for listing_type, categories in old_data.items():
+        merged.setdefault(listing_type, {})
+        for category, subtypes in categories.items():
+            if not merged[listing_type].get(category) and subtypes:
+                merged[listing_type][category] = subtypes
+    return merged
+
+
+def parse_hepsiemlak_subtype_links(
+    links: list[dict[str, str]], listing_type: str
+) -> list[dict]:
+    prefix = f"/{listing_type}/"
+    seen: set[str] = set()
+    subtypes: list[dict] = []
+    for link in links:
+        name = (link.get("name") or "").strip()
+        href = (link.get("href") or "").strip()
+        if not name or not href:
+            continue
+        path = href.split("hepsiemlak.com", 1)[-1]
+        path = path.split("?", 1)[0]
+        if not path.startswith(prefix):
+            continue
+        rest = path[len(prefix) :].strip("/")
+        if not rest or "/" in rest:
+            continue
+        subtype_id = rest.replace("-", "_")
+        if subtype_id in seen:
+            continue
+        seen.add(subtype_id)
+        subtypes.append({"id": subtype_id, "name": name, "path": f"{prefix}{rest}"})
+    return subtypes
+
+
 def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
     """Tüm kategori/listing_type kombinasyonları için alt kategorileri Selenium ile çek"""
     from core.driver_manager import DriverManager
-    from selenium.webdriver.common.by import By
 
     config = get_hepsiemlak_config()
     all_subcategories: dict[str, dict[str, list[dict]]] = {}
@@ -62,66 +100,16 @@ def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
 
                 try:
                     driver.get(url)
-                    time.sleep(5)  # Sayfa yüklenme süresi artırıldı
-
-                    # Dropdown'ı bul ve aç - birden fazla deneme
-                    dropdown_found = False
-                    for attempt in range(3):
-                        try:
-                            dropdown = driver.find_element(
-                                By.CSS_SELECTOR, "section.categorySubSec .custom-select"
-                            )
-                            driver.execute_script(
-                                "arguments[0].scrollIntoView(true);", dropdown
-                            )
-                            time.sleep(0.5)
-                            driver.execute_script("arguments[0].click();", dropdown)
-                            time.sleep(2)  # Dropdown açılma süresi artırıldı
-                            dropdown_found = True
-                            break
-                        except Exception:
-                            if attempt < 2:
-                                print(
-                                    f"   [!] Dropdown bulunamadi, tekrar deneniyor... ({attempt + 1}/3)"
-                                )
-                                time.sleep(2)
-                            continue
-
-                    if not dropdown_found:
-                        logger.info(f"No dropdown for {category}")
-                        all_subcategories[listing_type][category] = []
-                        continue
-
-                    # Alt kategorileri çek
-                    subtypes = []
-                    links = driver.find_elements(
-                        By.CSS_SELECTOR, "section.categorySubSec .sub-category-link"
+                    time.sleep(4)
+                    links = driver.execute_script(
+                        """
+                        return [...document.querySelectorAll('a.sub-category-link')].map((a) => ({
+                          name: (a.querySelector('.sub-category-select-item') || a).innerText.trim(),
+                          href: a.href || a.getAttribute('href') || ''
+                        }));
+                        """
                     )
-
-                    # Eğer link bulunamadıysa, dropdown listesini de dene
-                    if not links:
-                        links = driver.find_elements(
-                            By.CSS_SELECTOR, ".dropdown-lightbox .sub-category-link"
-                        )
-
-                    for link in links:
-                        try:
-                            href = link.get_attribute("href") or ""
-                            name_el = link.find_element(
-                                By.CSS_SELECTOR, ".sub-category-select-item"
-                            )
-                            name = name_el.text.strip() if name_el else ""
-
-                            if name and href:
-                                path_part = href.replace(config.base_url, "")
-                                subtype_id = path_part.split("/")[-1].replace("-", "_")
-
-                                subtypes.append(
-                                    {"id": subtype_id, "name": name, "path": path_part}
-                                )
-                        except Exception:  # nosec
-                            continue
-
+                    subtypes = parse_hepsiemlak_subtype_links(links or [], listing_type)
                     all_subcategories[listing_type][category] = subtypes
                     print(f"   [+] {len(subtypes)} alt kategori bulundu")
 
@@ -173,7 +161,10 @@ def ensure_subcategories_exist():
 def refresh_subcategories():
     """Subcategories'i yeniden cek ve kaydet"""
     print("[*] Subcategories yenileniyor...")
-    data = fetch_all_subcategories_with_selenium()
+    data = merge_subcategories(
+        fetch_all_subcategories_with_selenium(),
+        load_subcategories_from_json(),
+    )
     save_subcategories_to_json(data)
     print("[+] Subcategories guncellendi!")
 

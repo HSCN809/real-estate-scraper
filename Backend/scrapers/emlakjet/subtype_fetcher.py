@@ -56,6 +56,25 @@ def save_subcategories_to_json(data: dict[str, dict[str, list[dict]]]):
         logger.error(f"JSON yazma hatası: {e}")
 
 
+def candidate_node_ids(path: str) -> list[str]:
+    slug = path.strip("/").replace("/", "-")
+    aliases = [slug, slug.replace("isyeri", "is-yeri"), slug.replace("is-yeri", "isyeri")]
+    return list(dict.fromkeys(aliases))
+
+
+def merge_subcategories(
+    new_data: dict[str, dict[str, list[dict]]],
+    old_data: dict[str, dict[str, list[dict]]],
+) -> dict[str, dict[str, list[dict]]]:
+    merged = {lt: dict(cats) for lt, cats in new_data.items()}
+    for listing_type, categories in old_data.items():
+        merged.setdefault(listing_type, {})
+        for category, subtypes in categories.items():
+            if not merged[listing_type].get(category) and subtypes:
+                merged[listing_type][category] = subtypes
+    return merged
+
+
 def extract_subtype_id(path: str) -> str:
     """URL path'inden subtype ID çıkar"""
     # Path'i temizle
@@ -75,7 +94,6 @@ def extract_subtype_id(path: str) -> str:
 def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
     """Selenium ile tüm alt kategorileri çek"""
     from core.driver_manager import DriverManager
-    from selenium.webdriver.common.by import By
 
     all_subcategories: dict[str, dict[str, list[dict]]] = {}
     base_url = "https://www.emlakjet.com"
@@ -100,87 +118,38 @@ def fetch_all_subcategories_with_selenium() -> dict[str, dict[str, list[dict]]]:
                     driver.get(url)
                     time.sleep(3)  # Sayfa yüklensin
 
+                    rows = driver.execute_script(
+                        """
+                        const slugs = arguments[0];
+                        let parent = null;
+                        for (const slug of slugs) {
+                          parent = document.querySelector('[data-node-id=\"' + slug + '\"]');
+                          if (parent) break;
+                        }
+                        if (!parent) return [];
+                        const ul = parent.nextElementSibling;
+                        if (!ul) return [];
+                        return [...ul.querySelectorAll('[data-node-id] a[href^=\"/\"]')].map((a) => ({
+                          name: (a.innerText || '').trim().split('\\n')[0],
+                          href: a.getAttribute('href') || ''
+                        }));
+                        """,
+                        candidate_node_ids(path),
+                    )
                     subtypes = []
-
-                    # Yeni yapı: sidebar menüde ana kategori düğümü
-                    # <div data-node-id="satilik-konut"> ve alt türler
-                    # <div data-node-id="satilik-daire"><a href="/satilik-daire">Daire</a>
-                    main_slug = path.strip("/").replace("/", "-")
-                    try:
-                        main_node = driver.find_element(
-                            By.CSS_SELECTOR, f"[data-node-id='{main_slug}']"
+                    for row in rows or []:
+                        name = (row.get("name") or "").strip()
+                        href = (row.get("href") or "").strip()
+                        if not name or not href:
+                            continue
+                        subtype_path = href.replace(base_url, "")
+                        subtypes.append(
+                            {
+                                "id": extract_subtype_id(subtype_path),
+                                "name": name,
+                                "path": subtype_path,
+                            }
                         )
-                        sub_ul = main_node.find_element(
-                            By.XPATH, "following-sibling::ul[1]"
-                        )
-                        sub_links = sub_ul.find_elements(
-                            By.CSS_SELECTOR, "[data-node-id] a[href^='/']"
-                        )
-
-                        for link in sub_links:
-                            try:
-                                href = link.get_attribute("href") or ""
-                                name = link.text.strip()
-
-                                if name and href:
-                                    subtype_path = href.replace(base_url, "")
-                                    subtype_id = extract_subtype_id(subtype_path)
-
-                                    subtypes.append(
-                                        {
-                                            "id": subtype_id,
-                                            "name": name,
-                                            "path": subtype_path,
-                                        }
-                                    )
-                            except Exception:  # nosec
-                                continue
-
-                        # Eski yapı: styles_ulSubMenu seçicileri (geriye dönük uyumluluk)
-                        if not subtypes:
-                            submenu_items = driver.find_elements(
-                                By.CSS_SELECTOR, "li.styles_subMenu2__BskGl"
-                            )
-                            for item in submenu_items:
-                                try:
-                                    main_link = item.find_element(By.CSS_SELECTOR, "a")
-                                    main_href = main_link.get_attribute("href") or ""
-                                    if path in main_href or main_href.endswith(path):
-                                        sub_links_legacy = item.find_elements(
-                                            By.CSS_SELECTOR,
-                                            "ul.styles_ulSubMenu__E0zyf li.styles_subMenu2__BskGl a",
-                                        )
-                                        for legacy_link in sub_links_legacy:
-                                            try:
-                                                href = (
-                                                    legacy_link.get_attribute("href")
-                                                    or ""
-                                                )
-                                                span = legacy_link.find_element(
-                                                    By.CSS_SELECTOR, "span"
-                                                )
-                                                name = span.text.split("(")[0].strip()
-                                                if name and href:
-                                                    subtype_path = href.replace(
-                                                        base_url, ""
-                                                    )
-                                                    subtype_id = extract_subtype_id(
-                                                        subtype_path
-                                                    )
-                                                    subtypes.append(
-                                                        {
-                                                            "id": subtype_id,
-                                                            "name": name,
-                                                            "path": subtype_path,
-                                                        }
-                                                    )
-                                            except Exception:  # nosec
-                                                continue
-                                        break
-                                except Exception:  # nosec
-                                    continue
-                    except Exception as e:
-                        logger.warning(f"Alt kategori çekme hatası: {e}")
 
                     all_subcategories[listing_type][category] = subtypes
 
@@ -245,7 +214,10 @@ def ensure_subcategories_exist():
 def refresh_subcategories():
     """Subcategories'i yeniden cek ve kaydet"""
     print("[*] EmlakJet subcategories yenileniyor...")
-    data = fetch_all_subcategories_with_selenium()
+    data = merge_subcategories(
+        fetch_all_subcategories_with_selenium(),
+        load_subcategories_from_json(),
+    )
     save_subcategories_to_json(data)
     print("[+] Subcategories guncellendi!")
 

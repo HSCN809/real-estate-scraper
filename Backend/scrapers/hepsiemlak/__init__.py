@@ -1,14 +1,7 @@
 """HepsiEmlak Scraper modülü"""
 
-from .main import HepsiemlakScraper
-from .parsers import (
-    ArsaParser,
-    DevremulkParser,
-    IsyeriParser,
-    KonutParser,
-    TuristikParser,
-)
-from .scrapling_scraper import HepsiemlakScraplingScraper
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "ArsaParser",
@@ -19,3 +12,22 @@ __all__ = [
     "KonutParser",
     "TuristikParser",
 ]
+
+_EXPORTS = {
+    "ArsaParser": (".parsers", "ArsaParser"),
+    "DevremulkParser": (".parsers", "DevremulkParser"),
+    "HepsiemlakScraper": (".main", "HepsiemlakScraper"),
+    "HepsiemlakScraplingScraper": (".scrapling_scraper", "HepsiemlakScraplingScraper"),
+    "IsyeriParser": (".parsers", "IsyeriParser"),
+    "KonutParser": (".parsers", "KonutParser"),
+    "TuristikParser": (".parsers", "TuristikParser"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr = _EXPORTS[name]
+    value = getattr(import_module(module_name, __name__), attr)
+    globals()[name] = value
+    return value
