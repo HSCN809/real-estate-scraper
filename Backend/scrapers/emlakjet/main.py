@@ -665,9 +665,12 @@ class EmlakJetScraper(BaseScraper):
         """Tek bir hedefi (il/ilçe/mahalle) tara"""
         print = task_log.line
         url_max_pages = self.get_max_pages(target["url"])
+        requested = getattr(self, "_requested_max_pages", None)
+        if requested and requested > 0:
+            url_max_pages = min(url_max_pages, requested)
         self._log_location_start(target["label"], target["url"])
         self._log_location_plan(target["label"], url_max_pages)
-        print(f"📊 {url_max_pages} sayfa mevcut, tamamı taranacak.")
+        print(f"📊 {url_max_pages} sayfa taranacak.")
 
         page_num_ref = [
             0
@@ -703,6 +706,7 @@ class EmlakJetScraper(BaseScraper):
         """İki katmanlı optimizasyonla API tarama giriş noktası"""
         print = task_log.line
         self._max_listings = max_listings
+        self._requested_max_pages = max_pages
 
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
         limit_info = (
@@ -802,7 +806,7 @@ class EmlakJetScraper(BaseScraper):
                     print(f"⏭️  {province['name']} → 0 ilan, il atlanıyor.")
                     continue
 
-                if province_count <= self.PAGINATION_LIMIT:
+                if max_pages == 1 or province_count <= self.PAGINATION_LIMIT:
                     # İl genelinde ≤1500 ilan — ilçe/mahalleye inmeye gerek yok
                     print(
                         f"⚡ {province['name']} → {province_count} ilan (≤{self.PAGINATION_LIMIT}), il seviyesinden taranıyor."

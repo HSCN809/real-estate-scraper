@@ -1095,23 +1095,20 @@ class EmlakJetScraplingScraper:
             provinces = self._match_requested_locations(
                 all_provinces, self.selected_cities
             )
-            if not provinces:
-                if self.proxy_enabled and self.selected_cities:
-                    task_log.line(
-                        "Iller listesi alinamadi/eslesmedi (proxy/challenge). "
-                        "Secili sehirler icin dogrudan URL fallback uygulanacak.",
-                        level="warning",
-                    )
-                    provinces = [
+            if len(provinces) < len(self.selected_cities):
+                matched = {self._normalize_text(p["name"]) for p in provinces}
+                for city_name in self.selected_cities:
+                    if self._normalize_text(city_name) in matched:
+                        continue
+                    provinces.append(
                         {"name": city_name, "url": self._build_city_url(city_name)}
-                        for city_name in self.selected_cities
-                    ]
-                else:
-                    task_log.line(
-                        f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}",
-                        level="error",
                     )
-                    return {}
+            if not provinces:
+                task_log.line(
+                    f"Sehirler icin eslesen il bulunamadi: {self.selected_cities}",
+                    level="error",
+                )
+                return {}
 
             for prov_idx, province in enumerate(provinces, 1):
                 province_name = province["name"]
@@ -1150,7 +1147,7 @@ class EmlakJetScraplingScraper:
                     task_log.line(f"⏭️ {province_name} -> 0 ilan, il atlaniyor.")
                     continue
 
-                if province_count <= self.PAGINATION_LIMIT:
+                if page_limit == 1 or province_count <= self.PAGINATION_LIMIT:
                     target = {
                         "url": province["url"],
                         "label": province_name,
