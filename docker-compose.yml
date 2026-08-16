@@ -153,6 +153,8 @@ services:
     container_name: real-estate-worker
     init: true  # Zombie process'leri temizler
     shm_size: '2gb'  # Chrome için shared memory
+    security_opt:
+      - seccomp:unconfined
     volumes:
       # Source code mount (hot reload)
       - ./Backend:/app

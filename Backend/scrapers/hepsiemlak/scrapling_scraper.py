@@ -26,6 +26,7 @@ from core.config import get_hepsiemlak_config
 from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
 
+from scrapers.common.http_status import is_failed_http_response, response_http_status
 from scrapers.common.proxy_fetch import ProxyFetchClient
 
 from .main import save_listings_to_db
@@ -323,13 +324,7 @@ class HepsiemlakScraplingScraper:
                 self.metrics["failed_requests"] += 1
                 return None
 
-            status = getattr(response, "status", 200)
-            body = getattr(response, "body", b"")
-            if (
-                (isinstance(status, int) and status >= 400)
-                or not body
-                or len(body) <= 100
-            ):
+            if is_failed_http_response(response):
                 self.metrics["failed_requests"] += 1
                 return None
 
@@ -647,16 +642,7 @@ class HepsiemlakScraplingScraper:
                         fetch_kwargs["wait_selector"] = listing_results
                     response = session.fetch(url, **fetch_kwargs)
 
-            if not response:
-                return None
-
-            status = getattr(response, "status", 200)
-            body = getattr(response, "body", b"")
-            if (
-                (isinstance(status, int) and status >= 400)
-                or not body
-                or len(body) <= 100
-            ):
+            if not response or is_failed_http_response(response):
                 return None
             return response
         except Exception as exc:
@@ -824,6 +810,20 @@ class HepsiemlakScraplingScraper:
                 )
 
             async def parse(self, response: Response):
+                status = response_http_status(response)
+                if status >= 400:
+                    spider_errors.append(
+                        {
+                            "url": getattr(response, "url", ""),
+                            "error": f"HTTP {status}",
+                        }
+                    )
+                    task_log.line(
+                        f"{outer.scraping_method} blocked: {response.url} -> HTTP {status}",
+                        level="warning",
+                    )
+                    return
+
                 current_page = outer._get_page_number(response.url)
                 visited_pages.add(current_page)
                 if current_page in processed_pages:
@@ -993,6 +993,10 @@ class HepsiemlakScraplingScraper:
                 self.metrics["end_time"] - self.metrics["start_time"]
             )
             self.metrics["total_listings"] = len(all_listings)
+            if not all_listings and self.metrics["failed_requests"] > 0:
+                raise RuntimeError(
+                    f"Tarama başarısız: 0 ilan, {self.metrics['failed_requests']} başarısız istek"
+                )
             return all_results, all_listings
         finally:
             self._close_session()

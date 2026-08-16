@@ -64,6 +64,8 @@ class DriverManager:
         # Temel tarayıcı ayarları
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-crash-reporter")
+        options.add_argument("--crash-dumps-dir=/tmp/crashpad")
         options.add_argument(f"user-agent={self.user_agent}")
         options.add_argument("--window-size=1920,1080")
         if self.headless:
