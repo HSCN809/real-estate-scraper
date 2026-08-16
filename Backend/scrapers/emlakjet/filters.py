@@ -103,13 +103,21 @@ def matches_filters(
     extracted = extract_primary_slug_from_url(listing_url)
     if extracted is None:
         return False
-    if extracted == "ilan":
+    path_parts = [
+        normalize_slug(part)
+        for part in urlparse(listing_url or "").path.split("/")
+        if part
+    ]
+    if extracted == "ilan" or (path_parts and path_parts[0] == "ilan"):
         return True
 
     selected_subtype = normalize_slug(alt_kategori)
     if selected_subtype:
-        return extracted == selected_subtype or extracted.endswith(
-            f"-{selected_subtype}"
+        padded = f"-{extracted}-"
+        return (
+            extracted == selected_subtype
+            or extracted.endswith(f"-{selected_subtype}")
+            or f"-{selected_subtype}-" in padded
         )
 
     if expected_primary_slugs and extracted in expected_primary_slugs:

@@ -21,7 +21,7 @@ from utils.logger import TaskLogLayout, get_logger
 from .listings import CATEGORY_PARSERS, extract_listings_from_html
 from .parsers import KonutParser
 from .persist import save_listings_to_db
-from .urls import build_city_url, parse_location_options
+from .urls import build_city_url, parse_location_options, should_scrape_city_level
 from .urls import normalize_location_token as _normalize_location_token
 
 logger = get_logger(__name__)
@@ -152,7 +152,7 @@ class EmlakJetScraper(BaseScraper):
             listing_count = self._parse_listing_count()
 
             location_options = parse_location_options(
-                self.driver.page_source, current_url
+                self.driver.page_source, current_url, location_type
             )
 
             # Lokasyonları 4 sütunda göster
@@ -816,10 +816,27 @@ class EmlakJetScraper(BaseScraper):
                         )
                     continue
 
-                if max_pages == 1 or province_count <= self.PAGINATION_LIMIT:
-                    # İl genelinde ≤1500 ilan — ilçe/mahalleye inmeye gerek yok
+                province_name = province["name"]
+                api_districts_for_province = None
+                if districts:
+                    normalized_province_name = _normalize_location_token(province_name)
+                    for city_name, district_names in districts.items():
+                        if (
+                            _normalize_location_token(city_name)
+                            == normalized_province_name
+                            and district_names
+                        ):
+                            api_districts_for_province = district_names
+                            break
+
+                if should_scrape_city_level(
+                    max_pages,
+                    province_count,
+                    has_district_filter=bool(api_districts_for_province),
+                    pagination_limit=self.PAGINATION_LIMIT,
+                ):
                     print(
-                        f"⚡ {province['name']} → {province_count} ilan (≤{self.PAGINATION_LIMIT}), il seviyesinden taranıyor."
+                        f"⚡ {province['name']} → {province_count} ilan, il seviyesinden taranıyor."
                     )
                     target = {
                         "url": province["url"],
@@ -843,29 +860,13 @@ class EmlakJetScraper(BaseScraper):
                             prov_idx,
                             len(provinces),
                             min(int(overall), 99),
+                            unit="şehir",
                         )
                     continue
 
-                # İl > 1500 ilan — ilçelere iniyoruz
                 print(
-                    f"📊 {province['name']} → {province_count} ilan (>{self.PAGINATION_LIMIT}), ilçe seviyesine iniliyor..."
+                    f"📊 {province['name']} → {province_count} ilan, ilçe seviyesine iniliyor..."
                 )
-
-                # İlçe filtreleme var mı kontrol et
-                province_name = province["name"]
-                api_districts_for_province = None
-                if districts:
-                    normalized_province_name = _normalize_location_token(province_name)
-                    for city_name, district_names in districts.items():
-                        if (
-                            _normalize_location_token(city_name)
-                            == normalized_province_name
-                        ):
-                            api_districts_for_province = district_names
-                            logger.info(
-                                f"{province_name} için ilçe filtresi aktif: {api_districts_for_province}"
-                            )
-                            break
 
                 # İlçe listesini al
                 district_list, _ = self.get_location_options("İlçeler", province["url"])
@@ -935,6 +936,7 @@ class EmlakJetScraper(BaseScraper):
                                 dist_idx,
                                 len(district_list),
                                 min(int(overall), 99),
+                                unit="ilçe",
                             )
 
                         if should_skip:

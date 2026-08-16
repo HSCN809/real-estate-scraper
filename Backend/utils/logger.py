@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import os as _os
+import re
 import sys
 
 # Core modülünden içe aktarım
@@ -28,10 +29,10 @@ _UI_LOG_MARKERS = (
     "alınamadı",
     "alinamadi",
     "seçilemedi",
-    "0 ilan",
     "başarısız",
     "yeniden deneme",
 )
+_ZERO_LISTING_RE = re.compile(r"(?<!\d)0\s*ilan", re.IGNORECASE)
 
 
 def set_task_ui_log_sink(sink: TaskUiLogSink | None):
@@ -43,9 +44,11 @@ def reset_task_ui_log_sink(token) -> None:
 
 
 def should_forward_ui_log(message: str, level: str) -> bool:
-    if level in {"warning", "error"}:
+    if level == "error":
         return True
     compact = message.casefold()
+    if _ZERO_LISTING_RE.search(compact):
+        return True
     return any(marker in compact for marker in _UI_LOG_MARKERS)
 
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))

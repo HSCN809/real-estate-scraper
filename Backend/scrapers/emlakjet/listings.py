@@ -1,6 +1,9 @@
+import re
 from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin
+
+_LISTING_HREF_RE = re.compile(r"/ilan/[^/?#]+-\d+(?:/)?(?:[?#]|$)")
 
 from bs4 import BeautifulSoup
 from core.selectors import get_common_selectors
@@ -50,6 +53,23 @@ def _attr(element, css_selector: str, attribute: str, default: str = "") -> str:
     return value or default
 
 
+def _first_listing_href(element, css_selector: str) -> str:
+    selectors = [part.strip() for part in (css_selector or "").split(",") if part.strip()]
+    selectors.extend(["h3[data-listing-title] a", "a[data-listing-image]", "a[href*='/ilan/']"])
+    seen: set[str] = set()
+    for selector in selectors:
+        if selector in seen:
+            continue
+        seen.add(selector)
+        for node in element.select(selector):
+            raw = node.get("href")
+            href = raw[0] if isinstance(raw, list) else raw
+            href = str(href or "").strip()
+            if href and "ilan-ver" not in href and _LISTING_HREF_RE.search(href):
+                return href
+    return ""
+
+
 def extract_listing_from_card(
     element,
     *,
@@ -77,9 +97,7 @@ def extract_listing_from_card(
     if not all([title, location, price]):
         return None
 
-    listing_url = _attr(
-        element, common_selectors.get("link", "h3[data-listing-title] a"), "href"
-    )
+    listing_url = _first_listing_href(element, common_selectors.get("link", ""))
     if listing_url and page_url:
         listing_url = urljoin(page_url, listing_url)
 

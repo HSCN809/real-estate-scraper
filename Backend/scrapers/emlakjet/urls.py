@@ -87,12 +87,59 @@ def page_number_from_url(url: str) -> int:
     return 1
 
 
-def parse_location_options(source, current_url: str) -> list[dict[str, str]]:
+def location_kind_from_type(location_type: str | None) -> str:
+    compact = normalize_text(location_type or "")
+    if "mahalle" in compact:
+        return "mahalle"
+    if "ilce" in compact:
+        return "ilce"
+    return "il"
+
+
+def should_scrape_city_level(
+    max_pages: int | None,
+    listing_count: int | None,
+    *,
+    has_district_filter: bool,
+    pagination_limit: int = 1500,
+) -> bool:
+    if has_district_filter:
+        return False
+    if max_pages is not None:
+        return True
+    return (listing_count or 0) <= pagination_limit
+
+
+def _is_allowed_location_child(
+    parent_segment: str, child_segment: str, kind: str
+) -> bool:
+    if not child_segment or child_segment in _EXCLUDED_LOCATION_SEGMENTS:
+        return False
+    if kind == "mahalle":
+        return True
+
+    parent = parent_segment.strip("-")
+    child = child_segment.strip("-")
+    prefix = f"{parent}-"
+    if child.startswith(prefix):
+        remainder = child[len(prefix) :]
+    else:
+        remainder = child
+
+    if "mahalle" in remainder:
+        return False
+    return "-" not in remainder
+
+
+def parse_location_options(
+    source, current_url: str, location_type: str | None = None
+) -> list[dict[str, str]]:
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(as_html(source), "html.parser")
     base_path = urlparse(current_url).path.rstrip("/")
     last_segment = base_path.rsplit("/", 1)[-1]
+    kind = location_kind_from_type(location_type)
     options: list[dict[str, str]] = []
     seen_names: set[str] = set()
 
@@ -108,7 +155,8 @@ def parse_location_options(source, current_url: str) -> list[dict[str, str]]:
             (base_path + "/", base_path + "-")
         ):
             continue
-        if href_path.rsplit("/", 1)[-1] in _EXCLUDED_LOCATION_SEGMENTS:
+        child_segment = href_path.rsplit("/", 1)[-1]
+        if not _is_allowed_location_child(last_segment, child_segment, kind):
             continue
 
         location_name = extract_location_name(link.get_text(" ", strip=True))
@@ -116,8 +164,10 @@ def parse_location_options(source, current_url: str) -> list[dict[str, str]]:
         normalized_name = normalize_text(location_name)
         if normalized_segment and normalized_name.startswith(normalized_segment + "-"):
             location_name = location_name[len(last_segment) :].strip()
+        elif normalized_segment and normalized_name.startswith(normalized_segment + " "):
+            location_name = location_name[len(last_segment) :].strip(" -")
         if not location_name:
-            location_name = href_path.rsplit("/", 1)[-1].replace("-", " ")
+            location_name = child_segment.replace("-", " ")
         if not location_name:
             continue
         normalized = normalize_text(location_name)

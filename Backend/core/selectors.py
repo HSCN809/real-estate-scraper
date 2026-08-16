@@ -11,7 +11,7 @@ EMLAKJET_SELECTORS = {
         # İlan seçicileri (yeni Next.js yapısı - Ağustos 2026)
         "listing_container": "article[data-listing-id]",
         "title": "h3[data-listing-title] a",
-        "link": "h3[data-listing-title] a",
+        "link": "h3[data-listing-title] a, a[data-listing-image]",
         "location": "p.text-xs",
         "price": "span.shrink-0.whitespace-nowrap",
         "image": "img[src*='/listing/']",

@@ -36,6 +36,7 @@ from .urls import (
     normalize_text,
     page_number_from_url,
     parse_location_options,
+    should_scrape_city_level,
 )
 
 logger = get_logger(__name__)
@@ -520,7 +521,10 @@ class EmlakJetScraplingScraper:
             return [], None
 
         listing_count = self._parse_listing_count(selector)
-        return parse_location_options(selector, current_url), listing_count
+        return (
+            parse_location_options(selector, current_url, location_type),
+            listing_count,
+        )
 
     def _match_requested_locations(
         self, options: list[dict[str, str]], requested: list[str]
@@ -1151,7 +1155,20 @@ class EmlakJetScraplingScraper:
                     province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
                     continue
 
-                if page_limit == 1 or province_count <= self.PAGINATION_LIMIT:
+                requested_districts = None
+                for city_name, district_names in (self.selected_districts or {}).items():
+                    if self._normalize_text(city_name) == self._normalize_text(
+                        province_name
+                    ) and district_names:
+                        requested_districts = district_names
+                        break
+
+                if should_scrape_city_level(
+                    page_limit,
+                    province_count,
+                    has_district_filter=bool(requested_districts),
+                    pagination_limit=self.PAGINATION_LIMIT,
+                ):
                     target = {
                         "url": province["url"],
                         "label": province_name,
@@ -1172,14 +1189,6 @@ class EmlakJetScraplingScraper:
                     task_log.line(f"⏭️ {province_name} için ilçe bulunamadı, atlanıyor.")
                     province_callback(f"{province_name} atlandı", progress=100)
                     continue
-
-                requested_districts = None
-                for city_name, district_names in self.selected_districts.items():
-                    if self._normalize_text(city_name) == self._normalize_text(
-                        province_name
-                    ):
-                        requested_districts = district_names
-                        break
 
                 if requested_districts:
                     district_list = self._match_requested_locations(

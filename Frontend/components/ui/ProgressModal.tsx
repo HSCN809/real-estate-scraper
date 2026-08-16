@@ -81,7 +81,7 @@ export function ProgressPanel() {
     if (!mounted) return null;
 
     const progressValue = Math.max(0, Math.min(100, Math.round(status?.progress || 0)));
-    const counterLabel = (status?.unit?.trim() || 'Sayfa').replace(/^./, (char) => char.toLocaleUpperCase('tr-TR'));
+    const counterLabel = (status?.unit?.trim() || 'Konum').replace(/^./, (char) => char.toLocaleUpperCase('tr-TR'));
     const subtitle = status?.error || status?.message || (taskStatus === 'queued' ? 'İşçi bekleniyor...' : 'Başlatılıyor...');
 
     return createPortal(
