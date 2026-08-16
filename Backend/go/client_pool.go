@@ -103,7 +103,7 @@ func (cp *ClientPool) createTransport(clientHelloID string) *http.Transport {
 				parsedURL.User = url.UserPassword(cp.config.MobileProxyUser, cp.config.MobileProxyPass)
 			}
 			proxyURL = parsedURL
-			log.Info().Msgf("Mobile proxy configured: %s", proxyURL.String())
+			log.Info().Msgf("Upstream residential proxy configured: %s", proxyURL.Redacted())
 		}
 	}
 

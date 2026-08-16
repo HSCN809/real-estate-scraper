@@ -13,10 +13,10 @@ services:
       - PROXY_READ_TIMEOUT=30
       - PROXY_WRITE_TIMEOUT=30
 
-      # Mobile Proxy Configuration (optional)
-      # - MOBILE_PROXY_URL=socks5://user:pass@mobile-proxy.com:port
-      # - MOBILE_PROXY_USER=username
-      # - MOBILE_PROXY_PASS=password
+      # Residential/upstream proxy configuration (optional)
+      - MOBILE_PROXY_URL=${MOBILE_PROXY_URL:-}
+      - MOBILE_PROXY_USER=${MOBILE_PROXY_USER:-}
+      - MOBILE_PROXY_PASS=${MOBILE_PROXY_PASS:-}
 
       # TLS Fingerprint Configuration
       # HepsiEmlak testlerinde yalnizca HelloChrome_120 + Chrome 120 UA kombinasyonu
