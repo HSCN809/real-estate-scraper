@@ -508,6 +508,7 @@ class EmlakJetScraper(BaseScraper):
         """Her sayfa sonrası ilanları DB'ye kaydetmek için callback oluştur"""
 
         def _on_page_scraped(page_listings):
+            totals = [0, 0, 0]
             for listing in page_listings:
                 listing["il"] = prov_name
                 if tgt["type"] == "mahalle":
@@ -529,6 +530,9 @@ class EmlakJetScraper(BaseScraper):
                 )
                 page_num_ref[0] += 1
                 new_listings_count_ref[0] += new_count  # Yeni eklenenleri say
+                totals[0] += new_count
+                totals[1] += updated_count
+                totals[2] += unchanged_count
                 self._log_page_result(
                     page_num_ref[0],
                     len(page_listings),
@@ -536,6 +540,7 @@ class EmlakJetScraper(BaseScraper):
                     updated_count,
                     unchanged_count,
                 )
+            return tuple(totals)
 
         return _on_page_scraped
 
@@ -548,6 +553,7 @@ class EmlakJetScraper(BaseScraper):
         province: str = "",
         district: str = "",
         new_listings_count_ref: list[int] | None = None,
+        progress_callback=None,
     ) -> bool:
         """Başarısız sayfa takibi ile sayfa tarama"""
         first_page_count = 0
@@ -569,6 +575,13 @@ class EmlakJetScraper(BaseScraper):
                 current_page,
                 max_pages,
             )
+            if progress_callback:
+                progress_callback(
+                    f"{location_label or province or district or 'Lokasyon'} - Sayfa {current_page}/{max_pages} taranıyor...",
+                    current=current_page,
+                    total=max_pages,
+                    unit="sayfa",
+                )
 
             try:
                 if current_page > 1:
@@ -622,10 +635,21 @@ class EmlakJetScraper(BaseScraper):
                     self.all_listings.extend(listings)
 
                     # Sadece yeni eklenenleri saymak için
+                    result_counts = (0, 0, 0)
                     if on_page_scraped and listings:
-                        on_page_scraped(listings)
+                        result_counts = on_page_scraped(listings) or result_counts
                     elif listings:
                         self._log_page_result(current_page, len(listings), 0, 0, 0)
+                    if progress_callback:
+                        new_count, updated_count, unchanged_count = result_counts
+                        progress_callback(
+                            f"{location_label or province or district or 'Lokasyon'} - Sayfa {current_page}: "
+                            f"{len(listings)} ilan çıkarıldı; {new_count} yeni, "
+                            f"{updated_count} güncellendi, {unchanged_count} değişmedi",
+                            current=current_page,
+                            total=max_pages,
+                            unit="sayfa",
+                        )
 
                 if current_page == 1:
                     first_page_count = len(listings)
@@ -687,6 +711,7 @@ class EmlakJetScraper(BaseScraper):
             province=province_name,
             district=district_name,
             new_listings_count_ref=new_listings_count_ref,
+            progress_callback=getattr(self, "_progress_callback", None),
         )
         # Global kümülatif sayaça ekle
         self.total_new_listings += new_listings_count_ref[0]
@@ -707,6 +732,7 @@ class EmlakJetScraper(BaseScraper):
         print = task_log.line
         self._max_listings = max_listings
         self._requested_max_pages = max_pages
+        self._progress_callback = progress_callback
 
         subtype_info = f" ({self.subtype_name})" if self.subtype_name else ""
         if max_pages:
@@ -799,9 +825,7 @@ class EmlakJetScraper(BaseScraper):
                     base_progress = ((prov_idx - 1) / len(provinces)) * 100
                     progress_callback(
                         f"İşleniyor: {province['name']}...",
-                        prov_idx,
-                        len(provinces),
-                        base_progress,
+                        progress=base_progress,
                     )
 
                 # ── OPTİMİZASYON: İl seviyesi kontrol ──
@@ -810,9 +834,7 @@ class EmlakJetScraper(BaseScraper):
                     if progress_callback:
                         progress_callback(
                             f"{province['name']} atlandı (0 ilan)",
-                            prov_idx,
-                            len(provinces),
-                            int((prov_idx / len(provinces)) * 100),
+                            progress=int((prov_idx / len(provinces)) * 100),
                         )
                     continue
 
@@ -857,10 +879,7 @@ class EmlakJetScraper(BaseScraper):
                         overall = (prov_idx / len(provinces)) * 100
                         progress_callback(
                             f"{province['name']} (il seviyesi)",
-                            prov_idx,
-                            len(provinces),
-                            min(int(overall), 99),
-                            unit="şehir",
+                            progress=min(int(overall), 99),
                         )
                     continue
 
@@ -933,10 +952,7 @@ class EmlakJetScraper(BaseScraper):
                             overall = province_base + dist_idx * district_range
                             progress_callback(
                                 f"{province_name} > {district['name']}",
-                                dist_idx,
-                                len(district_list),
-                                min(int(overall), 99),
-                                unit="ilçe",
+                                progress=min(int(overall), 99),
                             )
 
                         if should_skip:
@@ -1022,9 +1038,7 @@ class EmlakJetScraper(BaseScraper):
                             )
                             progress_callback(
                                 f"{province_name} > {district['name']} > {target['label'].split('/')[-1].strip()}",
-                                target_idx,
-                                total_targets,
-                                min(int(overall), 99),
+                                progress=min(int(overall), 99),
                             )
 
                         if should_skip:

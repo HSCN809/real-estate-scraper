@@ -909,6 +909,14 @@ class HepsiemlakScraper(BaseScraper):
                     self._log_page_result(
                         page, len(page_listings), new_c, updated_c, unchanged_c
                     )
+                    if progress_callback:
+                        progress_callback(
+                            f"{city} - Sayfa {page}: {len(page_listings)} ilan çıkarıldı; "
+                            f"{new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi",
+                            current=page,
+                            total=pages_to_scrape,
+                            unit="sayfa",
+                        )
 
                 if page < pages_to_scrape:
                     self.random_medium_wait()  # Gizli mod: sayfalar arası
@@ -1046,9 +1054,10 @@ class HepsiemlakScraper(BaseScraper):
                         )
                         progress_callback(
                             f"{district} - Sayfa {page}/{pages_to_scrape}",
-                            current=idx,
-                            total=len(districts),
+                            current=page,
+                            total=pages_to_scrape,
                             progress=overall_progress,
+                            unit="sayfa",
                         )
 
                     page_url = self.driver.current_url.split("?")[0]
@@ -1124,6 +1133,15 @@ class HepsiemlakScraper(BaseScraper):
                         self._log_page_result(
                             page, len(page_listings), new_c, updated_c, unchanged_c
                         )
+                        if progress_callback:
+                            progress_callback(
+                                f"{city} / {district} - Sayfa {page}: {len(page_listings)} ilan çıkarıldı; "
+                                f"{new_c} yeni, {updated_c} güncellendi, {unchanged_c} değişmedi",
+                                current=page,
+                                total=pages_to_scrape,
+                                progress=overall_progress,
+                                unit="sayfa",
+                            )
 
                     if page < pages_to_scrape:
                         self.random_medium_wait()

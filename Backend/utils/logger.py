@@ -49,7 +49,7 @@ def reset_task_ui_log_sink(token) -> None:
 
 
 def should_forward_ui_log(message: str, level: str) -> bool:
-    if level == "error":
+    if level in {"warning", "error"}:
         return True
     compact = message.casefold()
     if _ZERO_LISTING_RE.search(compact):
