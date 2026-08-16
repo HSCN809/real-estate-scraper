@@ -804,6 +804,13 @@ class EmlakJetScraper(BaseScraper):
                 # ── OPTİMİZASYON: İl seviyesi kontrol ──
                 if province_count == 0:
                     print(f"⏭️  {province['name']} → 0 ilan, il atlanıyor.")
+                    if progress_callback:
+                        progress_callback(
+                            f"{province['name']} atlandı (0 ilan)",
+                            prov_idx,
+                            len(provinces),
+                            int((prov_idx / len(provinces)) * 100),
+                        )
                     continue
 
                 if max_pages == 1 or province_count <= self.PAGINATION_LIMIT:
@@ -830,8 +837,8 @@ class EmlakJetScraper(BaseScraper):
                         overall = (prov_idx / len(provinces)) * 100
                         progress_callback(
                             f"{province['name']} (il seviyesi)",
-                            1,
-                            1,
+                            prov_idx,
+                            len(provinces),
                             min(int(overall), 99),
                         )
                     continue
@@ -1079,10 +1086,9 @@ class EmlakJetScraper(BaseScraper):
 
                 if progress_callback:
                     progress_callback(
-                        f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
+                        f"Yeniden deneme #{retry_round} - {len(failed_pages)} sayfa",
                         0,
                         len(failed_pages),
-                        0,
                     )
 
                 for idx, page_info in enumerate(failed_pages, 1):
@@ -1092,10 +1098,9 @@ class EmlakJetScraper(BaseScraper):
 
                     if progress_callback:
                         progress_callback(
-                            f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
+                            f"Yeniden deneme #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
                             idx,
                             len(failed_pages),
-                            int((idx / len(failed_pages)) * 100),
                         )
 
                     try:

@@ -66,9 +66,9 @@ export function useTaskStatus(taskId: string | null) {
             // Auto-poll while task is still active
             const taskData = query.state.data as TaskStatus | undefined;
             if (taskData?.status === 'queued' || taskData?.status === 'running') {
-                return 2000; // Poll every 2 seconds
+                return 2000;
             }
-            return false; // Stop polling when finished
+            return false;
         },
         staleTime: 1000, // 1 second cache
         refetchOnWindowFocus: false,
@@ -80,15 +80,14 @@ export function useActiveTasks() {
         queryKey: ['active-tasks'],
         queryFn: getActiveTasks,
         refetchInterval: (query) => {
-            // Auto-poll when there are active tasks
             const data = query.state.data as { active_tasks: TaskStatus[]; count: number } | undefined;
             if (data?.active_tasks && data.active_tasks.length > 0) {
-                return 3000; // Poll every 3 seconds
+                return 3000;
             }
-            return false; // Stop polling when no active tasks
+            return 15000;
         },
-        staleTime: 1000, // 1 second cache
-        refetchOnWindowFocus: false,
+        staleTime: 1000,
+        refetchOnWindowFocus: true,
     });
 }
 

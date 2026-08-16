@@ -620,6 +620,8 @@ class EmlakJetScraplingScraper:
             task_log.line(
                 f"âš ï¸ Ilk sayfa alinamadi: {location_name}", level="warning"
             )
+            if progress_callback:
+                progress_callback(f"{location_name} atlandı", progress=100)
             return listings
 
         pages_to_scrape = self._resolve_page_limit(
@@ -809,15 +811,16 @@ class EmlakJetScraplingScraper:
                 if outer._is_listing_limit_reached():
                     return
 
+                done_pages = len(processed_pages) + 1
                 task_log.line(
-                    f"ğŸ” [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taraniyor..."
+                    f"ğŸ” [{done_pages}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taraniyor..."
                 )
                 if progress_callback:
                     progress_callback(
-                        f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
-                        current=current_page,
+                        f"{location_name} - Sayfa {done_pages}/{pages_to_scrape}",
+                        current=done_pages,
                         total=pages_to_scrape,
-                        progress=int((current_page / max(1, pages_to_scrape)) * 100),
+                        progress=int((done_pages / max(1, pages_to_scrape)) * 100),
                     )
 
                 page_listings = outer.extract_listings_from_page(
@@ -1032,7 +1035,7 @@ class EmlakJetScraplingScraper:
     def _make_progress_callback(
         self, progress_callback, current_idx: int, total_count: int, name: str
     ):
-        def callback(msg, current=0, total=0, progress=0):
+        def callback(msg, current=None, total=None, progress=None):
             overall = int(
                 ((current_idx - 1 + (progress or 0) / 100) / max(1, total_count)) * 100
             )
@@ -1145,6 +1148,7 @@ class EmlakJetScraplingScraper:
 
                 if province_count == 0:
                     task_log.line(f"⏭️ {province_name} -> 0 ilan, il atlaniyor.")
+                    province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
                     continue
 
                 if page_limit == 1 or province_count <= self.PAGINATION_LIMIT:
@@ -1166,6 +1170,7 @@ class EmlakJetScraplingScraper:
                 district_list, _ = self.get_location_options("Ilceler", province["url"])
                 if not district_list:
                     task_log.line(f"⏭️ {province_name} icin ilce bulunamadi, atlaniyor.")
+                    province_callback(f"{province_name} atlandı", progress=100)
                     continue
 
                 requested_districts = None
@@ -1184,6 +1189,7 @@ class EmlakJetScraplingScraper:
                         task_log.line(
                             f"⏭️ {province_name} icin eslesen ilce bulunamadi."
                         )
+                        province_callback(f"{province_name} atlandı", progress=100)
                         continue
 
                 for district_item in district_list:

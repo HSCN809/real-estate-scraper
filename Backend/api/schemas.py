@@ -41,12 +41,13 @@ class ScrapeStartResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     task_id: str
-    status: Literal["queued", "running", "completed", "failed"]
+    status: Literal["queued", "running", "completed", "failed", "cancelled"]
     message: str
     progress: int
     total: int
     current: int
     details: str
+    unit: str = ""
     error: str | None = None
     platform: str | None = None
     started_at: str | None = None

@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.task_status import (
+    TASK_STATUS_CANCELLED,
     TASK_STATUS_COMPLETED,
     TASK_STATUS_FAILED,
     TASK_STATUS_QUEUED,
@@ -71,3 +72,24 @@ def test_build_task_status_key_and_normalize_legacy_statuses():
     assert build_task_status_key("abc") == "scrape_task:abc"
     assert normalize_scrape_session_status("timeout") == TASK_STATUS_FAILED
     assert normalize_scrape_session_status("terminated") == TASK_STATUS_FAILED
+    assert normalize_scrape_session_status("cancelled") == TASK_STATUS_FAILED
+
+
+def test_progress_does_not_move_backwards():
+    store = TaskStatusStore(redis_client=FakeRedis())
+    store.create_queued_task("task-1", message="Queued")
+    store.mark_running("task-1", message="Running", progress=80)
+    updated = store.update("task-1", progress=10, message="Retry")
+    assert updated["progress"] == 80
+    assert updated["message"] == "Retry"
+
+
+def test_final_status_ignores_later_updates():
+    store = TaskStatusStore(redis_client=FakeRedis())
+    store.create_queued_task("task-1", message="Queued")
+    store.mark_cancelled("task-1")
+    updated = store.update(
+        "task-1", status=TASK_STATUS_RUNNING, message="Still going", progress=40
+    )
+    assert updated["status"] == TASK_STATUS_CANCELLED
+    assert store.is_cancel_requested("task-1")

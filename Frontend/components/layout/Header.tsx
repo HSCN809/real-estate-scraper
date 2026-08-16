@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2, Map, List, BarChart3 } from 'lucide-react';
+import { Home, Search, FileText, Settings, User, LogOut, ChevronDown, Loader2, Map, List, BarChart3, CheckCircle2, XCircle, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useScraping } from '@/contexts/ScrapingContext';
@@ -36,7 +36,10 @@ function Header() {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const resultsRef = useRef<HTMLDivElement>(null);
 
-    const showMiniIndicator = activeTask && !activeTask.isFinished && !isPanelVisible;
+    const showMiniIndicator = Boolean(activeTask && !isPanelVisible);
+    const miniFinished = Boolean(activeTask?.isFinished);
+    const miniFailed = activeTask?.status?.status === 'failed';
+    const miniCancelled = activeTask?.status?.status === 'cancelled';
     const isResultsActive = pathname.startsWith('/results');
 
     // Dropdown dışına tıklandığında kapat
@@ -150,13 +153,29 @@ function Header() {
                 </nav>
 
                 {/* Mini İlerleme Göstergesi */}
-                {showMiniIndicator && (
+                {showMiniIndicator && activeTask && (
                     <button
+                        type="button"
                         onClick={showPanel}
-                        className="flex items-center gap-2 px-3 py-1.5 mr-3 rounded-lg bg-blue-500/20 border border-blue-500/30 hover:bg-blue-500/30 transition-all text-blue-400 text-sm font-medium"
-                        title="Tarama devam ediyor — tıkla görüntüle"
+                        className={cn(
+                            'flex items-center gap-2 px-3 py-1.5 mr-3 rounded-lg border transition-all text-sm font-medium',
+                            miniFailed && 'bg-red-500/20 border-red-500/30 text-red-300 hover:bg-red-500/30',
+                            miniCancelled && 'bg-amber-500/20 border-amber-500/30 text-amber-300 hover:bg-amber-500/30',
+                            miniFinished && !miniFailed && !miniCancelled && 'bg-green-500/20 border-green-500/30 text-green-300 hover:bg-green-500/30',
+                            !miniFinished && 'bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30',
+                        )}
+                        aria-label="Tarama panelini aç"
+                        title="Tıkla, tarama panelini aç"
                     >
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {miniFailed ? (
+                            <XCircle className="w-4 h-4" />
+                        ) : miniCancelled ? (
+                            <Ban className="w-4 h-4" />
+                        ) : miniFinished ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                        ) : (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        )}
                         <span className="hidden sm:inline">
                             %{Math.round(activeTask.status?.progress || 0)}
                         </span>

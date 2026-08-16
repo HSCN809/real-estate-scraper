@@ -756,14 +756,14 @@ class HepsiemlakScraper(BaseScraper):
         self._log_location_start(city, self._build_location_url(city))
 
         if progress_callback:
-            progress_callback(
-                f"{city} için tarama başlatılıyor...", current=0, total=100
-            )
+            progress_callback(f"{city} için tarama başlatılıyor...")
 
         try:
             # Şehir seç (doğrudan şehir URL'ine gider)
             if not self.select_single_city(city):
                 task_log.line(f"❌ {city} seçilemedi, atlanıyor", level="error")
+                if progress_callback:
+                    progress_callback(f"{city} atlandı", progress=100)
                 return []
 
             # Sıfır sonuç kontrolü
@@ -783,6 +783,10 @@ class HepsiemlakScraper(BaseScraper):
                             task_log.line(
                                 f"⚠️ {city} için ilan bulunamadı", level="warning"
                             )
+                            if progress_callback:
+                                progress_callback(
+                                    f"{city} için ilan bulunamadı", progress=100
+                                )
                             return []
             except Exception:  # nosec
                 pass
@@ -1260,9 +1264,11 @@ class HepsiemlakScraper(BaseScraper):
                     # Sadece istatistik için tutuyoruz (zaten kaydedildi)
                     if district_results:
                         all_results[city] = district_results
-                        total_listings_count += sum(
+                        city_listing_count = sum(
                             len(listings) for listings in district_results.values()
                         )
+                        total_listings_count += city_listing_count
+                        self.total_scraped_count += city_listing_count
                 else:
                     # İlçe seçimi yoksa tüm şehri tara ve kaydet
                     task_log.line(f"📍 {city} - Tüm ilçeler taranacak (filtre yok)")
@@ -1309,10 +1315,9 @@ class HepsiemlakScraper(BaseScraper):
                 # İlerleme callback ile durumu güncelle
                 if progress_callback:
                     progress_callback(
-                        f"🔄 Retry #{retry_round} - {len(failed_pages)} sayfa",
+                        f"Yeniden deneme #{retry_round} - {len(failed_pages)} sayfa",
                         current=0,
                         total=len(failed_pages),
-                        progress=0,
                     )
 
                 # Her başarısız sayfa için yeni tarayıcı ile dene
@@ -1323,10 +1328,9 @@ class HepsiemlakScraper(BaseScraper):
 
                     if progress_callback:
                         progress_callback(
-                            f"🔄 Retry #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
+                            f"Yeniden deneme #{retry_round}: {page_info.city} Sayfa {page_info.page_number}",
                             current=idx,
                             total=len(failed_pages),
-                            progress=int((idx / len(failed_pages)) * 100),
                         )
 
                     try:

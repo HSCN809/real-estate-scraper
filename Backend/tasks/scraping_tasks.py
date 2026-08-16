@@ -6,7 +6,7 @@ from api.schemas import SUPPORTED_SCRAPING_METHODS
 from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_app import celery_app
-from core.task_status import TASK_STATUS_RUNNING, TaskStatusStore
+from core.task_status import TASK_STATUS_RUNNING, TaskCancelled, TaskStatusStore
 from utils.logger import get_logger
 
 logger = get_logger("celery.scraping")
@@ -83,6 +83,38 @@ class TaskProgressManager:
             details=error,
         )
 
+    def raise_if_cancelled(self) -> None:
+        if self.store.is_cancel_requested(self.task_id):
+            raise TaskCancelled("Tarama iptal edildi")
+
+
+def _listing_count(scraper) -> int:
+    if scraper is None:
+        return 0
+    count = getattr(scraper, "total_scraped_count", 0) or 0
+    if count:
+        return int(count)
+    listings = getattr(scraper, "all_listings", None)
+    if listings is not None:
+        return len(listings)
+    return 0
+
+
+def _make_progress_callback(progress_manager: TaskProgressManager):
+    def progress_callback(
+        message, current=None, total=None, progress=None, details=None
+    ):
+        progress_manager.raise_if_cancelled()
+        progress_manager.update(
+            message=message,
+            current=current,
+            total=total,
+            progress=progress,
+            details=details,
+        )
+
+    return progress_callback
+
 
 @celery_app.task(bind=True, name="scrape_hepsiemlak")
 def scrape_hepsiemlak_task(
@@ -153,14 +185,7 @@ def scrape_hepsiemlak_task(
         db.commit()
         logger.info(f"[Task {task_id}] ScrapeSession created: ID={scrape_session.id}")
 
-        # Redis'i guncelleyen ilerleme geri cagirima fonksiyonu
-        def progress_callback(message, current=0, total=0, progress=0):
-            progress_manager.update(
-                message=message, current=current, total=total, progress=progress
-            )
-            # Durdurma istegini kontrol et
-
-        # Kazıyıcı için durdurma kontrol fonksiyonu
+        progress_callback = _make_progress_callback(progress_manager)
 
         # Kaziyiciyi olustur
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
@@ -209,18 +234,25 @@ def scrape_hepsiemlak_task(
         )
 
         _final_status = "completed"
+        total_listings = _listing_count(scraper)
 
         progress_manager.complete(
-            message=f"Tarama tamamlandı! {getattr(scraper, 'total_scraped_count', 0)} ilan bulundu."
+            message=f"Tarama tamamlandı! {total_listings} ilan bulundu."
         )
 
         return {
             "status": "completed",
             "task_id": task_id,
-            "total_listings": getattr(scraper, "total_scraped_count", 0),
+            "total_listings": total_listings,
             "new_listings": getattr(scraper, "new_listings_count", 0),
             "duplicates": getattr(scraper, "duplicate_count", 0),
         }
+
+    except TaskCancelled:
+        logger.info(f"[Task {task_id}] Task cancelled by user")
+        _final_status = "cancelled"
+        _error_msg = "İptal edildi"
+        return {"status": "cancelled", "task_id": task_id}
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
@@ -240,9 +272,7 @@ def scrape_hepsiemlak_task(
         # Her durumda (SIGTERM dahil) session'ı kapat ve kaydet
         try:
             if scrape_session and db:
-                total_listings = (
-                    getattr(scraper, "total_scraped_count", 0) if scraper else 0
-                )
+                total_listings = _listing_count(scraper)
                 new_listings = (
                     getattr(scraper, "new_listings_count", 0) if scraper else 0
                 )
@@ -352,13 +382,7 @@ def scrape_emlakjet_task(
             category_path = config.categories[listing_type].get(category, "")
             base_url = config.base_url + category_path
 
-        # Ilerleme geri cagirima fonksiyonu
-        def progress_callback(message, current=0, total=0, progress=0):
-            progress_manager.update(
-                message=message, current=current, total=total, progress=progress
-            )
-
-        # Kazıyıcı için durdurma kontrol fonksiyonu
+        progress_callback = _make_progress_callback(progress_manager)
 
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
         if scraping_method == "selenium":
@@ -402,7 +426,7 @@ def scrape_emlakjet_task(
 
         _final_status = "completed"
 
-        total_listings = len(getattr(scraper, "all_listings", []))
+        total_listings = _listing_count(scraper)
         logger.info(
             f"[Task {task_id}] Scraping completed: {total_listings} listings collected"
         )
@@ -415,6 +439,12 @@ def scrape_emlakjet_task(
             "task_id": task_id,
             "total_listings": total_listings,
         }
+
+    except TaskCancelled:
+        logger.info(f"[Task {task_id}] Task cancelled by user")
+        _final_status = "cancelled"
+        _error_msg = "İptal edildi"
+        return {"status": "cancelled", "task_id": task_id}
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
@@ -435,9 +465,7 @@ def scrape_emlakjet_task(
         # Listing'ler zaten sayfa bazlı kaydedildi, tekrar kaydetmeye gerek yok
         try:
             if scrape_session and db:
-                total_listings = (
-                    len(getattr(scraper, "all_listings", [])) if scraper else 0
-                )
+                total_listings = _listing_count(scraper)
 
                 crud.update_scrape_session(
                     db,

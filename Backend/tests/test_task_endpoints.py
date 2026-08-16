@@ -106,3 +106,34 @@ def test_get_active_tasks_only_returns_active_statuses(monkeypatch):
     payload = response.json()
     assert payload["count"] == 2
     assert {item["task_id"] for item in payload["active_tasks"]} == {"task-1", "task-2"}
+
+
+def test_cancel_task_marks_cancelled(monkeypatch):
+    client, store = create_test_client(monkeypatch)
+    store.create_queued_task("task-1", message="Queued", platform="emlakjet")
+    store.mark_running("task-1", message="Running")
+
+    revoked = []
+    monkeypatch.setattr(
+        endpoints.celery_app.control,
+        "revoke",
+        lambda task_id, terminate=False: revoked.append((task_id, terminate)),
+    )
+
+    response = client.post("/api/v1/tasks/task-1/cancel")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "cancelled"
+    assert payload["task_id"] == "task-1"
+    assert revoked == [("task-1", True)]
+
+
+def test_cancel_task_rejects_finished_task(monkeypatch):
+    client, store = create_test_client(monkeypatch)
+    store.create_queued_task("task-1", message="Queued")
+    store.mark_completed("task-1", message="Done")
+
+    response = client.post("/api/v1/tasks/task-1/cancel")
+
+    assert response.status_code == 409

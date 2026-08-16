@@ -223,14 +223,17 @@ export async function getDistrictGeoJSON(provinceName: string): Promise<GeoJSON.
 
 // ==================== Görev Durumu API (Celery Entegrasyonu) ====================
 
+export type TaskLifecycleStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
 export interface TaskStatus {
     task_id: string;
-    status: 'queued' | 'running' | 'completed' | 'failed';
+    status: TaskLifecycleStatus;
     message: string;
     progress: number;
     total: number;
     current: number;
     details: string;
+    unit?: string;
     error?: string | null;
     platform?: 'emlakjet' | 'hepsiemlak';
     started_at?: string;
@@ -238,12 +241,22 @@ export interface TaskStatus {
     finished_at?: string | null;
 }
 
+export class TaskRequestError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = 'TaskRequestError';
+        this.status = status;
+    }
+}
+
 export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
     const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
         credentials: 'include',
     });
     if (!response.ok) {
-        throw new Error('Task durumu alınamadı');
+        throw new TaskRequestError('Task durumu alınamadı', response.status);
     }
     return response.json();
 }
@@ -255,6 +268,21 @@ export async function getActiveTasks(): Promise<{ active_tasks: TaskStatus[]; co
     });
     if (!response.ok) {
         throw new Error('Aktif tasklar alınamadı');
+    }
+    return response.json();
+}
+
+export async function cancelTask(taskId: string): Promise<TaskStatus> {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+    });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new TaskRequestError(
+            errorData.detail || 'Görev iptal edilemedi',
+            response.status,
+        );
     }
     return response.json();
 }

@@ -10,8 +10,9 @@ import {
 import Link from 'next/link';
 import { useEffect, useState, useMemo } from 'react';
 import type { ScrapeResult } from '@/types';
-import type { TaskStatus } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useScraping } from '@/contexts/ScrapingContext';
+import { useActiveTasks } from '@/lib/api-hooks';
 import {
   formatTimeAgo,
   getIstanbulHour,
@@ -80,28 +81,16 @@ export default function Dashboard() {
     this_week: 0, this_month: 0, last_scrape: '-',
   });
   const [results, setResults] = useState<ScrapeResult[]>([]);
-  const [activeTasks, setActiveTasks] = useState<TaskStatus[]>([]);
   const [recentScrollTop, setRecentScrollTop] = useState(0);
+  const { startTracking, showPanel } = useScraping();
+  const { data: activeTasksData } = useActiveTasks();
+  const activeTasks = activeTasksData?.active_tasks ?? [];
 
   useEffect(() => {
-    import('@/lib/api').then(({ getStats, getResults, getActiveTasks }) => {
+    import('@/lib/api').then(({ getStats, getResults }) => {
       getStats().then(setStats).catch(console.error);
       getResults().then(setResults).catch(console.error);
-      getActiveTasks()
-        .then(({ active_tasks }) => setActiveTasks(active_tasks))
-        .catch(console.error);
     });
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      import('@/lib/api').then(({ getActiveTasks }) => {
-        getActiveTasks()
-          .then(({ active_tasks }) => setActiveTasks(active_tasks))
-          .catch(() => {});
-      });
-    }, 3000);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -336,11 +325,21 @@ export default function Dashboard() {
                 </div>
                 <div className="space-y-3">
                   {activeTasks.map((task, i) => (
-                    <div key={task.task_id || i} className="p-3 rounded-xl bg-black/30 border border-white/5">
+                    <button
+                      type="button"
+                      key={task.task_id || i}
+                      onClick={() => {
+                        if (task.task_id) {
+                          startTracking(task.task_id, task.platform);
+                          showPanel();
+                        }
+                      }}
+                      className="w-full text-left p-3 rounded-xl bg-black/30 border border-white/5 hover:border-sky-500/30 transition-colors"
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-gray-300">{task.message || 'Tarama devam ediyor...'}</span>
                         <span className="text-xs text-sky-400 font-bold">
-                          {task.progress > 0 ? `%${Math.round(task.progress)}` : 'Başlatılıyor...'}
+                          {task.status === 'queued' ? 'Sırada' : task.progress > 0 ? `%${Math.round(task.progress)}` : 'Başlatılıyor...'}
                         </span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -352,7 +351,7 @@ export default function Dashboard() {
                         />
                       </div>
                       {task.details && <p className="text-[10px] text-gray-600 mt-1.5">{task.details}</p>}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
-from core.task_status import get_task_status_store
+from core.task_status import get_task_status_store, is_final_task_status
 from database import crud
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
@@ -218,6 +219,23 @@ async def get_task_status(task_id: str):
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskStatusResponse(**task)
+
+
+@router.post("/tasks/{task_id}/cancel", response_model=TaskStatusResponse)
+async def cancel_task(task_id: str):
+    store = _require_task_status_store()
+    task = store.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if is_final_task_status(task.get("status")):
+        raise HTTPException(status_code=409, detail="Görev zaten sonlandı")
+
+    payload = store.mark_cancelled(task_id)
+    try:
+        celery_app.control.revoke(task_id, terminate=True)
+    except Exception as exc:
+        logger.warning("Celery revoke failed for %s: %s", task_id, exc)
+    return TaskStatusResponse(**payload)
 
 
 @router.get("/analytics/prices")

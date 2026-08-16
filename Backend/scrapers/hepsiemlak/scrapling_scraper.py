@@ -483,6 +483,8 @@ class HepsiemlakScraplingScraper:
         first_page = self.fetch_page(location_url)
         if not first_page:
             task_log.line(f"⚠️ İlk sayfa alınamadı: {location_name}", level="warning")
+            if progress_callback:
+                progress_callback(f"{location_name} atlandı", progress=100)
             return listings
 
         pages_to_scrape = self._resolve_page_limit(
@@ -647,15 +649,16 @@ class HepsiemlakScraplingScraper:
                 if current_page in processed_pages:
                     return
 
+                done_pages = len(processed_pages) + 1
                 task_log.line(
-                    f"🔍 [{current_page}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor..."
+                    f"🔍 [{done_pages}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor..."
                 )
                 if progress_callback:
                     progress_callback(
-                        f"{location_name} - Sayfa {current_page}/{pages_to_scrape}",
-                        current=current_page,
+                        f"{location_name} - Sayfa {done_pages}/{pages_to_scrape}",
+                        current=done_pages,
                         total=pages_to_scrape,
-                        progress=int((current_page / max(1, pages_to_scrape)) * 100),
+                        progress=int((done_pages / max(1, pages_to_scrape)) * 100),
                     )
 
                 page_listings = outer.extract_listings_from_page(

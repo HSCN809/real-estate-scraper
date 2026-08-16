@@ -19,9 +19,14 @@ TASK_STATUS_QUEUED = "queued"
 TASK_STATUS_RUNNING = "running"
 TASK_STATUS_COMPLETED = "completed"
 TASK_STATUS_FAILED = "failed"
+TASK_STATUS_CANCELLED = "cancelled"
 
 ACTIVE_TASK_STATUSES = {TASK_STATUS_QUEUED, TASK_STATUS_RUNNING}
-FINAL_TASK_STATUSES = {TASK_STATUS_COMPLETED, TASK_STATUS_FAILED}
+FINAL_TASK_STATUSES = {
+    TASK_STATUS_COMPLETED,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_CANCELLED,
+}
 TASK_STATUS_VALUES = ACTIVE_TASK_STATUSES | FINAL_TASK_STATUSES
 
 SCRAPE_SESSION_STATUS_RUNNING = "running"
@@ -36,7 +41,12 @@ LEGACY_SCRAPE_SESSION_STATUS_MAP = {
     "timeout": SCRAPE_SESSION_STATUS_FAILED,
     "terminated": SCRAPE_SESSION_STATUS_FAILED,
     "stopped": SCRAPE_SESSION_STATUS_FAILED,
+    "cancelled": SCRAPE_SESSION_STATUS_FAILED,
 }
+
+
+class TaskCancelled(Exception):
+    pass
 
 
 def utcnow_iso() -> str:
@@ -73,6 +83,8 @@ def create_task_status_payload(
     started_at: str | None = None,
     updated_at: str | None = None,
     finished_at: str | None = None,
+    unit: str = "",
+    cancel_requested: bool = False,
 ) -> dict[str, Any]:
     if status not in TASK_STATUS_VALUES:
         raise ValueError(f"Unsupported task status: {status}")
@@ -91,6 +103,8 @@ def create_task_status_payload(
         "started_at": started_at or now,
         "updated_at": updated_at or now,
         "finished_at": finished_at,
+        "unit": unit,
+        "cancel_requested": cancel_requested,
     }
     if is_final_task_status(status) and payload["finished_at"] is None:
         payload["finished_at"] = payload["updated_at"]
@@ -132,6 +146,8 @@ class TaskStatusStore:
         details: str | None = None,
         error: str | None = None,
         platform: str | None = None,
+        unit: str | None = None,
+        cancel_requested: bool | None = None,
     ) -> dict[str, Any]:
         existing = self.get_task(task_id)
         if existing is None:
@@ -145,6 +161,8 @@ class TaskStatusStore:
                 message=message or "",
                 platform=platform,
             )
+        elif is_final_task_status(existing.get("status")):
+            return existing
 
         if status is not None:
             if status not in TASK_STATUS_VALUES:
@@ -153,6 +171,12 @@ class TaskStatusStore:
         if message is not None:
             existing["message"] = message
         if progress is not None:
+            previous = int(existing.get("progress") or 0)
+            if (
+                existing.get("status") in ACTIVE_TASK_STATUSES
+                and progress < previous
+            ):
+                progress = previous
             existing["progress"] = progress
         if current is not None:
             existing["current"] = current
@@ -164,6 +188,10 @@ class TaskStatusStore:
             existing["error"] = error
         if platform is not None:
             existing["platform"] = platform
+        if unit is not None:
+            existing["unit"] = unit
+        if cancel_requested is not None:
+            existing["cancel_requested"] = cancel_requested
 
         existing["updated_at"] = utcnow_iso()
         if is_final_task_status(existing["status"]):
@@ -220,6 +248,29 @@ class TaskStatusStore:
             message=message,
             error=error,
             details=details,
+        )
+
+    def mark_cancelled(
+        self,
+        task_id: str,
+        *,
+        message: str = "Tarama iptal edildi.",
+    ) -> dict[str, Any]:
+        return self.update(
+            task_id,
+            status=TASK_STATUS_CANCELLED,
+            message=message,
+            details="Kullanıcı tarafından durduruldu",
+            cancel_requested=True,
+        )
+
+    def is_cancel_requested(self, task_id: str) -> bool:
+        task = self.get_task(task_id)
+        if task is None:
+            return False
+        return bool(
+            task.get("cancel_requested")
+            or task.get("status") == TASK_STATUS_CANCELLED
         )
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
