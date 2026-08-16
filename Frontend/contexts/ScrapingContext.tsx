@@ -3,15 +3,20 @@
 import { createContext, startTransition, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { cancelTask, getTaskStatus, getActiveTasks, TaskRequestError, type TaskStatus } from '@/lib/api';
 
-const MAX_LOG_LINES = 8;
+const MAX_LOG_LINES = 40;
 const MAX_POLL_FAILURES = 8;
+
+export interface ScrapingLogEntry {
+    text: string;
+    level: 'info' | 'warning' | 'error';
+}
 
 interface ScrapingTask {
     taskId: string;
     platform?: string;
     status: TaskStatus | null;
     isFinished: boolean;
-    logs: string[];
+    logs: ScrapingLogEntry[];
 }
 
 interface ScrapingContextType {
@@ -34,12 +39,32 @@ function isTerminalStatus(status: TaskStatus['status'] | undefined): boolean {
     return status === 'completed' || status === 'failed' || status === 'cancelled';
 }
 
-function appendLog(logs: string[], message?: string | null): string[] {
+function normalizeLogLevel(level?: string): ScrapingLogEntry['level'] {
+    if (level === 'error' || level === 'warning') return level;
+    return 'info';
+}
+
+function logsFromStatus(status: TaskStatus | null | undefined): ScrapingLogEntry[] | null {
+    if (!status?.logs?.length) return null;
+    return status.logs
+        .map((entry) => ({
+            text: (entry.text || '').trim(),
+            level: normalizeLogLevel(entry.level),
+        }))
+        .filter((entry) => entry.text)
+        .slice(-MAX_LOG_LINES);
+}
+
+function appendLog(
+    logs: ScrapingLogEntry[],
+    message?: string | null,
+    level: ScrapingLogEntry['level'] = 'info',
+): ScrapingLogEntry[] {
     const next = (message || '').trim();
-    if (!next || logs[logs.length - 1] === next) {
+    if (!next || logs[logs.length - 1]?.text === next) {
         return logs;
     }
-    return [...logs, next].slice(-MAX_LOG_LINES);
+    return [...logs, { text: next, level }].slice(-MAX_LOG_LINES);
 }
 
 export function ScrapingProvider({ children }: { children: ReactNode }) {
@@ -84,7 +109,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                                     platform: task.platform,
                                     status: task,
                                     isFinished: false,
-                                    logs: appendLog([], task.message),
+                                    logs: logsFromStatus(task) || appendLog([], task.message),
                                 });
                                 setIsPanelVisible(true);
                             });
@@ -114,7 +139,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 status: data,
                 isFinished: finished,
-                logs: appendLog(prev.logs, data.message || data.details || data.error),
+                logs: logsFromStatus(data) || appendLog(prev.logs, data.error || data.details),
             };
         });
         return finished;
@@ -163,7 +188,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                         error,
                         platform: prev.status?.platform,
                     },
-                    logs: appendLog(prev.logs, message),
+                    logs: appendLog(prev.logs, message, 'error'),
                 };
             });
         }
@@ -202,7 +227,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             platform,
             status: null,
             isFinished: false,
-            logs: ['Sıraya alındı'],
+            logs: [{ text: 'Sıraya alındı', level: 'info' }],
         });
         setIsPanelVisible(true);
     }, []);

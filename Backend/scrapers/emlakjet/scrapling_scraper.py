@@ -1147,7 +1147,7 @@ class EmlakJetScraplingScraper:
                 )
 
                 if province_count == 0:
-                    task_log.line(f"⏭️ {province_name} -> 0 ilan, il atlaniyor.")
+                    task_log.line(f"⏭️ {province_name} → 0 ilan, il atlanıyor.")
                     province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
                     continue
 
@@ -1169,7 +1169,7 @@ class EmlakJetScraplingScraper:
 
                 district_list, _ = self.get_location_options("Ilceler", province["url"])
                 if not district_list:
-                    task_log.line(f"⏭️ {province_name} icin ilce bulunamadi, atlaniyor.")
+                    task_log.line(f"⏭️ {province_name} için ilçe bulunamadı, atlanıyor.")
                     province_callback(f"{province_name} atlandı", progress=100)
                     continue
 
@@ -1187,7 +1187,7 @@ class EmlakJetScraplingScraper:
                     )
                     if not district_list:
                         task_log.line(
-                            f"⏭️ {province_name} icin eslesen ilce bulunamadi."
+                            f"⏭️ {province_name} için eşleşen ilçe bulunamadı."
                         )
                         province_callback(f"{province_name} atlandı", progress=100)
                         continue

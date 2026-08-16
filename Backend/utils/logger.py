@@ -9,8 +9,44 @@ import sys
 # Core modülünden içe aktarım
 import sys as _sys
 import tempfile
+from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+
+TaskUiLogSink = Callable[[str, str], None]
+_task_ui_log_sink: ContextVar[TaskUiLogSink | None] = ContextVar(
+    "task_ui_log_sink", default=None
+)
+
+_UI_LOG_MARKERS = (
+    "atlandı",
+    "atlanıyor",
+    "atlaniyor",
+    "bulunamadı",
+    "bulunamadi",
+    "alınamadı",
+    "alinamadi",
+    "seçilemedi",
+    "0 ilan",
+    "başarısız",
+    "yeniden deneme",
+)
+
+
+def set_task_ui_log_sink(sink: TaskUiLogSink | None):
+    return _task_ui_log_sink.set(sink)
+
+
+def reset_task_ui_log_sink(token) -> None:
+    _task_ui_log_sink.reset(token)
+
+
+def should_forward_ui_log(message: str, level: str) -> bool:
+    if level in {"warning", "error"}:
+        return True
+    compact = message.casefold()
+    return any(marker in compact for marker in _UI_LOG_MARKERS)
 
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
 from core.config import get_config
@@ -301,7 +337,14 @@ class TaskLogLayout:
         getattr(self.logger, level or self.level)(message)
 
     def line(self, message: str, level: str | None = None):
+        resolved = level or self.level
         self._write(message, level=level)
+        sink = _task_ui_log_sink.get()
+        if sink and should_forward_ui_log(str(message), resolved):
+            try:
+                sink(str(message), resolved)
+            except Exception:
+                pass
 
     def lines(self, *messages: str, level: str | None = None):
         for message in messages:

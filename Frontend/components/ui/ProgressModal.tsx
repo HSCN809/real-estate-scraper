@@ -81,7 +81,7 @@ export function ProgressPanel() {
     if (!mounted) return null;
 
     const progressValue = Math.max(0, Math.min(100, Math.round(status?.progress || 0)));
-    const counterLabel = status?.unit?.trim() || 'Adım';
+    const counterLabel = (status?.unit?.trim() || 'Sayfa').replace(/^./, (char) => char.toLocaleUpperCase('tr-TR'));
     const subtitle = status?.error || status?.message || (taskStatus === 'queued' ? 'İşçi bekleniyor...' : 'Başlatılıyor...');
 
     return createPortal(
@@ -213,9 +213,17 @@ export function ProgressPanel() {
                                     aria-relevant="additions"
                                     className="max-h-28 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2 space-y-1"
                                 >
-                                    {activeTask.logs.map((line, index) => (
-                                        <p key={`${index}-${line}`} className="text-[11px] text-slate-400 break-words">
-                                            {line}
+                                    {activeTask.logs.map((entry, index) => (
+                                        <p
+                                            key={`${index}-${entry.text}`}
+                                            className={cn(
+                                                'text-[11px] break-words',
+                                                entry.level === 'error' && 'text-red-300',
+                                                entry.level === 'warning' && 'text-amber-300',
+                                                entry.level === 'info' && 'text-slate-400',
+                                            )}
+                                        >
+                                            {entry.text}
                                         </p>
                                     ))}
                                 </div>

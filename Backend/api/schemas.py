@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 SUPPORTED_SCRAPING_METHODS = (
     "selenium",
@@ -39,6 +39,11 @@ class ScrapeStartResponse(BaseModel):
     message: str
 
 
+class TaskLogEntry(BaseModel):
+    text: str
+    level: str = "info"
+
+
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: Literal["queued", "running", "completed", "failed", "cancelled"]
@@ -53,6 +58,7 @@ class TaskStatusResponse(BaseModel):
     started_at: str | None = None
     updated_at: str | None = None
     finished_at: str | None = None
+    logs: list[TaskLogEntry] = Field(default_factory=list)
 
 
 class ActiveTasksResponse(BaseModel):

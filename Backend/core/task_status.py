@@ -85,6 +85,7 @@ def create_task_status_payload(
     finished_at: str | None = None,
     unit: str = "",
     cancel_requested: bool = False,
+    logs: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     if status not in TASK_STATUS_VALUES:
         raise ValueError(f"Unsupported task status: {status}")
@@ -105,6 +106,7 @@ def create_task_status_payload(
         "finished_at": finished_at,
         "unit": unit,
         "cancel_requested": cancel_requested,
+        "logs": list(logs or []),
     }
     if is_final_task_status(status) and payload["finished_at"] is None:
         payload["finished_at"] = payload["updated_at"]
@@ -192,6 +194,7 @@ class TaskStatusStore:
             existing["unit"] = unit
         if cancel_requested is not None:
             existing["cancel_requested"] = cancel_requested
+        existing.setdefault("logs", [])
 
         existing["updated_at"] = utcnow_iso()
         if is_final_task_status(existing["status"]):
@@ -256,13 +259,15 @@ class TaskStatusStore:
         *,
         message: str = "Tarama iptal edildi.",
     ) -> dict[str, Any]:
-        return self.update(
+        payload = self.update(
             task_id,
             status=TASK_STATUS_CANCELLED,
             message=message,
             details="Kullanıcı tarafından durduruldu",
             cancel_requested=True,
         )
+        self.append_log(task_id, message, "warning")
+        return payload
 
     def is_cancel_requested(self, task_id: str) -> bool:
         task = self.get_task(task_id)
@@ -272,6 +277,27 @@ class TaskStatusStore:
             task.get("cancel_requested")
             or task.get("status") == TASK_STATUS_CANCELLED
         )
+
+    def append_log(
+        self,
+        task_id: str,
+        message: str,
+        level: str = "info",
+    ) -> dict[str, Any] | None:
+        existing = self.get_task(task_id)
+        if existing is None:
+            return None
+        text = " ".join(str(message or "").split())
+        if not text:
+            return existing
+        logs = list(existing.get("logs") or [])
+        if logs and logs[-1].get("text") == text:
+            return existing
+        logs.append({"text": text, "level": level})
+        existing["logs"] = logs[-40:]
+        existing["updated_at"] = utcnow_iso()
+        self._write(existing)
+        return existing
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         data = self.redis_client.get(build_task_status_key(task_id))

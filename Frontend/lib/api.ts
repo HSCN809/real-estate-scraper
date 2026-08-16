@@ -234,6 +234,7 @@ export interface TaskStatus {
     current: number;
     details: string;
     unit?: string;
+    logs?: Array<{ text: string; level?: string }>;
     error?: string | null;
     platform?: 'emlakjet' | 'hepsiemlak';
     started_at?: string;

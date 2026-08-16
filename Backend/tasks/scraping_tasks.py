@@ -7,7 +7,7 @@ from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_app import celery_app
 from core.task_status import TASK_STATUS_RUNNING, TaskCancelled, TaskStatusStore
-from utils.logger import get_logger
+from utils.logger import get_logger, should_forward_ui_log
 
 logger = get_logger("celery.scraping")
 
@@ -43,8 +43,8 @@ class TaskProgressManager:
         status: str = TASK_STATUS_RUNNING,
         error: str | None = None,
         platform: str | None = None,
+        unit: str | None = None,
     ):
-        """Redis'teki görev ilerlemesini güncelle."""
         data = self.store.update(
             self.task_id,
             status=status,
@@ -55,6 +55,7 @@ class TaskProgressManager:
             details=details,
             error=error,
             platform=platform,
+            unit=unit,
         )
 
         current_task.update_state(
@@ -87,6 +88,9 @@ class TaskProgressManager:
         if self.store.is_cancel_requested(self.task_id):
             raise TaskCancelled("Tarama iptal edildi")
 
+    def log(self, message: str, level: str = "info") -> None:
+        self.store.append_log(self.task_id, message, level)
+
 
 def _listing_count(scraper) -> int:
     if scraper is None:
@@ -100,9 +104,22 @@ def _listing_count(scraper) -> int:
     return 0
 
 
+def _infer_unit(message: str | None, unit: str | None) -> str | None:
+    if unit:
+        return unit
+    compact = (message or "").casefold()
+    if "sayfa" in compact:
+        return "sayfa"
+    if "ilçe" in compact or "ilce" in compact:
+        return "ilçe"
+    if "şehir" in compact or "sehir" in compact or " il " in f" {compact} ":
+        return "şehir"
+    return None
+
+
 def _make_progress_callback(progress_manager: TaskProgressManager):
     def progress_callback(
-        message, current=None, total=None, progress=None, details=None
+        message, current=None, total=None, progress=None, details=None, unit=None
     ):
         progress_manager.raise_if_cancelled()
         progress_manager.update(
@@ -111,7 +128,10 @@ def _make_progress_callback(progress_manager: TaskProgressManager):
             total=total,
             progress=progress,
             details=details,
+            unit=_infer_unit(message, unit),
         )
+        if message and should_forward_ui_log(str(message), "info"):
+            progress_manager.log(str(message), "warning")
 
     return progress_callback
 
@@ -137,7 +157,7 @@ def scrape_hepsiemlak_task(
         f"method={scraping_method}, proxy_enabled={proxy_enabled}, cities={cities}"
     )
     progress_manager.update(
-        message="HepsiEmlak taramasi baslatiliyor...",
+        message="HepsiEmlak taraması başlatılıyor...",
         progress=0,
         status=TASK_STATUS_RUNNING,
         platform="hepsiemlak",
@@ -227,11 +247,16 @@ def scrape_hepsiemlak_task(
             f"method={scraping_method}, proxy_enabled={proxy_enabled}"
         )
 
-        # Kaziyiciyi durdurma kontroluyle calistir
-        scraper.start_scraping_api(
-            max_pages=max_pages,
-            progress_callback=progress_callback,
-        )
+        from utils.logger import reset_task_ui_log_sink, set_task_ui_log_sink
+
+        sink_token = set_task_ui_log_sink(progress_manager.log)
+        try:
+            scraper.start_scraping_api(
+                max_pages=max_pages,
+                progress_callback=progress_callback,
+            )
+        finally:
+            reset_task_ui_log_sink(sink_token)
 
         _final_status = "completed"
         total_listings = _listing_count(scraper)
@@ -256,9 +281,9 @@ def scrape_hepsiemlak_task(
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
-        progress_manager.fail("Zaman limiti asildi")
+        progress_manager.fail("Zaman limiti aşıldı")
         _final_status = "failed"
-        _error_msg = "Zaman limiti asildi"
+        _error_msg = "Zaman limiti aşıldı"
         raise
 
     except Exception as e:
@@ -331,7 +356,7 @@ def scrape_emlakjet_task(
         f"method={scraping_method}, proxy_enabled={proxy_enabled}"
     )
     progress_manager.update(
-        message="EmlakJet taramasi baslatiliyor...",
+        message="EmlakJet taraması başlatılıyor...",
         progress=0,
         status=TASK_STATUS_RUNNING,
         platform="emlakjet",
@@ -416,13 +441,19 @@ def scrape_emlakjet_task(
         scraper.db = db
         scraper.scrape_session_id = scrape_session.id
 
-        scraper.start_scraping_api(
-            cities=cities,
-            districts=districts,
-            max_listings=max_listings,
-            max_pages=max_pages,
-            progress_callback=progress_callback,
-        )
+        from utils.logger import reset_task_ui_log_sink, set_task_ui_log_sink
+
+        sink_token = set_task_ui_log_sink(progress_manager.log)
+        try:
+            scraper.start_scraping_api(
+                cities=cities,
+                districts=districts,
+                max_listings=max_listings,
+                max_pages=max_pages,
+                progress_callback=progress_callback,
+            )
+        finally:
+            reset_task_ui_log_sink(sink_token)
 
         _final_status = "completed"
 
@@ -448,9 +479,9 @@ def scrape_emlakjet_task(
 
     except SoftTimeLimitExceeded:
         logger.error(f"[Task {task_id}] Task exceeded time limit")
-        progress_manager.fail("Zaman limiti asildi")
+        progress_manager.fail("Zaman limiti aşıldı")
         _final_status = "failed"
-        _error_msg = "Zaman limiti asildi"
+        _error_msg = "Zaman limiti aşıldı"
         raise
 
     except Exception as e:

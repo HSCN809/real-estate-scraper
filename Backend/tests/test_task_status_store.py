@@ -93,3 +93,17 @@ def test_final_status_ignores_later_updates():
     )
     assert updated["status"] == TASK_STATUS_CANCELLED
     assert store.is_cancel_requested("task-1")
+
+
+def test_append_log_keeps_recent_events():
+    store = TaskStatusStore(redis_client=FakeRedis())
+    store.create_queued_task("task-1", message="Queued")
+    store.mark_running("task-1", message="Running")
+    store.append_log("task-1", "Şırnak atlandı (0 ilan)", "warning")
+    store.append_log("task-1", "Şırnak atlandı (0 ilan)", "warning")
+    store.append_log("task-1", "Cizre ilçesi alınamadı", "error")
+    task = store.get_task("task-1")
+    assert [item["text"] for item in task["logs"]] == [
+        "Şırnak atlandı (0 ilan)",
+        "Cizre ilçesi alınamadı",
+    ]
