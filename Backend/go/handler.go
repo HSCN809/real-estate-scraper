@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -279,6 +281,11 @@ func (ph *ProxyHandler) handleGetProxy(w http.ResponseWriter, r *http.Request) {
 		req.Headers = headers
 	}
 
+	if err := validateTargetURL(req.URL); err != nil {
+		ph.sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	ph.executeProxyRequest(w, r.Context(), req)
 }
 
@@ -298,6 +305,11 @@ func (ph *ProxyHandler) handlePostProxy(w http.ResponseWriter, r *http.Request) 
 	// Set default timeout if not provided
 	if req.Timeout == 0 {
 		req.Timeout = int(ph.config.ReadTimeout.Milliseconds() / 1000)
+	}
+
+	if err := validateTargetURL(req.URL); err != nil {
+		ph.sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	ph.executeProxyRequest(w, r.Context(), req)

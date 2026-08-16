@@ -81,6 +81,24 @@ CLAUDE.md
 # docker-compose.override.yml
 
 # ===========================================
+# Test / scan artifacts (do not push)
+# ===========================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+Frontend/test-results/
+Frontend/playwright-report/
+Frontend/blob-report/
+test-results/
+playwright-report/
+lighthouse*.json
+gitleaks-report.json
+*-report.json
+
+# ===========================================
 # Diğer Dosyalar
 # ===========================================
 Genel Proje Kuralları.md
