@@ -139,7 +139,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 status: data,
                 isFinished: finished,
-                logs: logsFromStatus(data) || appendLog(prev.logs, data.error || data.details),
+                logs: logsFromStatus(data) || appendLog(prev.logs, data.message || data.error || data.details),
             };
         });
         return finished;

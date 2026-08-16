@@ -7,7 +7,7 @@ from celery import current_task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_app import celery_app
 from core.task_status import TASK_STATUS_RUNNING, TaskCancelled, TaskStatusStore
-from utils.logger import get_logger, should_forward_ui_log
+from utils.logger import get_logger
 
 logger = get_logger("celery.scraping")
 
@@ -130,8 +130,8 @@ def _make_progress_callback(progress_manager: TaskProgressManager):
             details=details,
             unit=_infer_unit(message, unit),
         )
-        if message and should_forward_ui_log(str(message), "info"):
-            progress_manager.log(str(message), "warning")
+        if message:
+            progress_manager.log(str(message), "info")
 
     return progress_callback
 

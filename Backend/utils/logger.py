@@ -31,6 +31,11 @@ _UI_LOG_MARKERS = (
     "seçilemedi",
     "başarısız",
     "yeniden deneme",
+    "ilçe",
+    "ilce",
+    "mahalle",
+    "seviyesinden",
+    "seviyesine",
 )
 _ZERO_LISTING_RE = re.compile(r"(?<!\d)0\s*ilan", re.IGNORECASE)
 

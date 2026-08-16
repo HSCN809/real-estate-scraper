@@ -105,7 +105,7 @@ def should_scrape_city_level(
 ) -> bool:
     if has_district_filter:
         return False
-    if max_pages is not None:
+    if max_pages == 1:
         return True
     return (listing_count or 0) <= pagination_limit
 

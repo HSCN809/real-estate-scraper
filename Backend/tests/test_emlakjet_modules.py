@@ -110,7 +110,8 @@ def test_emlakjet_keeps_ilan_detail_urls_with_subtype():
 
 
 def test_emlakjet_stays_at_city_when_page_limit_set():
-    assert should_scrape_city_level(5, 22694, has_district_filter=False) is True
+    assert should_scrape_city_level(1, 22694, has_district_filter=False) is True
+    assert should_scrape_city_level(5, 22694, has_district_filter=False) is False
     assert should_scrape_city_level(None, 22694, has_district_filter=False) is False
     assert should_scrape_city_level(None, 800, has_district_filter=False) is True
     assert should_scrape_city_level(5, 22694, has_district_filter=True) is False
@@ -119,7 +120,7 @@ def test_emlakjet_stays_at_city_when_page_limit_set():
 def test_ui_log_does_not_treat_thirty_listings_as_zero():
     assert should_forward_ui_log("Şırnak → 0 ilan, il atlanıyor.", "info") is True
     assert should_forward_ui_log("Sayfa 1: 30 ilan çıkarıldı", "info") is False
-    assert should_forward_ui_log("Bağcılar → 20 ilan, ilçe seviyesinden taranıyor.", "info") is False
+    assert should_forward_ui_log("Bağcılar → 20 ilan, ilçe seviyesinden taranıyor.", "info") is True
 
 
 def test_emlakjet_keeps_seo_ilan_urls():
