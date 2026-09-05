@@ -1,5 +1,9 @@
 # Real Estate Scraper
 
+> 🌍 **Modular real-estate listing scraper for Turkish property portals (EmlakJet, HepsiEmlak) with a Go uTLS anti-bot proxy and a Next.js dashboard.**
+>
+> _(Details in Turkish below.)_
+
 ---
 
 This project is supported by Thordata.
