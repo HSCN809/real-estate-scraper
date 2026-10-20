@@ -9,6 +9,11 @@ from sqlalchemy.orm import sessionmaker
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
+    # SQLAlchemy 2 postgresql:// varsayılanı psycopg v3. Paket psycopg2.
+    if DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgresql://") :]
+    elif DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgres://") :]
     # PostgreSQL (Docker)
     engine = create_engine(
         DATABASE_URL,

@@ -1224,7 +1224,7 @@ class HepsiemlakScraper(BaseScraper):
                     current_city_idx, num_cities, city_name
                 ):
                     def city_progress_callback(
-                        msg, current=None, total=None, progress=None
+                        msg, current=None, total=None, progress=None, unit=None
                     ):
                         # Şehir içi progress'i toplam progress'e çevir
                         city_local_progress = progress if progress is not None else 0
@@ -1241,6 +1241,7 @@ class HepsiemlakScraper(BaseScraper):
                                 current=current,
                                 total=total,
                                 progress=overall,
+                                unit=unit,
                             )
                         else:
                             # Bellek içi task_status'a geri dön

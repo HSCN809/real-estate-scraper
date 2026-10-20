@@ -84,8 +84,8 @@ func TestServeHTTPProxyAuth(t *testing.T) {
 	open := testHandler("")
 	rec = httptest.NewRecorder()
 	open.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/proxy", nil))
-	if rec.Code == http.StatusUnauthorized {
-		t.Fatal("empty API key should not return 401")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("empty API key status = %d", rec.Code)
 	}
 }
 
@@ -207,9 +207,11 @@ func TestValidateTargetURL(t *testing.T) {
 }
 
 func TestServeHTTPRejectsInternalURL(t *testing.T) {
-	ph := testHandler("")
+	ph := testHandler("secret")
 	rec := httptest.NewRecorder()
-	ph.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/proxy?url=http://127.0.0.1:9/", nil))
+	req := httptest.NewRequest(http.MethodGet, "/proxy?url=http://127.0.0.1:9/", nil)
+	req.Header.Set("X-API-Key", "secret")
+	ph.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("internal url status = %d", rec.Code)
 	}
@@ -241,5 +243,26 @@ func BenchmarkRateLimiterAllow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = rl.Allow("1.1.1.1")
+	}
+}
+
+func TestIsCloudflareChallenge(t *testing.T) {
+	if !isCloudflareChallenge(http.StatusForbidden, []byte("no")) {
+		t.Fatal("403 should be a challenge")
+	}
+	if !isCloudflareChallenge(http.StatusOK, []byte("<title>Just a moment...</title>")) {
+		t.Fatal("200 interstitial should be a challenge")
+	}
+	if isCloudflareChallenge(http.StatusOK, []byte("<html>ilan listesi</html>")) {
+		t.Fatal("listing html should not be a challenge")
+	}
+}
+
+func TestProxySessionID(t *testing.T) {
+	if got := proxySessionID(map[string]string{"x-proxy-session": "abc"}); got != "abc" {
+		t.Fatalf("session = %q", got)
+	}
+	if proxySessionID(nil) != "" {
+		t.Fatal("nil headers should have no session")
 	}
 }

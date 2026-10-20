@@ -1,0 +1,12 @@
+node_modules/
+venv/
+.venv/
+.venv*/
+Frontend/node_modules/
+Frontend/.next/
+__pycache__/
+graphify-out/cache/
+*.db
+*.csv
+*.xlsx
+*.png

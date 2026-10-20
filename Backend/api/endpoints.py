@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from auth.dependencies import get_current_user
 from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
 from core.task_status import get_task_status_store, is_final_task_status
@@ -31,7 +32,7 @@ DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
 _districts_cache: dict[str, Any] = {}
 _districts_index: dict[str, Any] | None = None
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("api")
 
 # Görüntüleme için kategori adı eşlemeleri

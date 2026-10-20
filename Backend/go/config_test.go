@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -30,6 +31,7 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "http://a.com,http://b.com")
 	t.Setenv("MOBILE_PROXY_URL", "http://proxy:8000")
 	t.Setenv("RATE_LIMIT", "25")
+	t.Setenv("RETRY_DELAY", "1000")
 
 	cfg := LoadConfigFromEnv()
 	if cfg.Port != 9090 {
@@ -49,6 +51,9 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	}
 	if cfg.RateLimit != 25 {
 		t.Fatalf("RateLimit = %d, want 25", cfg.RateLimit)
+	}
+	if cfg.RetryDelay != time.Second {
+		t.Fatalf("RetryDelay = %s, want 1s", cfg.RetryDelay)
 	}
 }
 

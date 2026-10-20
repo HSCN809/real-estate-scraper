@@ -128,6 +128,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - HEPSIEMLAK_MAX_PAGES=${HEPSIEMLAK_MAX_PAGES}
       - EMLAKJET_MAX_PAGES=${EMLAKJET_MAX_PAGES}
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
     depends_on:
       real-estate-db:
         condition: service_healthy
@@ -165,6 +166,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - GO_PROXY_URL=http://invisible-proxy:8080
       - USE_GO_PROXY=true
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
       - LOG_FILE=/tmp/scraper-logs/scraper.log
       - LOG_FALLBACK_DIR=/tmp/scraper-logs
     depends_on:

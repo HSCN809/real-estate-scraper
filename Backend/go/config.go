@@ -145,6 +145,16 @@ func LoadConfigFromEnv() *Config {
 		}
 	}
 
+	// Bare integers are milliseconds (docker-compose RETRY_DELAY=1000).
+	// Values with a unit, such as "1s", go through time.ParseDuration.
+	if retryDelay := os.Getenv("RETRY_DELAY"); retryDelay != "" {
+		if d, err := time.ParseDuration(retryDelay); err == nil {
+			cfg.RetryDelay = d
+		} else if ms, err := strconv.Atoi(retryDelay); err == nil {
+			cfg.RetryDelay = time.Duration(ms) * time.Millisecond
+		}
+	}
+
 	// API Key
 	if apiKey := os.Getenv("PROXY_API_KEY"); apiKey != "" {
 		cfg.APIKey = apiKey

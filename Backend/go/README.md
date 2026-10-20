@@ -155,8 +155,8 @@ USE_MOBILE_PROXY=true
 
 # TLS Fingerprint
 TLS_CLIENT_ID=HelloChrome_120           # Chrome version to mimic
-TLS_ROTATE=true                         # Enable fingerprint rotation
-TLS_ROTATE_LIST=HelloChrome_120,HelloChrome_119,HelloFirefox_120  # Fingerprints to rotate
+TLS_ROTATE=false                        # Keep false: only HelloChrome_120 passes Cloudflare here
+TLS_ROTATE_LIST=HelloChrome_120         # Do not add other fingerprints
 USER_AGENT=Mozilla/5.0...             # Custom user agent
 
 # Security
@@ -293,7 +293,7 @@ print(f'Body length: {len(response.body)} bytes')
 1. **API Key Authentication**: Set `PROXY_API_KEY` environment variable to secure proxy access
 2. **CORS Protection**: Configure `ALLOWED_ORIGINS` to limit cross-origin requests
 3. **Rate Limiting**: Built-in token bucket rate limiting (default: 10 req/s, burst 20)
-4. **TLS Fingerprint Rotation**: Enable `TLS_ROTATE=true` to rotate between multiple fingerprints
+4. **TLS Fingerprint**: Keep `TLS_ROTATE=false` and `HelloChrome_120`. Other fingerprints draw a Cloudflare challenge.
 5. **Mobile Proxy Usage**: Always use residential/mobile proxies for production scraping
 6. **Cookie Persistence**: Maintain session cookies for authentication
 7. **Monitoring**: Keep logs of Cloudflare challenges and success rates
@@ -301,7 +301,7 @@ print(f'Body length: {len(response.body)} bytes')
 ### Production Security Checklist
 - [ ] Set `PROXY_API_KEY` to a strong random key
 - [ ] Configure `ALLOWED_ORIGINS` to your frontend domains only
-- [ ] Enable `TLS_ROTATE=true` for fingerprint rotation
+- [ ] Keep `TLS_ROTATE=false` and `TLS_CLIENT_ID=HelloChrome_120`
 - [ ] Use mobile/residential proxies for production
 - [ ] Monitor rate limit logs for abuse detection
 - [ ] Set `DEBUG=false` in production
@@ -326,8 +326,9 @@ MOBILE_PROXY_URL=socks5://your-mobile-proxy.com:port
 MOBILE_PROXY_USER=username
 MOBILE_PROXY_PASS=password
 
-# 2. Try different Chrome fingerprint
-TLS_CLIENT_ID=HelloFirefox_120
+# 2. Stay on the fingerprint that passes
+TLS_CLIENT_ID=HelloChrome_120
+TLS_ROTATE=false
 
 # 3. Increase delays in scraping scripts
 time.sleep(random.uniform(2, 5))  # Instead of time.sleep(1)

@@ -12,6 +12,19 @@ from utils.logger import get_logger
 logger = get_logger("celery.scraping")
 
 
+def _go_proxy_enabled(scraping_method: str, proxy_enabled: bool) -> bool:
+    """Selenium cannot use the Go JSON API as --proxy-server. Other methods can."""
+    if scraping_method == "selenium":
+        if proxy_enabled:
+            logger.warning(
+                "proxy_enabled ignored for selenium; Go proxy is not an HTTP proxy"
+            )
+        return False
+    if proxy_enabled:
+        return True
+    return os.getenv("USE_GO_PROXY", "").strip().lower() in {"1", "true", "yes"}
+
+
 def _validate_scraping_method(scraping_method: str) -> str | None:
     if scraping_method == "go_proxy":
         return (
@@ -209,10 +222,11 @@ def scrape_hepsiemlak_task(
 
         # Kaziyiciyi olustur
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
+        proxy_on = _go_proxy_enabled(scraping_method, proxy_enabled)
         if scraping_method == "selenium":
             from scrapers.hepsiemlak.main import HepsiemlakScraper
 
-            manager = DriverManager(proxy_url=go_proxy_url if proxy_enabled else None)
+            manager = DriverManager()
             driver = manager.start()
 
             scraper = HepsiemlakScraper(
@@ -234,7 +248,7 @@ def scrape_hepsiemlak_task(
                 selected_districts=districts,
                 scraping_method=scraping_method,
                 headless=True,
-                proxy_enabled=proxy_enabled,
+                proxy_enabled=proxy_on,
                 proxy_url=go_proxy_url,
             )
 
@@ -410,10 +424,11 @@ def scrape_emlakjet_task(
         progress_callback = _make_progress_callback(progress_manager)
 
         go_proxy_url = os.getenv("GO_PROXY_URL", "http://invisible-proxy:8080")
+        proxy_on = _go_proxy_enabled(scraping_method, proxy_enabled)
         if scraping_method == "selenium":
             from scrapers.emlakjet.main import EmlakJetScraper
 
-            manager = DriverManager(proxy_url=go_proxy_url if proxy_enabled else None)
+            manager = DriverManager()
             driver = manager.start()
             scraper = EmlakJetScraper(
                 driver=driver,
@@ -433,7 +448,7 @@ def scrape_emlakjet_task(
                 selected_districts=districts,
                 scraping_method=scraping_method,
                 headless=True,
-                proxy_enabled=proxy_enabled,
+                proxy_enabled=proxy_on,
                 proxy_url=go_proxy_url,
             )
 

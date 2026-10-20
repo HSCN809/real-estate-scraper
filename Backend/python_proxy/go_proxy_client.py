@@ -6,7 +6,9 @@ Python client for the Invisible Go Proxy server
 import base64
 import binascii
 import json
+import os
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -85,6 +87,7 @@ class GoProxyClient:
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self._cookies: list[dict[str, Any]] = []
 
     def _make_proxy_request(
         self,
@@ -107,6 +110,10 @@ class GoProxyClient:
             ProxyResponse object
         """
         url = f"{self.proxy_url}/{endpoint}"
+        headers = dict(headers or {})
+        api_key = os.getenv("PROXY_API_KEY", "").strip()
+        if api_key:
+            headers.setdefault("X-API-Key", api_key)
         for attempt in range(self.max_retries + 1):
             try:
                 if method == "GET":
@@ -119,7 +126,9 @@ class GoProxyClient:
                     )
 
                 response_data = response.json()
-                return ProxyResponse.from_dict(response_data)
+                parsed = ProxyResponse.from_dict(response_data)
+                self._cookies = list(parsed.cookies or [])
+                return parsed
 
             except requests.exceptions.RequestException as e:
                 if attempt < self.max_retries:
@@ -226,11 +235,8 @@ class GoProxyClient:
             return False
 
     def get_cookies(self) -> list[dict[str, Any]]:
-        """
-        Get cookies from the last response
-        """
-        # This would need to be implemented with state tracking
-        return []
+        """Cookies from the last proxy response."""
+        return list(self._cookies)
 
     def __repr__(self) -> str:
         return f"GoProxyClient(proxy_url='{self.proxy_url}', timeout={self.timeout})"
@@ -257,8 +263,8 @@ class CloudflareBypassClient:
             user_agent
             or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
-
-        # Store cookies for session persistence
+        # Pins the Go pooled client so __cf_bm stays on one cookie jar.
+        self.session_id = uuid.uuid4().hex
         self.session_cookies: dict[str, str] = {}
 
     def fetch_with_retry(
@@ -278,7 +284,10 @@ class CloudflareBypassClient:
         for attempt in range(max_retries):
             try:
                 # Add session cookies if available
-                headers = {"User-Agent": self.user_agent}
+                headers = {
+                    "User-Agent": self.user_agent,
+                    "X-Proxy-Session": self.session_id,
+                }
                 if self.session_cookies:
                     headers["Cookie"] = "; ".join(
                         f"{k}={v}" for k, v in self.session_cookies.items()

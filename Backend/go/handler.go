@@ -219,9 +219,8 @@ func (ph *ProxyHandler) isOriginAllowed(origin string) bool {
 
 // authenticateRequest validates the API key
 func (ph *ProxyHandler) authenticateRequest(r *http.Request) bool {
-	// If no API key is configured, allow all requests
 	if ph.config.APIKey == "" {
-		return true
+		return false
 	}
 
 	// Check X-API-Key header
@@ -364,11 +363,22 @@ func (ph *ProxyHandler) handlePostProxy(w http.ResponseWriter, r *http.Request) 
 func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.Context, req ProxyRequest) {
 	var lastError error
 
-	// A single pooled client is used for all attempts so its cookie jar keeps
-	// the __cf_bm token set by Cloudflare challenge responses.
-	pooled := ph.clientPool.GetClient()
+	// One client for every attempt, and for later calls that send the same
+	// X-Proxy-Session, so the cookie jar keeps __cf_bm.
+	session := proxySessionID(req.Headers)
+	pooled := ph.clientPool.Acquire(session)
 	client := pooled.Client
-	defer ph.clientPool.ReturnClient(pooled)
+	defer ph.clientPool.Release(session, pooled)
+
+	var held *http.Response
+	var heldBody []byte
+	sendHeld := func() bool {
+		if heldBody == nil {
+			return false
+		}
+		ph.sendSuccessResponse(w, held, heldBody)
+		return true
+	}
 
 	// Retry logic
 	for attempt := 0; attempt <= ph.config.MaxRetries; attempt++ {
@@ -395,6 +405,9 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 				continue
 			}
 			log.Error().Err(err).Msgf("Request failed for URL: %s", req.URL)
+			if sendHeld() {
+				return
+			}
 			ph.sendErrorResponse(w, err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -406,20 +419,30 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		if err != nil {
 			lastError = err
 			log.Error().Err(err).Msg("Failed to read response body")
+			if sendHeld() {
+				return
+			}
 			ph.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Cloudflare-style challenge (403/503): retry on the SAME client so the
-		// cookie jar reuses the challenge token on the next attempt.
-		if (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusServiceUnavailable) && attempt < ph.config.MaxRetries {
+		// 403/503 and a 200 interstitial are the same failure. Retry on this
+		// client so its cookie jar keeps __cf_bm. A later transport error still
+		// returns this body. The last attempt is returned as a normal body.
+		if isCloudflareChallenge(resp.StatusCode, body) && attempt < ph.config.MaxRetries {
 			log.Warn().Int("status", resp.StatusCode).Msgf("Challenge response for %s, retrying with same session (attempt %d/%d)", req.URL, attempt+1, ph.config.MaxRetries)
+			held = &http.Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}
+			heldBody = append([]byte(nil), body...)
 			time.Sleep(ph.config.RetryDelay * time.Duration(attempt+1))
 			continue
 		}
 
 		// Success! Send response back
 		ph.sendSuccessResponse(w, resp, body)
+		return
+	}
+
+	if sendHeld() {
 		return
 	}
 
@@ -447,9 +470,10 @@ func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest, userAgent string) (
 	// Set custom headers
 	for key, value := range req.Headers {
 		// Keep Host and Accept-Encoding under proxy control.
-		if !strings.EqualFold(key, "Host") && !strings.EqualFold(key, "Accept-Encoding") {
-			httpReq.Header.Set(key, value)
+		if strings.EqualFold(key, "Host") || strings.EqualFold(key, "Accept-Encoding") || strings.EqualFold(key, "X-Proxy-Session") {
+			continue
 		}
+		httpReq.Header.Set(key, value)
 	}
 
 	// Always override the User-Agent with the fingerprint-matched one.
@@ -500,6 +524,40 @@ func (ph *ProxyHandler) sendErrorResponse(w http.ResponseWriter, errorMsg string
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(proxyResp)
+}
+
+func proxySessionID(headers map[string]string) string {
+	for key, value := range headers {
+		if strings.EqualFold(key, "X-Proxy-Session") {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func isCloudflareChallenge(status int, body []byte) bool {
+	if status == http.StatusForbidden || status == http.StatusServiceUnavailable {
+		return true
+	}
+	if status != http.StatusOK || len(body) == 0 {
+		return false
+	}
+	page := strings.ToLower(string(body))
+	markers := []string{
+		"cf-challenge",
+		"challenge-platform",
+		"just a moment",
+		"checking your browser",
+		"attention required",
+		"cf-turnstile",
+		"/cdn-cgi/challenge-platform/",
+	}
+	for _, marker := range markers {
+		if strings.Contains(page, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldRetry determines if an error warrants a retry

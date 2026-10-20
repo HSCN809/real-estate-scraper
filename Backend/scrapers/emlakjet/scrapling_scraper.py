@@ -236,7 +236,7 @@ class EmlakJetScraplingScraper:
         if effective_method == "scrapling_stealth_session":
             self.session_context = StealthySession(
                 headless=self.headless,
-                solve_cloudflare=False,
+                solve_cloudflare=True,
                 google_search=False,
                 timeout=self.request_timeout_ms,
                 network_idle=True,
@@ -312,7 +312,7 @@ class EmlakJetScraplingScraper:
                 return session.fetch(url, **fetch_kwargs)
         with StealthySession(
             headless=self.headless,
-            solve_cloudflare=False,
+            solve_cloudflare=True,
             google_search=False,
             timeout=self.request_timeout_ms,
             network_idle=True,
@@ -586,7 +586,7 @@ class EmlakJetScraplingScraper:
             else:
                 with StealthySession(
                     headless=self.headless,
-                    solve_cloudflare=False,
+                    solve_cloudflare=True,
                     google_search=False,
                     timeout=mode_settings["timeout_ms"],
                     network_idle=True,
@@ -771,6 +771,7 @@ class EmlakJetScraplingScraper:
                         "default",
                         AsyncStealthySession(
                             headless=outer.headless,
+                            solve_cloudflare=True,
                             disable_resources=True,
                             timeout=mode_settings["timeout_ms"],
                             retries=mode_settings["retries"],

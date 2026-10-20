@@ -6,7 +6,7 @@ from database.models import User
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .security import decode_token
+from .security import decode_token, password_stamp
 
 COOKIE_NAME = "session_token"
 
@@ -51,6 +51,9 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
             status_code=status.HTTP_403_FORBIDDEN, detail="Hesap devre dışı"
         )
 
+    if payload.get("pwd") != password_stamp(user.hashed_password):
+        raise credentials_exception
+
     return user
 
 
@@ -86,4 +89,7 @@ async def get_optional_user(
     except (TypeError, ValueError):
         return None
 
-    return db.query(User).filter(User.id == user_id, User.is_active).first()
+    user = db.query(User).filter(User.id == user_id, User.is_active).first()
+    if user is None or payload.get("pwd") != password_stamp(user.hashed_password):
+        return None
+    return user

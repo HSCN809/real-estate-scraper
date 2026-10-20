@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import endpoints
+from auth.dependencies import get_current_user
 from core.task_status import TaskStatusStore
 
 
@@ -40,12 +41,29 @@ class DummyTaskCallable:
         self.calls.append(kwargs)
 
 
-def create_test_client(monkeypatch):
+def create_test_client(monkeypatch, authenticated=True):
     app = FastAPI()
     app.include_router(endpoints.router, prefix="/api/v1")
+    if authenticated:
+        app.dependency_overrides[get_current_user] = lambda: None
     store = TaskStatusStore(redis_client=FakeRedis())
     monkeypatch.setattr(endpoints, "get_task_status_store", lambda: store)
     return TestClient(app), store
+
+
+def test_scrape_requires_auth(monkeypatch):
+    client, _store = create_test_client(monkeypatch, authenticated=False)
+
+    response = client.post(
+        "/api/v1/scrape/emlakjet",
+        json={
+            "listing_type": "satilik",
+            "category": "konut",
+            "scraping_method": "selenium",
+        },
+    )
+
+    assert response.status_code == 401
 
 
 def test_scrape_start_returns_queued_status(monkeypatch):

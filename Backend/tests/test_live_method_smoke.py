@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import uuid
 
 import pytest
 import requests
@@ -123,11 +124,27 @@ def _timeout_for(method: str) -> int:
     return int(os.getenv("SMOKE_FETCHER_TIMEOUT", "1200"))
 
 
-def _wait_task(task_id: str, timeout: int) -> dict:
+def _auth_session() -> requests.Session:
+    suffix = uuid.uuid4().hex[:8]
+    session = requests.Session()
+    created = session.post(
+        f"{API}/api/v1/auth/register",
+        json={
+            "username": f"live_{suffix}",
+            "email": f"live_{suffix}@example.com",
+            "password": "SmokeTest1",
+        },
+        timeout=10,
+    )
+    assert created.status_code == 201, created.text
+    return session
+
+
+def _wait_task(session: requests.Session, task_id: str, timeout: int) -> dict:
     deadline = time.time() + timeout
     last: dict = {}
     while time.time() < deadline:
-        response = requests.get(f"{API}/api/v1/tasks/{task_id}", timeout=15)
+        response = session.get(f"{API}/api/v1/tasks/{task_id}", timeout=15)
         response.raise_for_status()
         last = response.json()
         if last.get("status") in {"completed", "failed"}:
@@ -148,7 +165,8 @@ def _listing_count(payload: dict) -> int:
 @pytest.mark.parametrize("method", SUPPORTED_SCRAPING_METHODS)
 def test_one_page_all_cities_live(platform: str, method: str):
     assert len(TURKEY_CITIES) == 81
-    started = requests.post(
+    session = _auth_session()
+    started = session.post(
         f"{API}/api/v1/scrape/{platform}",
         json={
             "listing_type": "satilik",
@@ -162,6 +180,6 @@ def test_one_page_all_cities_live(platform: str, method: str):
     )
     assert started.status_code == 200, started.text
     task_id = started.json()["task_id"]
-    result = _wait_task(task_id, _timeout_for(method))
+    result = _wait_task(session, task_id, _timeout_for(method))
     assert result.get("status") == "completed", result
     assert _listing_count(result) > 0, result

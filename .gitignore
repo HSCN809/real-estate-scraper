@@ -106,3 +106,4 @@ Genel Proje Kuralları.md
 *.png
 *snapshot.md
 graphify-out/
+.graphify_*

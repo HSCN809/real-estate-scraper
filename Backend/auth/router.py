@@ -21,6 +21,7 @@ from .security import (
     ACCESS_TOKEN_EXPIRE_DAYS,
     create_access_token,
     get_password_hash,
+    password_stamp,
     verify_password,
 )
 
@@ -92,7 +93,11 @@ async def register(
     db.refresh(user)
 
     # Token oluştur ve cookie'ye ayarla
-    token_data = {"sub": user.id, "username": user.username}
+    token_data = {
+        "sub": user.id,
+        "username": user.username,
+        "pwd": password_stamp(user.hashed_password),
+    }
     access_token = create_access_token(token_data)
     _set_auth_cookie(response, access_token)
 
@@ -132,7 +137,11 @@ async def login(
     db.commit()
 
     # Token oluştur ve cookie'ye ayarla
-    token_data = {"sub": user.id, "username": user.username}
+    token_data = {
+        "sub": user.id,
+        "username": user.username,
+        "pwd": password_stamp(user.hashed_password),
+    }
     access_token = create_access_token(token_data)
     _set_auth_cookie(response, access_token)
 
@@ -187,6 +196,7 @@ async def update_profile(
 @router.post("/change-password")
 async def change_password(
     password_data: ChangePasswordRequest,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -200,6 +210,14 @@ async def change_password(
 
     current_user.hashed_password = get_password_hash(password_data.new_password)
     db.commit()
+    access_token = create_access_token(
+        {
+            "sub": current_user.id,
+            "username": current_user.username,
+            "pwd": password_stamp(current_user.hashed_password),
+        }
+    )
+    _set_auth_cookie(response, access_token)
 
     return {"message": "Şifre başarıyla değiştirildi"}
 
