@@ -1,32 +1,24 @@
 # Invisible Go Proxy - Dockerfile
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
 
 # Install dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
-# Copy go mod file
-COPY go.mod ./
+COPY go.mod go.sum ./
 
-# Disable go.sum checksum verification completely
-ENV GOSUMDB=off
-ENV GOPROXY=direct
-ENV GONOSUMDB=*
-
-# Download dependencies without checksum verification
 RUN go mod download
 
 # Copy source code
 COPY . .
 
-# Build the application without any checksum verification
-RUN GOSUMDB=off GOPROXY=direct GONOSUMDB=* CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o invisible-proxy .
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o invisible-proxy .
 
 # Final stage
-FROM alpine:latest
+FROM alpine:3.24
 
 RUN apk --no-cache add ca-certificates tzdata
 

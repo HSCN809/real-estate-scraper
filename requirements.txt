@@ -12,17 +12,10 @@ fake-useragent==1.4.0
 # API & Web Frameworks
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-flask>=3.1.3,<4
-flask-cors>=6.0.0,<7
-blinker>=1.9.0,<2
 
-# Browser Automation (Selenium) - STEALTH MODE
+# Browser Automation (Selenium)
 selenium>=4.14.0,<5
-webdriver-manager==4.0.1
-selenium-stealth==1.0.6
-selenium-wire==5.1.0
 undetected-chromedriver>=3.5.0  # Cloudflare, Turnstile bypass
-cloudscraper
 
 # Database
 sqlalchemy>=2.0.0
@@ -37,7 +30,7 @@ setuptools>=83.0.0,<84
 
 # Scraping Frameworks
 # Scrapling - Modern web scraping library
-scrapling>=0.4.1
+scrapling>=0.4.1,<0.5
 
 # Scrapling core dependencies (already included in scrapling but listed for clarity)
 cssselect>=1.4.0

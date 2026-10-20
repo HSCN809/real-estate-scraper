@@ -4,9 +4,9 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY requirements-api.txt .
+COPY requirements-api.lock .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir -r requirements-api.txt
+    pip install --no-cache-dir -r requirements-api.lock
 
 COPY Backend/ .
 

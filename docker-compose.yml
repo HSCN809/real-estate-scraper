@@ -45,9 +45,6 @@ services:
 
       # Debug mode
       - DEBUG=false
-      - GOSUMDB=off
-      - GOPROXY=direct
-      - GONOSUMDB=*
 
     volumes:
       - ./Backend/go/logs:/app/logs
@@ -89,7 +86,7 @@ services:
 
   # Redis - Message Broker for Celery
   real-estate-redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine
     container_name: real-estate-redis
     ports:
       - "6379:6379"
@@ -212,7 +209,7 @@ services:
 
   # Frontend - Next.js (Development Mode with Hot Reload)
   real-estate-frontend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: real-estate-frontend
     working_dir: /app
     ports:

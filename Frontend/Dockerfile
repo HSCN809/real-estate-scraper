@@ -1,6 +1,6 @@
 # Frontend Dockerfile - Next.js
 # syntax=docker/dockerfile:1.4
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Bağımlılıkları kur
 FROM base AS deps

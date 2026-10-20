@@ -62,9 +62,9 @@ RUN wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_V
 WORKDIR /app
 
 # Python bağımlılıkları (cache ile)
-COPY requirements.txt .
+COPY requirements.lock .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install -r requirements.lock
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN mkdir -p /ms-playwright \
