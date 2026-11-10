@@ -12,8 +12,8 @@ func TestUserAgentForClientHelloID(t *testing.T) {
 	}
 
 	fallback := UserAgentForClientHelloID("HelloUnknown_1")
-	if !strings.Contains(fallback, "Chrome/120") {
-		t.Fatalf("fallback UA = %q, want Chrome/120", fallback)
+	if !strings.Contains(fallback, "Chrome/133") {
+		t.Fatalf("fallback UA = %q, want Chrome/133", fallback)
 	}
 }
 

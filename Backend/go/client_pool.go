@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/net/http2"
 )
 
 // PooledClient bundles an HTTP client with the User-Agent that matches its
@@ -142,13 +145,64 @@ func (cp *ClientPool) returnAll(clients []*PooledClient) {
 	}
 }
 
+type idleCloser interface {
+	CloseIdleConnections()
+}
+
+func closeIdleClient(client *PooledClient) {
+	if client != nil && client.Client != nil {
+		if closer, ok := client.Client.Transport.(idleCloser); ok {
+			closer.CloseIdleConnections()
+		}
+	}
+}
+
+// AdaptiveTransport routes HTTPS requests to HTTP/2 transport (negotiating h2 via utls ALPN)
+// and gracefully falls back to HTTP/1.1 if the target host does not support h2.
+type AdaptiveTransport struct {
+	h1Transport *http.Transport
+	h2Transport *http2.Transport
+	h1OnlyHosts sync.Map
+}
+
+func (at *AdaptiveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	host := req.URL.Host
+	if req.URL.Scheme == "https" && at.h2Transport != nil {
+		if _, isH1 := at.h1OnlyHosts.Load(host); !isH1 {
+			resp, err := at.h2Transport.RoundTrip(req)
+			if err == nil {
+				return resp, nil
+			}
+			errStr := strings.ToLower(err.Error())
+			if strings.Contains(errStr, "unexpected alpn") || strings.Contains(errStr, "no prior knowledge") {
+				at.h1OnlyHosts.Store(host, true)
+				if req.GetBody != nil && req.Body != nil {
+					if body, bErr := req.GetBody(); bErr == nil {
+						req.Body = body
+					}
+				}
+				return at.h1Transport.RoundTrip(req)
+			}
+			return nil, err
+		}
+	}
+	return at.h1Transport.RoundTrip(req)
+}
+
+func (at *AdaptiveTransport) CloseIdleConnections() {
+	if at.h1Transport != nil {
+		at.h1Transport.CloseIdleConnections()
+	}
+	if at.h2Transport != nil {
+		at.h2Transport.CloseIdleConnections()
+	}
+}
+
 // recycle drops the previous host cookies before the client can be borrowed again.
 func (cp *ClientPool) recycle(client *PooledClient) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		if transport, ok := client.Client.Transport.(*http.Transport); ok {
-			transport.CloseIdleConnections()
-		}
+		closeIdleClient(client)
 		return
 	}
 	client.Client.Jar = jar
@@ -176,9 +230,7 @@ func (cp *ClientPool) ReturnClient(client *PooledClient) {
 		case cp.clients <- client:
 			return
 		default:
-			if transport, ok := client.Client.Transport.(*http.Transport); ok {
-				transport.CloseIdleConnections()
-			}
+			closeIdleClient(client)
 		}
 	}
 }
@@ -209,8 +261,8 @@ func (cp *ClientPool) createClient(index int) *PooledClient {
 	}
 }
 
-// createTransport creates an HTTP transport and wires utls TLS dialing.
-func (cp *ClientPool) createTransport(clientHelloID string) *http.Transport {
+// createTransport creates an HTTP transport with HTTP/2 and HTTP/1.1 support via utls.
+func (cp *ClientPool) createTransport(clientHelloID string) http.RoundTripper {
 	var proxyURL *url.URL
 
 	if cp.config.UseMobileProxy && cp.config.MobileProxyURL != "" {
@@ -223,8 +275,7 @@ func (cp *ClientPool) createTransport(clientHelloID string) *http.Transport {
 		}
 	}
 
-	transport := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
+	h1Transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -234,22 +285,32 @@ func (cp *ClientPool) createTransport(clientHelloID string) *http.Transport {
 		IdleConnTimeout:       cp.config.IdleConnTimeout,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-
-		// Fallback config; actual TLS fingerprinting comes from DialTLSContext.
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			MaxVersion: tls.VersionTLS13,
 		},
-
-		// Keep HTTP/2 enabled when utls negotiates h2 via ALPN.
-		ForceAttemptHTTP2: true,
 	}
 
 	if cp.tlsManager != nil {
-		transport.DialTLSContext = cp.tlsManager.CreateDialTLSContextFuncFor(clientHelloID)
+		h1Transport.DialTLSContext = cp.tlsManager.CreateDialTLSContextFuncWithProxy(proxyURL, false, clientHelloID, "http/1.1")
 	}
 
-	return transport
+	h2Transport := &http2.Transport{
+		IdleConnTimeout: cp.config.IdleConnTimeout,
+		PingTimeout:     15 * time.Second,
+	}
+
+	if cp.tlsManager != nil {
+		h2Transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+			dialer := cp.tlsManager.CreateDialTLSContextFuncWithProxy(proxyURL, true, clientHelloID, "h2", "http/1.1")
+			return dialer(ctx, network, addr)
+		}
+	}
+
+	return &AdaptiveTransport{
+		h1Transport: h1Transport,
+		h2Transport: h2Transport,
+	}
 }
 
 // Close closes all clients in the pool.
@@ -262,17 +323,13 @@ func (cp *ClientPool) Close() {
 	cp.sessions = map[string]*sessionLease{}
 	cp.mu.Unlock()
 	for _, client := range leased {
-		if transport, ok := client.Client.Transport.(*http.Transport); ok {
-			transport.CloseIdleConnections()
-		}
+		closeIdleClient(client)
 	}
 
 	close(cp.clients)
 
 	for client := range cp.clients {
-		if transport, ok := client.Client.Transport.(*http.Transport); ok {
-			transport.CloseIdleConnections()
-		}
+		closeIdleClient(client)
 	}
 
 	log.Info().Msg("Client pool closed")

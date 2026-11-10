@@ -16,10 +16,10 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.APIKey != "" {
 		t.Fatalf("APIKey = %q, want empty", cfg.APIKey)
 	}
-	if cfg.RateLimit != 10 || cfg.RateLimitBurst != 20 {
-		t.Fatalf("rate = %d/%d, want 10/20", cfg.RateLimit, cfg.RateLimitBurst)
+	if cfg.RateLimit != 2 || cfg.RateLimitBurst != 5 {
+		t.Fatalf("rate = %d/%d, want 2/5", cfg.RateLimit, cfg.RateLimitBurst)
 	}
-	if cfg.TLSClientID != "HelloChrome_120" {
+	if cfg.TLSClientID != "HelloChrome_133" {
 		t.Fatalf("TLSClientID = %q", cfg.TLSClientID)
 	}
 }

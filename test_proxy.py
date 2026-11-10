@@ -12,6 +12,8 @@ else:
     PROXY_URL = os.getenv("GO_PROXY_URL", "http://127.0.0.1:8080")
 
 ALLOWED_URL = "https://www.hepsiemlak.com"
+API_KEY = os.getenv("PROXY_API_KEY", "").strip()
+HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 BLOCKED_URLS = [
     "https://httpbin.org/get",
     "http://127.0.0.1:9/",
@@ -31,7 +33,9 @@ def test_health_check() -> bool:
 def test_blocked_hosts() -> bool:
     ok = True
     for url in BLOCKED_URLS:
-        response = requests.get(f"{PROXY_URL}/proxy", params={"url": url}, timeout=10)
+        response = requests.get(
+            f"{PROXY_URL}/proxy", params={"url": url}, headers=HEADERS, timeout=10
+        )
         if response.status_code != 400:
             print(f"FAIL allowlist {url}: {response.status_code}")
             ok = False
@@ -45,6 +49,7 @@ def test_allowed_host() -> bool:
     response = requests.post(
         f"{PROXY_URL}/proxy",
         json={"url": ALLOWED_URL, "method": "GET", "timeout": 60},
+        headers=HEADERS,
         timeout=65,
     )
     elapsed = time.time() - started

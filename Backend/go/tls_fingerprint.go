@@ -1,15 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/base64"
+	"fmt"
+	"io"
 	"math/rand"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/net/proxy"
 )
 
 // TLSFingerprintManager manages TLS fingerprint spoofing
@@ -34,7 +41,7 @@ func UserAgentForClientHelloID(clientHelloID string) string {
 	if ua, ok := FingerprintUserAgents[clientHelloID]; ok {
 		return ua
 	}
-	return FingerprintUserAgents["HelloChrome_120"]
+	return FingerprintUserAgents["HelloChrome_133"]
 }
 
 // NewTLSFingerprintManager creates a new TLS fingerprint manager
@@ -71,20 +78,118 @@ func (tfm *TLSFingerprintManager) FingerprintForClient(index int) (string, strin
 	return clientID, UserAgentForClientHelloID(clientID)
 }
 
-// CreateDialTLSContextFuncFor creates a TLS dialer that always uses the given
-// client hello preset (no rotation at dial time).
-func (tfm *TLSFingerprintManager) CreateDialTLSContextFuncFor(clientHelloID string) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return tfm.dialUTLSContextWith(ctx, network, addr, clientHelloID)
-	}
+type bufferedConn struct {
+	net.Conn
+	r io.Reader
 }
 
-func (tfm *TLSFingerprintManager) dialUTLSContextWith(ctx context.Context, network, addr, clientHelloID string) (net.Conn, error) {
+func (bc *bufferedConn) Read(b []byte) (int, error) {
+	return bc.r.Read(b)
+}
+
+func dialRawConn(ctx context.Context, network, addr string, proxyURL *url.URL) (net.Conn, error) {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	rawConn, err := dialer.DialContext(ctx, network, addr)
+
+	if proxyURL == nil {
+		return dialer.DialContext(ctx, network, addr)
+	}
+
+	switch proxyURL.Scheme {
+	case "http", "https":
+		proxyHost := proxyURL.Host
+		if _, _, err := net.SplitHostPort(proxyHost); err != nil {
+			if proxyURL.Scheme == "https" {
+				proxyHost = net.JoinHostPort(proxyHost, "443")
+			} else {
+				proxyHost = net.JoinHostPort(proxyHost, "80")
+			}
+		}
+
+		conn, err := dialer.DialContext(ctx, "tcp", proxyHost)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial proxy %s: %w", proxyURL.Redacted(), err)
+		}
+
+		connectReq := &http.Request{
+			Method: http.MethodConnect,
+			URL:    &url.URL{Opaque: addr},
+			Host:   addr,
+			Header: make(http.Header),
+		}
+
+		if proxyURL.User != nil {
+			user := proxyURL.User.Username()
+			pass, _ := proxyURL.User.Password()
+			auth := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
+			connectReq.Header.Set("Proxy-Authorization", "Basic "+auth)
+		}
+
+		if err := connectReq.Write(conn); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("failed to send CONNECT to proxy: %w", err)
+		}
+
+		br := bufio.NewReader(conn)
+		connectResp, err := http.ReadResponse(br, connectReq)
+		if err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("failed to read CONNECT response from proxy: %w", err)
+		}
+		if connectResp.StatusCode != http.StatusOK {
+			_ = conn.Close()
+			return nil, fmt.Errorf("proxy CONNECT rejected with status %d: %s", connectResp.StatusCode, connectResp.Status)
+		}
+
+		if br.Buffered() > 0 {
+			return &bufferedConn{Conn: conn, r: br}, nil
+		}
+		return conn, nil
+
+	case "socks5":
+		var auth *proxy.Auth
+		if proxyURL.User != nil {
+			auth = &proxy.Auth{
+				User: proxyURL.User.Username(),
+			}
+			auth.Password, _ = proxyURL.User.Password()
+		}
+		socksDialer, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, dialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create socks5 dialer: %w", err)
+		}
+		if contextDialer, ok := socksDialer.(proxy.ContextDialer); ok {
+			return contextDialer.DialContext(ctx, network, addr)
+		}
+		return socksDialer.Dial(network, addr)
+
+	default:
+		return nil, fmt.Errorf("unsupported proxy scheme: %s", proxyURL.Scheme)
+	}
+}
+
+// CreateDialTLSContextFuncFor creates a TLS dialer that always uses the given
+// client hello preset (no rotation at dial time) with specified ALPN protocols.
+func (tfm *TLSFingerprintManager) CreateDialTLSContextFuncFor(clientHelloID string, alpnProtocols ...string) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return tfm.CreateDialTLSContextFuncWithProxy(nil, false, clientHelloID, alpnProtocols...)
+}
+
+// CreateDialTLSContextFuncWithProxy creates a TLS dialer that supports upstream proxy tunneling,
+// strict HTTP/2 ALPN validation, and utls fingerprint presets.
+func (tfm *TLSFingerprintManager) CreateDialTLSContextFuncWithProxy(proxyURL *url.URL, mustNegotiateH2 bool, clientHelloID string, alpnProtocols ...string) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	protocols := alpnProtocols
+	if len(protocols) == 0 {
+		protocols = []string{"h2", "http/1.1"}
+	}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return tfm.dialUTLSContextWith(ctx, network, addr, clientHelloID, protocols, proxyURL, mustNegotiateH2)
+	}
+}
+
+func (tfm *TLSFingerprintManager) dialUTLSContextWith(ctx context.Context, network, addr, clientHelloID string, alpnProtocols []string, proxyURL *url.URL, mustNegotiateH2 bool) (net.Conn, error) {
+	rawConn, err := dialRawConn(ctx, network, addr, proxyURL)
 	if err != nil {
 		return nil, err
 	}
@@ -94,23 +199,35 @@ func (tfm *TLSFingerprintManager) dialUTLSContextWith(ctx context.Context, netwo
 		serverName = host
 	}
 
+	if len(alpnProtocols) == 0 {
+		alpnProtocols = []string{"h2", "http/1.1"}
+	}
+
 	tlsConfig := &utls.Config{
 		ServerName:         serverName,
 		MinVersion:         utls.VersionTLS12,
 		MaxVersion:         utls.VersionTLS13,
-		InsecureSkipVerify: false,
-		NextProtos:         []string{"http/1.1"},
+		InsecureSkipVerify: tfm.config != nil && tfm.config.InsecureSkipVerify,
+		NextProtos:         alpnProtocols,
 	}
 
 	clientHelloPreset := tfm.resolveClientHelloID(clientHelloID)
 	uConn := utls.UClient(rawConn, tlsConfig, utls.HelloCustom)
-	if err := tfm.applyClientHelloPreset(uConn, clientHelloPreset); err != nil {
+	if err := tfm.applyClientHelloPreset(uConn, clientHelloPreset, alpnProtocols); err != nil {
 		_ = rawConn.Close()
 		return nil, err
 	}
 	if err := uConn.HandshakeContext(ctx); err != nil {
 		_ = rawConn.Close()
 		return nil, err
+	}
+
+	if mustNegotiateH2 {
+		negotiated := uConn.ConnectionState().NegotiatedProtocol
+		if negotiated != "h2" {
+			_ = uConn.Close()
+			return nil, fmt.Errorf("unexpected ALPN protocol %q; want %q", negotiated, "h2")
+		}
 	}
 
 	return uConn, nil
@@ -125,7 +242,7 @@ func (tfm *TLSFingerprintManager) CreateDialTLSContextFunc() func(ctx context.Co
 
 func (tfm *TLSFingerprintManager) dialUTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	clientID := tfm.getNextClientHelloID()
-	return tfm.dialUTLSContextWith(ctx, network, addr, clientID)
+	return tfm.dialUTLSContextWith(ctx, network, addr, clientID, []string{"h2", "http/1.1"}, nil, false)
 }
 
 // getNextClientHelloID returns the next TLS client ID for rotation
@@ -146,15 +263,17 @@ func (tfm *TLSFingerprintManager) getNextClientHelloID() string {
 	return fingerprint
 }
 
-func (tfm *TLSFingerprintManager) applyClientHelloPreset(uConn *utls.UConn, clientHelloID utls.ClientHelloID) error {
+func (tfm *TLSFingerprintManager) applyClientHelloPreset(uConn *utls.UConn, clientHelloID utls.ClientHelloID, alpnProtocols []string) error {
 	spec, err := utls.UTLSIdToSpec(clientHelloID)
 	if err != nil {
 		return err
 	}
 
-	for _, ext := range spec.Extensions {
-		if alpnExt, ok := ext.(*utls.ALPNExtension); ok {
-			alpnExt.AlpnProtocols = []string{"http/1.1"}
+	if len(alpnProtocols) > 0 {
+		for _, ext := range spec.Extensions {
+			if alpnExt, ok := ext.(*utls.ALPNExtension); ok {
+				alpnExt.AlpnProtocols = alpnProtocols
+			}
 		}
 	}
 
@@ -186,14 +305,14 @@ func (tfm *TLSFingerprintManager) resolveClientHelloID(clientID string) utls.Cli
 	case "hellochrome_120", "chrome_120", "hellochrome_119", "chrome_119", "hellochrome_118", "chrome_118", "hellochrome_117", "chrome_117", "hellochrome_116", "chrome_116":
 		return utls.HelloChrome_120
 	default:
-		return utls.HelloChrome_Auto
+		return utls.HelloChrome_133
 	}
 }
 
 // GetRandomFingerprint returns a random fingerprint from the rotation list
 func GetRandomFingerprint(fingerprints []string) string {
 	if len(fingerprints) == 0 {
-		return "HelloChrome_120"
+		return "HelloChrome_133"
 	}
 	return fingerprints[rand.Intn(len(fingerprints))]
 }

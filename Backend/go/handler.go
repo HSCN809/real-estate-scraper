@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -115,7 +116,7 @@ func NewProxyHandler(cfg *Config, pool *ClientPool, tlsManager *TLSFingerprintMa
 		config:      cfg,
 		clientPool:  pool,
 		tlsManager:  tlsManager,
-		rateLimiter: NewRateLimiter(10, 20), // 10 requests/second, burst of 20
+		rateLimiter: NewRateLimiter(cfg.RateLimit, cfg.RateLimitBurst),
 		allowedOrigins: []string{
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
@@ -384,7 +385,8 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 	for attempt := 0; attempt <= ph.config.MaxRetries; attempt++ {
 		if attempt > 0 {
 			log.Debug().Msgf("Retry attempt %d for URL: %s", attempt, req.URL)
-			time.Sleep(ph.config.RetryDelay)
+			jitter := time.Duration(rand.Intn(400)) * time.Millisecond
+			time.Sleep(ph.config.RetryDelay + jitter)
 		}
 
 		// Create HTTP request
@@ -433,7 +435,8 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 			log.Warn().Int("status", resp.StatusCode).Msgf("Challenge response for %s, retrying with same session (attempt %d/%d)", req.URL, attempt+1, ph.config.MaxRetries)
 			held = &http.Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}
 			heldBody = append([]byte(nil), body...)
-			time.Sleep(ph.config.RetryDelay * time.Duration(attempt+1))
+			jitter := time.Duration(rand.Intn(600)) * time.Millisecond
+			time.Sleep(ph.config.RetryDelay*time.Duration(attempt+1) + jitter)
 			continue
 		}
 
@@ -460,12 +463,35 @@ func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest, userAgent string) (
 		return nil, err
 	}
 
+	effectiveUA := ph.config.UserAgent
+	if userAgent != "" {
+		effectiveUA = userAgent
+	}
+
 	// Set default headers
-	httpReq.Header.Set("User-Agent", ph.config.UserAgent)
+	httpReq.Header.Set("User-Agent", effectiveUA)
 	httpReq.Header.Set("Accept", ph.config.AcceptHeader)
 	httpReq.Header.Set("Accept-Language", ph.config.AcceptLanguage)
 	httpReq.Header.Set("Connection", "keep-alive")
 	httpReq.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	// Set Client Hints and Fetch Metadata when user-agent is Chrome
+	if strings.Contains(effectiveUA, "Chrome") {
+		chromeVer := "133"
+		if strings.Contains(effectiveUA, "Chrome/131") {
+			chromeVer = "131"
+		} else if strings.Contains(effectiveUA, "Chrome/120") {
+			chromeVer = "120"
+		}
+		httpReq.Header.Set("sec-ch-ua", fmt.Sprintf(`"Not(A:Brand";v="99", "Google Chrome";v="%s", "Chromium";v="%s"`, chromeVer, chromeVer))
+		httpReq.Header.Set("sec-ch-ua-mobile", "?0")
+		httpReq.Header.Set("sec-ch-ua-platform", `"Windows"`)
+	}
+
+	httpReq.Header.Set("Sec-Fetch-Dest", "document")
+	httpReq.Header.Set("Sec-Fetch-Mode", "navigate")
+	httpReq.Header.Set("Sec-Fetch-Site", "none")
+	httpReq.Header.Set("Sec-Fetch-User", "?1")
 
 	// Set custom headers
 	for key, value := range req.Headers {

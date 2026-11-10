@@ -154,9 +154,9 @@ MOBILE_PROXY_PASS=password
 USE_MOBILE_PROXY=true
 
 # TLS Fingerprint
-TLS_CLIENT_ID=HelloChrome_120           # Chrome version to mimic
-TLS_ROTATE=false                        # Keep false: only HelloChrome_120 passes Cloudflare here
-TLS_ROTATE_LIST=HelloChrome_120         # Do not add other fingerprints
+TLS_CLIENT_ID=HelloChrome_133           # Chrome version to mimic
+TLS_ROTATE=false                        # Keep false: only HelloChrome_133 passes Cloudflare here
+TLS_ROTATE_LIST=HelloChrome_133         # Do not add other fingerprints
 USER_AGENT=Mozilla/5.0...             # Custom user agent
 
 # Security
@@ -164,8 +164,8 @@ PROXY_API_KEY=your-secret-api-key      # API key for authentication (empty = no 
 ALLOWED_ORIGINS=http://localhost:3000   # Comma-separated allowed CORS origins
 
 # Rate Limiting
-RATE_LIMIT=10                          # Requests per second per IP
-RATE_LIMIT_BURST=20                    # Max burst size
+RATE_LIMIT=2                           # Requests per second per IP
+RATE_LIMIT_BURST=5                     # Max burst size
 
 # Connection Pool
 MAX_IDLE_CONNS=100                     # Max idle connections
@@ -174,14 +174,16 @@ IDLE_CONN_TIMEOUT=90                   # Idle timeout (seconds)
 
 # Retry Logic
 MAX_RETRIES=3                          # Max retry attempts
-RETRY_DELAY=1000                       # Retry delay (milliseconds)
+RETRY_DELAY=2000                       # Retry delay (milliseconds)
 DEBUG=false                            # Enable debug logging
 ```
 
 ### TLS Client IDs
 
 Available Chrome fingerprints:
-- `HelloChrome_120` (default)
+- `HelloChrome_133` (default)
+- `HelloChrome_131`
+- `HelloChrome_120`
 - `HelloChrome_119`
 - `HelloChrome_118`
 - `HelloChrome_117`
@@ -301,7 +303,7 @@ print(f'Body length: {len(response.body)} bytes')
 ### Production Security Checklist
 - [ ] Set `PROXY_API_KEY` to a strong random key
 - [ ] Configure `ALLOWED_ORIGINS` to your frontend domains only
-- [ ] Keep `TLS_ROTATE=false` and `TLS_CLIENT_ID=HelloChrome_120`
+- [ ] Keep `TLS_ROTATE=false` and `TLS_CLIENT_ID=HelloChrome_133`
 - [ ] Use mobile/residential proxies for production
 - [ ] Monitor rate limit logs for abuse detection
 - [ ] Set `DEBUG=false` in production
@@ -327,7 +329,7 @@ MOBILE_PROXY_USER=username
 MOBILE_PROXY_PASS=password
 
 # 2. Stay on the fingerprint that passes
-TLS_CLIENT_ID=HelloChrome_120
+TLS_CLIENT_ID=HelloChrome_133
 TLS_ROTATE=false
 
 # 3. Increase delays in scraping scripts

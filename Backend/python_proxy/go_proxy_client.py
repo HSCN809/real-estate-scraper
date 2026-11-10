@@ -261,7 +261,7 @@ class CloudflareBypassClient:
         self.proxy_client = GoProxyClient(proxy_url=proxy_url)
         self.user_agent = (
             user_agent
-            or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
         )
         # Pins the Go pooled client so __cf_bm stays on one cookie jar.
         self.session_id = uuid.uuid4().hex

@@ -45,6 +45,7 @@ type Config struct {
 	// Security settings
 	APIKey         string   // API key for authentication
 	AllowedOrigins []string // Allowed CORS origins
+	InsecureSkipVerify bool // Skip TLS verification (tests only)
 
 	// Rate limiting
 	RateLimit      int // Requests per second
@@ -62,18 +63,16 @@ func DefaultConfig() *Config {
 		MobileProxyURL: "",
 		UseMobileProxy: false,
 
-		// Chrome 120 fingerprint
-		TLSClientID:    "HelloChrome_120",
+		// Chrome 133 fingerprint
+		TLSClientID:    "HelloChrome_133",
 		JA3Fingerprint: "771,4865-4866-4867-49195-49199-49196-49200-52393-52542-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-34-51-43-13-45-28-21,29-23-24,0",
 		TLSRotate:      false,
 		TLSRotateList: []string{
-			// HepsiEmlak testlerinde yalnızca HelloChrome_120 + Chrome 120 UA
-			// kombinasyonu Cloudflare'i geçiyor; diğer parmak izleri challenge alıyor.
-			"HelloChrome_120",
+			"HelloChrome_133",
 		},
 
-		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		AcceptLanguage: "en-US,en;q=0.9,tr;q=0.8",
+		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		AcceptLanguage: "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
 		AcceptHeader:   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 
 		MaxIdleConns:        100,
@@ -81,7 +80,7 @@ func DefaultConfig() *Config {
 		IdleConnTimeout:     90 * time.Second,
 
 		MaxRetries:     3,
-		RetryDelay:     1 * time.Second,
+		RetryDelay:     2 * time.Second,
 		RetryOnTimeout: true,
 
 		APIKey: "", // No auth by default
@@ -90,9 +89,10 @@ func DefaultConfig() *Config {
 			"http://127.0.0.1:3000",
 			"http://real-estate-frontend:3000",
 		},
+		InsecureSkipVerify: false,
 
-		RateLimit:      10, // 10 requests per second
-		RateLimitBurst: 20, // Max burst of 20
+		RateLimit:      2, // 2 requests per second
+		RateLimitBurst: 5, // Max burst of 5
 	}
 }
 
@@ -176,6 +176,10 @@ func LoadConfigFromEnv() *Config {
 		if b, err := strconv.Atoi(rateBurst); err == nil {
 			cfg.RateLimitBurst = b
 		}
+	}
+
+	if skipVerify := os.Getenv("INSECURE_SKIP_VERIFY"); strings.ToLower(skipVerify) == "true" {
+		cfg.InsecureSkipVerify = true
 	}
 
 	return cfg

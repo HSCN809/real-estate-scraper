@@ -266,3 +266,36 @@ func TestProxySessionID(t *testing.T) {
 		t.Fatal("nil headers should have no session")
 	}
 }
+
+func TestCreateHTTPRequestClientHints(t *testing.T) {
+	ph := testHandler("")
+	req, err := ph.createHTTPRequest(&ProxyRequest{
+		URL:    "https://www.hepsiemlak.com/istanbul",
+		Method: http.MethodGet,
+	}, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if req.Header.Get("Sec-Ch-Ua") == "" || !strings.Contains(req.Header.Get("Sec-Ch-Ua"), "133") {
+		t.Fatalf("Sec-Ch-Ua = %q, want Chrome 133 hints", req.Header.Get("Sec-Ch-Ua"))
+	}
+	if req.Header.Get("Sec-Ch-Ua-Mobile") != "?0" {
+		t.Fatalf("Sec-Ch-Ua-Mobile = %q, want ?0", req.Header.Get("Sec-Ch-Ua-Mobile"))
+	}
+	if req.Header.Get("Sec-Ch-Ua-Platform") != `"Windows"` {
+		t.Fatalf("Sec-Ch-Ua-Platform = %q, want Windows", req.Header.Get("Sec-Ch-Ua-Platform"))
+	}
+	if req.Header.Get("Sec-Fetch-Dest") != "document" {
+		t.Fatalf("Sec-Fetch-Dest = %q, want document", req.Header.Get("Sec-Fetch-Dest"))
+	}
+	if req.Header.Get("Sec-Fetch-Mode") != "navigate" {
+		t.Fatalf("Sec-Fetch-Mode = %q, want navigate", req.Header.Get("Sec-Fetch-Mode"))
+	}
+	if req.Header.Get("Sec-Fetch-Site") != "none" {
+		t.Fatalf("Sec-Fetch-Site = %q, want none", req.Header.Get("Sec-Fetch-Site"))
+	}
+	if req.Header.Get("Sec-Fetch-User") != "?1" {
+		t.Fatalf("Sec-Fetch-User = %q, want ?1", req.Header.Get("Sec-Fetch-User"))
+	}
+}

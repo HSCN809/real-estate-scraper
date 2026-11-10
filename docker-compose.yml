@@ -19,12 +19,12 @@ services:
       - MOBILE_PROXY_PASS=${MOBILE_PROXY_PASS:-}
 
       # TLS Fingerprint Configuration
-      # HepsiEmlak testlerinde yalnizca HelloChrome_120 + Chrome 120 UA kombinasyonu
-      # Cloudflare'i geciyor; rotasyon acildiginda diger parmak izleri challenge aliyor.
-      - TLS_CLIENT_ID=HelloChrome_120
+      # HepsiEmlak testlerinde HelloChrome_133 + Chrome 133 UA kombinasyonu
+      # uTLS ALPN h2 ve Client Hints ile Cloudflare challenge'ini asar.
+      - TLS_CLIENT_ID=HelloChrome_133
       - TLS_ROTATE=false
-      - TLS_ROTATE_LIST=HelloChrome_120
-      - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+      - TLS_ROTATE_LIST=HelloChrome_133
+      - USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36
 
       # Connection Pool Configuration
       - MAX_IDLE_CONNS=100
@@ -33,15 +33,15 @@ services:
 
       # Retry Configuration
       - MAX_RETRIES=3
-      - RETRY_DELAY=1000
+      - RETRY_DELAY=2000
 
       # Security Configuration
       - PROXY_API_KEY=${PROXY_API_KEY:-}
       - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://real-estate-frontend:3000,http://localhost:8000,http://real-estate-api:8000
 
       # Rate Limiting
-      - RATE_LIMIT=10
-      - RATE_LIMIT_BURST=20
+      - RATE_LIMIT=2
+      - RATE_LIMIT_BURST=5
 
       # Debug mode
       - DEBUG=false
