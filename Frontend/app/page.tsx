@@ -1,7 +1,7 @@
 'use client';
 
 import CountUp from '@/components/ui/CountUp';
-import dynamic from 'next/dynamic';
+import { ResultsBackground } from '@/components/ui/ResultsBackground';
 import { motion } from 'framer-motion';
 import {
   Search, Database, TrendingUp, Clock, Zap,
@@ -19,8 +19,6 @@ import {
   istanbulDayStart,
   formatIstanbulDate,
 } from '@/lib/datetime';
-
-const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
 
 const container = {
   hidden: { opacity: 0 },
@@ -91,19 +89,7 @@ export default function Dashboard() {
 
   return (
     <div className="relative min-h-screen bg-black -mt-16 pt-16">
-      {/* Floating Lines Arka Plan */}
-      <div className="fixed inset-0 z-0">
-        <FloatingLines
-          linesGradient={['#38bdf8', '#0ea5e9', '#34d399', '#818cf8']}
-          enabledWaves={['top', 'middle', 'bottom']}
-          lineCount={5}
-          lineDistance={5}
-          bendRadius={5}
-          bendStrength={-0.5}
-          interactive
-          parallax
-        />
-      </div>
+      <ResultsBackground />
 
       {/* Koyu Kaplama */}
       <div className="fixed inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/50 to-black/85 pointer-events-none" />

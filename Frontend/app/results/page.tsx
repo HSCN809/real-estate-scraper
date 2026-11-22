@@ -5,9 +5,7 @@ import { ResultsMap } from '@/components/ui/ResultsMap';
 import { ResultsCharts } from '@/components/ui/ResultsCharts';
 import CountUp from '@/components/ui/CountUp';
 import { motion, AnimatePresence } from 'framer-motion';
-import dynamic from 'next/dynamic';
-
-const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
+import { ResultsBackground } from '@/components/ui/ResultsBackground';
 import {
     FileText,
     Download,
@@ -351,19 +349,7 @@ export default function ResultsPage() {
 
     return (
         <div className="relative min-h-screen bg-black">
-            {/* FloatingLines Arka Plan */}
-            <div className="fixed inset-0 z-0">
-                <FloatingLines
-                    linesGradient={['#38bdf8', '#0ea5e9', '#34d399', '#818cf8']}
-                    enabledWaves={['top', 'middle', 'bottom']}
-                    lineCount={5}
-                    lineDistance={5}
-                    bendRadius={5}
-                    bendStrength={-0.5}
-                    interactive
-                    parallax
-                />
-            </div>
+            <ResultsBackground />
 
             {/* Dark Gradient Overlay */}
             <div className="fixed inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/50 to-black/85 pointer-events-none" />
