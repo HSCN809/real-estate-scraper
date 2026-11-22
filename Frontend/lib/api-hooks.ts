@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     getStats,
     getResults,
+    getResultsFilters,
+    getResultsOverview,
+    getPriceSummary,
     getCategories,
     getSubtypes,
     getListings,
@@ -14,7 +17,7 @@ import {
     exportToExcel,
     type TaskStatus
 } from './api';
-import type { Platform, ScrapeRequest } from '@/types';
+import type { Platform, ResultsFilters, ResultsPageParams, ScrapeRequest } from '@/types';
 
 // ==================== Statistics & Data Hooks ====================
 
@@ -22,17 +25,44 @@ export function useStats() {
     return useQuery({
         queryKey: ['stats'],
         queryFn: getStats,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 0,
         refetchOnWindowFocus: false,
     });
 }
 
-export function useResults() {
+export function useResults(params: ResultsPageParams = {}, enabled = true) {
     return useQuery({
-        queryKey: ['results'],
-        queryFn: getResults,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        queryKey: ['results', 'page', params],
+        queryFn: ({ signal }) => getResults(params, signal),
+        enabled,
+        staleTime: 0,
         refetchOnWindowFocus: false,
+    });
+}
+
+export function useResultsFilters() {
+    return useQuery({
+        queryKey: ['results', 'filters'],
+        queryFn: ({ signal }) => getResultsFilters(signal),
+        staleTime: 0,
+    });
+}
+
+export function useResultsOverview(filters: ResultsFilters = {}, enabled = true) {
+    return useQuery({
+        queryKey: ['results', 'overview', filters],
+        queryFn: ({ signal }) => getResultsOverview(filters, signal),
+        enabled,
+        staleTime: 0,
+    });
+}
+
+export function usePriceSummary(filters: ResultsFilters, enabled: boolean) {
+    return useQuery({
+        queryKey: ['results', 'prices', filters],
+        queryFn: ({ signal }) => getPriceSummary(filters, signal),
+        enabled,
+        staleTime: 0,
     });
 }
 

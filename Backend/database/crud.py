@@ -15,7 +15,7 @@ from core.task_status import (
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
-from utils.timezone import format_istanbul, latest_datetime, now_utc_naive, to_iso
+from utils.timezone import format_istanbul, latest_datetime, now_utc_naive
 
 from .models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 
@@ -574,62 +574,6 @@ def get_scrape_sessions(
 # ============== Analitik ==============
 
 
-def get_price_analytics(
-    db: Session,
-    platform: str | None = None,
-    kategori: str | None = None,
-    ilan_tipi: str | None = None,
-    city: str | None = None,
-) -> dict[str, Any]:
-    """Opsiyonel filtrelerle fiyat analizlerini getir"""
-    query = (
-        db.query(
-            Listing.fiyat,
-            Location.il.label("city"),
-            Listing.platform,
-            Listing.kategori,
-            Listing.ilan_tipi,
-        )
-        .join(Location)
-        .filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
-    )
-
-    if platform and platform != "all":
-        query = query.filter(Listing.platform == platform)
-    if kategori and kategori != "all":
-        query = query.filter(Listing.kategori == kategori)
-    if ilan_tipi and ilan_tipi != "all":
-        query = query.filter(Listing.ilan_tipi == ilan_tipi)
-    if city:
-        query = query.filter(Location.il == city)
-
-    results = query.limit(50000).all()  # Performans için limit
-
-    prices = [
-        {
-            "city": r.city,
-            "platform": r.platform,
-            "category": r.kategori,
-            "listing_type": r.ilan_tipi,
-            "price": r.fiyat,
-        }
-        for r in results
-    ]
-
-    price_values = [r.fiyat for r in results]
-
-    summary = {
-        "total_count": len(price_values),
-        "avg_price": round(sum(price_values) / len(price_values), 2)
-        if price_values
-        else 0,
-        "min_price": min(price_values) if price_values else 0,
-        "max_price": max(price_values) if price_values else 0,
-    }
-
-    return {"prices": prices, "summary": summary}
-
-
 def get_city_analytics(
     db: Session,
     city_name: str,
@@ -824,107 +768,6 @@ def get_stats_summary(db: Session) -> dict[str, Any]:
         "this_month": this_month,
         "last_scrape": last_scrape,
     }
-
-
-def get_results_for_frontend(db: Session) -> list[dict[str, Any]]:
-    """Frontend icin sehir bazli gruplanmis sonuclari getir."""
-    # Kategori/ilan tipi goruntuleme eslemeleri
-    platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
-    category_map = {
-        "konut": "Konut",
-        "arsa": "Arsa",
-        "isyeri": "İşyeri",
-        "devremulk": "Devremülk",
-        "turistik_isletme": "Turistik İşletme",
-        "turistik_tesis": "Turistik Tesis",
-    }
-    listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
-
-    # İl + İlçe bazında gruplama (mahalle aggregate ediliyor)
-    results = []
-
-    combinations = (
-        db.query(
-            Location.il,
-            Location.ilce,
-            Listing.platform,
-            Listing.kategori,
-            Listing.ilan_tipi,
-            Listing.alt_kategori,
-            func.count(Listing.id).label("count"),
-            func.avg(Listing.fiyat).label("avg_price"),
-            func.max(Listing.created_at).label("last_date"),
-        )
-        .join(Location)
-        .group_by(
-            Location.il,
-            Location.ilce,
-            Listing.platform,
-            Listing.kategori,
-            Listing.ilan_tipi,
-            Listing.alt_kategori,
-        )
-        .order_by(func.max(Listing.created_at).desc())
-        .all()
-    )
-
-    def _normalize_display_location(value: str | None) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        if not text:
-            return None
-        if text == "-":
-            return None
-
-        normalized = text.casefold().translate(
-            str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc")
-        )
-        compact = re.sub(r"[\s\-_]+", "", normalized)
-        if compact in {"belirtilmemis", "bilinmiyor", "unknown", "none", "null", "yok"}:
-            return None
-        return text
-
-    for idx, row in enumerate(combinations):
-        city = _normalize_display_location(row.il) or "Bilinmiyor"
-        district = _normalize_display_location(row.ilce)
-
-        # Görüntüleme adlarını biçimlendir
-        platform_display = platform_map.get(row.platform, row.platform)
-        category_display = category_map.get(row.kategori, row.kategori)
-        listing_type_display = listing_type_map.get(row.ilan_tipi, row.ilan_tipi)
-        subtype_display = (
-            row.alt_kategori.replace("_", " ").title() if row.alt_kategori else None
-        )
-
-        # Tarihi biçimlendir
-        date_str = format_istanbul(row.last_date)
-        date_iso = to_iso(row.last_date)
-
-        # Benzersiz ID olustur
-        result_id = f"db_{row.platform}_{row.kategori}_{row.ilan_tipi}_{city}_{district or 'all'}_{idx}"
-
-        results.append(
-            {
-                "id": result_id,
-                "platform": platform_display,
-                "category": category_display,
-                "subtype": subtype_display,
-                "listing_type": listing_type_display,
-                "city": city,
-                "district": district,
-                "date": date_str,
-                "date_iso": date_iso,
-                "count": row.count,
-                "avg_price": round(row.avg_price, 2) if row.avg_price else None,
-                "file_size": 0,
-                "file_size_mb": 0,
-                "status": "completed",
-                "files": [],
-            }
-        )
-
-    return results
 
 
 # ============== Basarisiz Sayfa CRUD ==============

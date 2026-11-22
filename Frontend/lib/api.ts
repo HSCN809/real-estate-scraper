@@ -1,8 +1,8 @@
 // Emlak Scraper Backend API istemcisi
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-import type { ScrapeRequest, ScrapeStartResponse, Platform, ScrapeResult } from '@/types';
+import type { ScrapeRequest, ScrapeStartResponse, Platform, PriceSummary, ResultsFacets, ResultsFilters, ResultsOverview, ResultsPageParams, ResultsPageResponse } from '@/types';
 
 export async function startScrape(platform: Platform, data: ScrapeRequest): Promise<ScrapeStartResponse> {
     const response = await fetch(`${API_BASE_URL}/scrape/${platform}`, {
@@ -45,14 +45,40 @@ export async function getStats() {
     return response.json();
 }
 
-export async function getResults(): Promise<ScrapeResult[]> {
-    const response = await fetch(`${API_BASE_URL}/results`, {
+async function getResultsData<T>(path: string, params: ResultsPageParams, signal?: AbortSignal): Promise<T> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (Array.isArray(value)) {
+            for (const item of value) query.append(key, item);
+        } else if (value !== undefined && value !== 'all') {
+            query.set(key, String(value));
+        }
+    }
+    const url = `${API_BASE_URL}${path}`;
+    const response = await fetch(query.size ? `${url}?${query}` : url, {
         credentials: 'include',
+        signal,
     });
     if (!response.ok) {
         throw new Error('Sonuçlar alınamadı');
     }
     return response.json();
+}
+
+export function getResults(params: ResultsPageParams = {}, signal?: AbortSignal) {
+    return getResultsData<ResultsPageResponse>('/results', params, signal);
+}
+
+export function getResultsFilters(signal?: AbortSignal) {
+    return getResultsData<ResultsFacets>('/results/filters', {}, signal);
+}
+
+export function getResultsOverview(filters: ResultsFilters = {}, signal?: AbortSignal) {
+    return getResultsData<ResultsOverview>('/results/overview', filters, signal);
+}
+
+export function getPriceSummary(filters: ResultsFilters, signal?: AbortSignal) {
+    return getResultsData<PriceSummary>('/analytics/prices', filters, signal);
 }
 
 export interface Category {

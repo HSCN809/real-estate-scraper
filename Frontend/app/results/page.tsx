@@ -27,9 +27,11 @@ import {
     ChevronsLeft,
     ChevronsRight
 } from 'lucide-react';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
-import { getResults, getStats, exportToExcel } from '@/lib/api';
+import { API_BASE_URL, exportToExcel } from '@/lib/api';
+import { usePriceSummary, useResults, useResultsFilters, useResultsOverview, useStats } from '@/lib/api-hooks';
 import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
 import { formatAppDateTime, formatIstanbulDate } from '@/lib/datetime';
@@ -56,13 +58,6 @@ interface RichResult extends ScrapeResult {
     file_size_mb?: number;
 }
 
-interface PriceData {
-    city: string;
-    platform: string;
-    category: string;
-    listing_type: string;
-    price: number;
-}
 
 interface PreviewData {
     data: Array<Record<string, unknown>>;
@@ -80,28 +75,16 @@ export default function ResultsPage() {
     const searchParams = useSearchParams();
     const viewParam = searchParams.get('view') as 'map' | 'table' | 'charts' | null;
 
-    const [results, setResults] = useState<RichResult[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [lastScrape, setLastScrape] = useState('-');
-    const [viewMode, setViewMode] = useState<'table' | 'map' | 'charts'>(viewParam || 'map');
+    const viewMode = viewParam === 'table' || viewParam === 'charts' ? viewParam : 'map';
+    const queryClient = useQueryClient();
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
-
-    // URL parametresi değiştiğinde viewMode güncelle
-    useEffect(() => {
-        if (viewParam && ['map', 'table', 'charts'].includes(viewParam)) {
-            setViewMode(viewParam);
-        }
-    }, [viewParam]);
 
     // Filtreler
     const [platformFilter, setPlatformFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [listingTypeFilter, setListingTypeFilter] = useState<string>('all');
     const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
-    const normalizeFilterText = (value?: string | null) =>
-        (value || '').toLocaleLowerCase('tr-TR').trim();
 
     // Tablo görünümü için şehir/ilçe filtreleri
     const [cityFilter, setCityFilter] = useState<string[]>([]);
@@ -110,7 +93,7 @@ export default function ResultsPage() {
     const [districtDropdownOpen, setDistrictDropdownOpen] = useState(false);
 
     // Tablo görünümü için sayfalama
-    const [currentPage, setCurrentPage] = useState(1);
+    const [requestedPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
 
     // Dışarı tıklama algılama ref'leri
@@ -126,83 +109,38 @@ export default function ResultsPage() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewFile, setPreviewFile] = useState<string | null>(null);
 
-    // Grafik fiyat verileri - eski veri render'ını önlemek için filtre takibi
-    const [priceData, setPriceData] = useState<{
-        prices: PriceData[];
-        filters: { platform: string; category: string; listingType: string };
-    }>({ prices: [], filters: { platform: 'all', category: 'all', listingType: 'all' } });
-    const [priceDataLoading, setPriceDataLoading] = useState(false);
-
-    // Excel dışa aktarma durumu
     const [exporting, setExporting] = useState(false);
-
-    // Fiyat verisinin mevcut filtrelerle eşleşip eşleşmediğini kontrol et
-    const isPriceDataValid =
-        priceData.filters.platform === platformFilter &&
-        priceData.filters.category === categoryFilter &&
-        priceData.filters.listingType === listingTypeFilter;
-
-    // Filtrelerle fiyat verisi çek
-    const fetchPriceData = useCallback(async () => {
-        const currentFilters = {
-            platform: platformFilter,
-            category: categoryFilter,
-            listingType: listingTypeFilter
-        };
-
-        setPriceDataLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (platformFilter !== 'all') params.append('platform', platformFilter);
-            if (categoryFilter !== 'all') params.append('category', categoryFilter);
-            if (listingTypeFilter !== 'all') params.append('listing_type', listingTypeFilter);
-
-            const url = `http://localhost:8000/api/v1/analytics/prices${params.toString() ? '?' + params.toString() : ''}`;
-            const res = await fetch(url);
-            const data = await res.json();
-
-            // Fiyatları çekildikleri filtrelerle birlikte kaydet
-            setPriceData({
-                prices: data.prices || [],
-                filters: currentFilters
-            });
-        } catch (err) {
-            console.error('Fiyat verisi alınamadı:', err);
-            setPriceData({ prices: [], filters: currentFilters });
-        } finally {
-            setPriceDataLoading(false);
-        }
-    }, [platformFilter, categoryFilter, listingTypeFilter]);
-
-    // Filtreler değiştiğinde ve grafik görünümünde fiyat verisini yeniden çek
-    useEffect(() => {
-        if (viewMode === 'charts') {
-            fetchPriceData();
-        }
-    }, [fetchPriceData, viewMode]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [platformFilter, categoryFilter, listingTypeFilter, subtypeFilter]);
-
-    const fetchResults = async () => {
-        try {
-            setLoading(true);
-            const [data, stats] = await Promise.all([getResults(), getStats()]);
-            setResults(Array.isArray(data) ? data : []);
-            setLastScrape(stats?.last_scrape || '-');
-            setError(null);
-        } catch {
-            setError('Veriler alınırken bir hata oluştu');
-        } finally {
-            setLoading(false);
-        }
+    const filters = {
+        platform: platformFilter,
+        category: categoryFilter,
+        listing_type: listingTypeFilter,
+        subtype: subtypeFilter,
     };
+    const tableView = viewMode === 'table';
+    const showPrices = viewMode === 'charts' && categoryFilter !== 'all' && listingTypeFilter !== 'all';
+    const pageQuery = useResults(
+        { ...filters, city: cityFilter, district: districtFilter, page: requestedPage, limit: itemsPerPage },
+        tableView,
+    );
+    const overviewQuery = useResultsOverview(filters, !tableView);
+    const priceQuery = usePriceSummary(filters, showPrices);
+    const facetsQuery = useResultsFilters();
+    const statsQuery = useStats();
+    const activeResults = tableView ? pageQuery : overviewQuery;
+    const loading = activeResults.isPending || facetsQuery.isPending || (showPrices && priceQuery.isPending);
+    const error = activeResults.isError || facetsQuery.isError || (showPrices && priceQuery.isError)
+        ? 'Veriler alınırken bir hata oluştu'
+        : null;
+
+    const fetchResults = () => Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['results'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats'] }),
+    ]);
 
     const clearResults = async () => {
         try {
             setClearing(true);
-            const res = await fetch('http://localhost:8000/api/v1/clear-results', {
+            const res = await fetch(`${API_BASE_URL}/clear-results`, {
                 method: 'DELETE',
                 credentials: 'include',
             });
@@ -211,8 +149,9 @@ export default function ResultsPage() {
                 throw new Error(payload?.detail || payload?.message || 'Toplu temizleme başarısız');
             }
 
-            setResults([]);
+            setCurrentPage(1);
             setShowClearConfirm(false);
+            await fetchResults();
         } catch (err) {
             console.error('Clear failed:', err);
             alert(err instanceof Error ? err.message : 'Tüm sonuçlar temizlenemedi');
@@ -234,10 +173,11 @@ export default function ResultsPage() {
             if (result.district) params.append('district', result.district);
             if (result.subtype) params.append('alt_kategori', result.subtype);
 
-            const res = await fetch(`http://localhost:8000/api/v1/listings/group?${params}`, { method: 'DELETE' });
-            if (res.ok) {
-                setResults(results.filter(r => r.id !== result.id));
-            }
+            const res = await fetch(`${API_BASE_URL}/listings/group?${params}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            if (res.ok) await fetchResults();
         } catch (err) {
             console.error('Delete failed:', err);
         }
@@ -269,7 +209,7 @@ export default function ResultsPage() {
             if (result.district) params.append('district', result.district);
             params.append('limit', '20');
 
-            const res = await fetch(`http://localhost:8000/api/v1/listings/preview?${params}`);
+            const res = await fetch(`${API_BASE_URL}/listings/preview?${params}`, { credentials: 'include' });
             const data = await res.json();
             setPreviewData(data);
         } catch (err) {
@@ -312,12 +252,6 @@ export default function ResultsPage() {
         }
     };
 
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-        fetchResults();
-    }, []);
 
     // Dışarı tıklayınca dropdown'ları kapat
     useEffect(() => {
@@ -334,45 +268,20 @@ export default function ResultsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    if (!mounted) {
-        return (
-            <div className="flex items-center justify-center min-h-[50vh]">
-                <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-            </div>
-        );
-    }
-
-    // Filtrelenmiş sonuçlar
-    const filteredResults = results.filter(r => {
-        if (platformFilter !== 'all' && normalizeFilterText(r.platform) !== normalizeFilterText(platformFilter)) return false;
-        if (categoryFilter !== 'all' && normalizeFilterText(r.category) !== normalizeFilterText(categoryFilter)) return false;
-        if (listingTypeFilter !== 'all' && normalizeFilterText(r.listing_type) !== normalizeFilterText(listingTypeFilter)) return false;
-        if (subtypeFilter !== 'all' && normalizeFilterText(r.subtype) !== normalizeFilterText(subtypeFilter)) return false;
-        // Şehir/İlçe filtreleri (tablo görünümü)
-        if (cityFilter.length > 0 && !cityFilter.includes(r.city || '')) return false;
-        if (districtFilter.length > 0 && !districtFilter.includes(r.district || '')) return false;
-        return true;
-    });
-
-    // İstatistikler
-    const totalFiles = results.length;
-    const totalRecords = results.reduce((acc, curr) => acc + (curr.count || 0), 0);
-    const uniqueCities = [...new Set(results.map(r => r.city).filter(Boolean))].length;
-    const latestDate = lastScrape;
-
-    // Filtreler için benzersiz platformlar, kategoriler, ilan tipleri ve alt kategoriler
-    const platforms = [...new Set(results.map(r => r.platform))];
-    const categories = [...new Set(results.map(r => r.category))];
-    const listingTypes = [...new Set(results.map(r => r.listing_type).filter(Boolean))];
-    const subtypes = [...new Set(results.map(r => r.subtype).filter((s): s is string => !!s))];
-
-    // Tablo filtreleri için şehirler ve ilçeler
-    const cities = [...new Set(results.map(r => r.city).filter(Boolean))].sort() as string[];
-    const availableDistricts = results
-        .filter(r => cityFilter.length === 0 || cityFilter.includes(r.city || ''))
-        .map(r => r.district)
-        .filter(Boolean);
-    const districts = [...new Set(availableDistricts)].sort() as string[];
+    const resultPage = pageQuery.data;
+    const overview = overviewQuery.data;
+    const facets = facetsQuery.data;
+    const totalFiles = facets?.total_groups ?? 0;
+    const totalRecords = facets?.total_listings ?? 0;
+    const latestDate = statsQuery.data?.last_scrape || '-';
+    const platforms = facets?.platforms ?? [];
+    const categories = facets?.categories ?? [];
+    const listingTypes = facets?.listing_types ?? [];
+    const subtypes = facets?.subtypes ?? [];
+    const locations = facets?.locations ?? {};
+    const cities = Object.keys(locations).sort();
+    const uniqueCities = cities.length;
+    const districts = [...new Set((cityFilter.length ? cityFilter : cities).flatMap(city => locations[city] ?? []))].sort();
 
     // Şehir filtresi değişince ilçe filtresini temizle
     const handleCityFilterChange = (city: string) => {
@@ -413,11 +322,11 @@ export default function ResultsPage() {
         }
     };
 
-    // Sayfalama hesaplamaları
-    const totalPages = Math.ceil(filteredResults.length / itemsPerPage);
+    const currentPage = resultPage?.page ?? requestedPage;
+    const filteredTotal = resultPage?.total ?? 0;
+    const totalPages = resultPage?.pages ?? 0;
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedResults = filteredResults.slice(startIndex, endIndex);
+    const paginatedResults = resultPage?.items ?? [];
 
     // Filtreler değişince 1. sayfaya dön
     const handleCityFilterChangeWithReset = (city: string) => {
@@ -521,7 +430,7 @@ export default function ResultsPage() {
                         <span className="text-sm font-medium text-green-400">Excel</span>
                     </button>
 
-                    {results.length > 0 && (
+                    {totalFiles > 0 && (
                         <button
                             onClick={() => setShowClearConfirm(true)}
                             className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all flex items-center gap-2"
@@ -602,7 +511,7 @@ export default function ResultsPage() {
                     id="platform-filter"
                     label="Platform"
                     value={platformFilter}
-                    onChange={setPlatformFilter}
+                    onChange={(value) => { setPlatformFilter(value); setCurrentPage(1); }}
                     options={platforms}
                     icon={<Filter className="w-3 h-3" aria-hidden="true" />}
                     focusRingColor="focus:ring-blue-500"
@@ -613,8 +522,8 @@ export default function ResultsPage() {
                     id="listing-type-filter"
                     label="İlan Tipi"
                     value={listingTypeFilter}
-                    onChange={setListingTypeFilter}
-                    options={listingTypes.filter(Boolean) as string[]}
+                    onChange={(value) => { setListingTypeFilter(value); setCurrentPage(1); }}
+                    options={listingTypes}
                     focusRingColor="focus:ring-amber-500"
                 />
 
@@ -623,7 +532,7 @@ export default function ResultsPage() {
                     id="category-filter"
                     label="Kategori"
                     value={categoryFilter}
-                    onChange={setCategoryFilter}
+                    onChange={(value) => { setCategoryFilter(value); setCurrentPage(1); }}
                     options={categories}
                     focusRingColor="focus:ring-emerald-500"
                 />
@@ -634,7 +543,7 @@ export default function ResultsPage() {
                         id="subtype-filter"
                         label="Alt Kategori"
                         value={subtypeFilter}
-                        onChange={setSubtypeFilter}
+                        onChange={(value) => { setSubtypeFilter(value); setCurrentPage(1); }}
                         options={subtypes}
                         focusRingColor="focus:ring-purple-500"
                     />
@@ -663,7 +572,7 @@ export default function ResultsPage() {
                             </button>
                         </div>
                     </ArtCard>
-                ) : filteredResults.length === 0 ? (
+                ) : totalFiles === 0 || (!tableView && !overview?.cities.length) ? (
                     <motion.div variants={itemVariants}>
                         <ArtCard glowColor="blue" className="text-center py-20">
                             <div className="flex flex-col items-center gap-6 max-w-md mx-auto">
@@ -681,7 +590,7 @@ export default function ResultsPage() {
                     /* Harita Görünümü */
                     <motion.figure variants={itemVariants} aria-label="Sonuçlar haritası">
                         <ResultsMap
-                            results={filteredResults}
+                            results={overview?.cities ?? []}
                             platformFilter={platformFilter}
                             categoryFilter={categoryFilter}
                             listingTypeFilter={listingTypeFilter}
@@ -691,15 +600,10 @@ export default function ResultsPage() {
                 ) : viewMode === 'charts' ? (
                     /* Grafik Görünümü */
                     <motion.figure variants={itemVariants} aria-label="Sonuç grafikleri">
-                        {(priceDataLoading || !isPriceDataValid) ? (
-                            <div className="flex flex-col items-center justify-center py-20 gap-4" role="status" aria-live="polite">
-                                <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" aria-hidden="true"></div>
-                                <p className="text-gray-400 animate-pulse">Fiyat verileri yükleniyor...</p>
-                            </div>
-                        ) : (
+                        {overview && (
                             <ResultsCharts
-                                results={filteredResults}
-                                priceData={priceData.prices}
+                                overview={overview}
+                                priceData={priceQuery.data}
                                 categoryFilter={categoryFilter}
                                 listingTypeFilter={listingTypeFilter}
                             />
@@ -940,8 +844,11 @@ export default function ResultsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {paginatedResults.map((result, index) => (
-                                    <tr key={result.id || index} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
+                                {paginatedResults.length === 0 && (
+                                    <tr><td colSpan={9} className="py-8 text-center text-gray-400">Filtrelere uyan sonuç yok.</td></tr>
+                                )}
+                                {paginatedResults.map((result) => (
+                                    <tr key={result.id} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                         <td className="py-3 px-4">
                                             <div className="flex items-center gap-2">
                                                 <MapPin className="w-4 h-4 text-sky-400" />
@@ -1020,7 +927,7 @@ export default function ResultsPage() {
                         {totalPages > 1 && (
                             <nav className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700" aria-label="Sayfa navigasyonu">
                                 <p className="text-sm text-gray-400" aria-live="polite">
-                                    Toplam {filteredResults.length} kayıttan {startIndex + 1}-{Math.min(endIndex, filteredResults.length)} arası gösteriliyor
+                                    Toplam {filteredTotal} kayıttan {startIndex + 1}-{startIndex + paginatedResults.length} arası gösteriliyor
                                 </p>
                                 <ul className="flex items-center gap-2" role="list">
                                     {/* İlk Sayfa */}
@@ -1042,7 +949,7 @@ export default function ResultsPage() {
                                     {/* Önceki Sayfa */}
                                     <li>
                                         <button
-                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                             disabled={currentPage === 1}
                                             className={`p-2 rounded-lg transition-colors ${
                                                 currentPage === 1
@@ -1088,7 +995,7 @@ export default function ResultsPage() {
                                     {/* Sonraki Sayfa */}
                                     <li>
                                         <button
-                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                             disabled={currentPage === totalPages}
                                             className={`p-2 rounded-lg transition-colors ${
                                                 currentPage === totalPages

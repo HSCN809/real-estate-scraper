@@ -2,7 +2,7 @@
 
 import React, { startTransition, useState, useMemo, useCallback, useEffect } from 'react';
 import { X, Building2, BarChart3, TrendingUp, MapPin, Database, Sparkles, TrendingUp as TrendIcon } from 'lucide-react';
-import { ScrapeResult } from '@/types';
+import type { ResultsOverview } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -82,7 +82,7 @@ interface FileStats {
 }
 
 interface ResultsMapProps {
-    results: ScrapeResult[];
+    results: ResultsOverview['cities'];
     platformFilter?: string;
     categoryFilter?: string;
     listingTypeFilter?: string;
@@ -167,7 +167,7 @@ export default function ResultsMapInner({
 
     // Şehir verilerini map'e dönüştür (aynı şehir için count'ları topla)
     const cityDataMap = useMemo(() => {
-        const map = new Map<string, ScrapeResult>();
+        const map = new Map<string, ResultsOverview['cities'][number]>();
         results.forEach(result => {
             if (result.city) {
                 const normalizedCity = normalizeCity(result.city);

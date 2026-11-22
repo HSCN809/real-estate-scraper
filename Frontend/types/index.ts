@@ -60,6 +60,53 @@ export interface ScrapeResult {
   }[];
 }
 
+export interface ResultsFilters {
+  platform?: string;
+  category?: string;
+  listing_type?: string;
+  subtype?: string;
+  city?: string[];
+  district?: string[];
+}
+
+export interface ResultsPageParams extends ResultsFilters {
+  page?: number;
+  limit?: number;
+}
+
+export interface ResultsPageResponse {
+  items: ScrapeResult[];
+  page: number;
+  limit: number;
+  pages: number;
+  total: number;
+}
+
+export interface ResultsFacets {
+  platforms: string[];
+  categories: string[];
+  listing_types: string[];
+  subtypes: string[];
+  locations: Record<string, string[]>;
+  total_groups: number;
+  total_listings: number;
+}
+
+export interface ResultsOverview {
+  cities: { city: string; count: number }[];
+  platforms: Record<string, number>;
+  categories: Record<string, number>;
+  listing_types: Record<string, number>;
+  history: { date: string; count: number }[];
+}
+
+export interface PriceSummary {
+  summary: { total_count: number; avg_price: number; min_price: number; max_price: number };
+  cities: { city: string; avg_price: number }[];
+  platforms: { platform: string; avg_price: number }[];
+  histogram: { min: number; max: number; count: number }[];
+}
+
 export const CATEGORIES: Record<Platform, Record<ListingType, Category[]>> = {
   emlakjet: {
     satilik: [],

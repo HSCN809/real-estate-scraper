@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
 from anyio import Lock
@@ -12,7 +12,7 @@ from auth.dependencies import get_current_user
 from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
 from core.task_status import get_task_status_store, is_final_task_status
-from database import crud
+from database import crud, results
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -243,75 +243,12 @@ async def cancel_task(task_id: str):
 
 
 @router.get("/analytics/prices")
-async def get_price_analytics(
-    platform: str | None = None,
-    category: str | None = None,
-    listing_type: str | None = None,
+def get_price_analytics(
+    filters: Annotated[results.ResultsFilters, Query()],
     db: Session = Depends(get_db),
 ):
-    """Veritabanından fiyat verilerini çek - grafikler için (filtrelenebilir)"""
-    # Goruntuleme adlari icin platform/kategori/ilan tipi eslemeleri
-    platform_map = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
-    category_map = {
-        "konut": "Konut",
-        "arsa": "Arsa",
-        "isyeri": "İşyeri",
-        "devremulk": "Devremülk",
-    }
-    listing_type_map = {"satilik": "Satılık", "kiralik": "Kiralık"}
-
-    # Filtreleme icin goruntuleme adlarini DB degerlerine cevir
-    db_platform = None
-    db_category = None
-    db_listing_type = None
-
-    if platform and platform != "all":
-        db_platform = (
-            platform.lower()
-            .replace("hepsiemlak", "hepsiemlak")
-            .replace("emlakjet", "emlakjet")
-        )
-        if platform == "HepsiEmlak":
-            db_platform = "hepsiemlak"
-        elif platform == "Emlakjet":
-            db_platform = "emlakjet"
-
-    if category and category != "all":
-        for k, v in category_map.items():
-            if v == category:
-                db_category = k
-                break
-        if not db_category:
-            db_category = category.lower()
-
-    if listing_type and listing_type != "all":
-        for k, v in listing_type_map.items():
-            if v == listing_type:
-                db_listing_type = k
-                break
-        if not db_listing_type:
-            db_listing_type = listing_type.lower()
-
-    result = crud.get_price_analytics(
-        db, platform=db_platform, kategori=db_category, ilan_tipi=db_listing_type
-    )
-
-    # Goruntuleme adlarina donustur
-    prices = []
-    for p in result["prices"]:
-        prices.append(
-            {
-                "city": p["city"],
-                "platform": platform_map.get(p["platform"], p["platform"]),
-                "category": category_map.get(p["category"], p["category"]),
-                "listing_type": listing_type_map.get(
-                    p["listing_type"], p["listing_type"]
-                ),
-                "price": p["price"],
-            }
-        )
-
-    return {"prices": prices, "summary": result["summary"]}
+    """Return price averages and histogram bins for the active filters."""
+    return results.get_price_summary(db, filters)
 
 
 @router.get("/analytics/city/{city_name}")
@@ -551,9 +488,25 @@ async def clear_results(db: Session = Depends(get_db)):
 
 
 @router.get("/results")
-async def get_results(db: Session = Depends(get_db)):
-    """Veritabanından sonuçları döndür"""
-    return crud.get_results_for_frontend(db)
+def get_results(
+    filters: Annotated[results.ResultsPageQuery, Query()],
+    db: Session = Depends(get_db),
+):
+    """Return one page of grouped listing results."""
+    return results.get_results_page(db, filters)
+
+
+@router.get("/results/filters")
+def get_result_filters(db: Session = Depends(get_db)):
+    return results.get_results_filters(db)
+
+
+@router.get("/results/overview")
+def get_results_overview(
+    filters: Annotated[results.ResultsFilters, Query()],
+    db: Session = Depends(get_db),
+):
+    return results.get_results_overview(db, filters)
 
 
 @router.get("/listings/preview")

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
 import { BarChart3 } from 'lucide-react';
-import type { ScrapeResult } from '@/types';
+import type { PriceSummary, ResultsOverview } from '@/types';
 
 // Loading component
 function ChartLoadingSpinner() {
@@ -25,26 +25,18 @@ const ResultsChartsInner = dynamic(() => import('./ResultsChartsInner'), {
     ssr: false
 });
 
-interface PriceData {
-    city: string;
-    platform: string;
-    category: string;
-    listing_type: string;
-    price: number;
-}
-
-interface ResultsChartsProps {
-    results: ScrapeResult[];
-    priceData: PriceData[];
+export interface ResultsChartsProps {
+    overview: ResultsOverview;
+    priceData?: PriceSummary;
     categoryFilter: string;
     listingTypeFilter: string;
 }
 
-export function ResultsCharts({ results, priceData, categoryFilter, listingTypeFilter }: ResultsChartsProps) {
+export function ResultsCharts({ overview, priceData, categoryFilter, listingTypeFilter }: ResultsChartsProps) {
     return (
         <Suspense fallback={<ChartLoadingSpinner />}>
             <ResultsChartsInner
-                results={results}
+                overview={overview}
                 priceData={priceData}
                 categoryFilter={categoryFilter}
                 listingTypeFilter={listingTypeFilter}

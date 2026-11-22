@@ -8,16 +8,16 @@ import {
   Activity, BarChart3, Rocket, Eye
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState, useMemo } from 'react';
-import type { ScrapeResult } from '@/types';
+import { useState, useMemo } from 'react';
+import type { ResultsOverview } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useScraping } from '@/contexts/ScrapingContext';
-import { useActiveTasks } from '@/lib/api-hooks';
+import { useActiveTasks, useResults, useResultsOverview, useStats } from '@/lib/api-hooks';
 import {
   formatTimeAgo,
   getIstanbulHour,
   istanbulDayStart,
-  parseAppDate,
+  formatIstanbulDate,
 } from '@/lib/datetime';
 
 const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
@@ -40,29 +40,21 @@ function getGreeting(): string {
   return 'İyi Akşamlar';
 }
 
-function parseResultDate(result: ScrapeResult): Date | null {
-  return parseAppDate(result.date_iso || result.date);
-}
 
 interface ChartDay { label: string; count: number; }
 
-function getChartData(results: ScrapeResult[]): ChartDay[] {
+function getChartData(history: ResultsOverview['history']): ChartDay[] {
+  const counts = new Map(history.map(({ date, count }) => [date, count]));
   const todayStart = istanbulDayStart(new Date());
   const days: ChartDay[] = [];
 
   for (let i = 6; i >= 0; i--) {
     const dayStart = new Date(todayStart.getTime() - i * 24 * 60 * 60 * 1000);
-    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
     const dayLabel = dayStart.toLocaleDateString('tr-TR', {
       weekday: 'short',
       timeZone: 'Europe/Istanbul',
     });
-    const dayCount = results
-      .filter((result) => {
-        const parsedDate = parseResultDate(result);
-        return parsedDate ? parsedDate >= dayStart && parsedDate < dayEnd : false;
-      })
-      .reduce((sum, result) => sum + (result.count || 0), 0);
+    const dayCount = counts.get(formatIstanbulDate(dayStart)) ?? 0;
 
     days.push({ label: dayLabel, count: dayCount });
   }
@@ -76,44 +68,26 @@ export default function Dashboard() {
   const RECENT_VIEWPORT_HEIGHT = 320;
   const RECENT_OVERSCAN = 4;
 
-  const [stats, setStats] = useState({
-    total_scrapes: 0, total_listings: 0,
-    this_week: 0, this_month: 0, last_scrape: '-',
-  });
-  const [results, setResults] = useState<ScrapeResult[]>([]);
+  const stats = useStats().data ?? {
+    total_scrapes: 0, total_listings: 0, this_week: 0, this_month: 0, last_scrape: '-',
+  };
+  const results = useResults({ limit: 50 }).data?.items ?? [];
+  const overview = useResultsOverview().data;
   const [recentScrollTop, setRecentScrollTop] = useState(0);
   const { startTracking, showPanel } = useScraping();
   const { data: activeTasksData } = useActiveTasks();
   const activeTasks = activeTasksData?.active_tasks ?? [];
 
-  useEffect(() => {
-    import('@/lib/api').then(({ getStats, getResults }) => {
-      getStats().then(setStats).catch(console.error);
-      getResults().then(setResults).catch(console.error);
-    });
-  }, []);
-
-  useEffect(() => {
-    setRecentScrollTop(0);
-  }, [results.length]);
-
-  const chartData = useMemo(() => getChartData(results), [results]);
+  const chartData = useMemo(() => getChartData(overview?.history ?? []), [overview]);
   const maxChart = useMemo(() => Math.max(...chartData.map((d) => d.count), 1), [chartData]);
-  const recentResults = useMemo(
-    () => [...results].sort((a, b) => {
-      const bTime = parseResultDate(b)?.getTime() ?? 0;
-      const aTime = parseResultDate(a)?.getTime() ?? 0;
-      return bTime - aTime;
-    }),
-    [results]
-  );
-  const recentTotalHeight = recentResults.length * RECENT_ROW_HEIGHT;
-  const recentStartIndex = Math.max(0, Math.floor(recentScrollTop / RECENT_ROW_HEIGHT) - RECENT_OVERSCAN);
+  const recentTotalHeight = results.length * RECENT_ROW_HEIGHT;
+  const scrollOffset = Math.min(recentScrollTop, Math.max(0, recentTotalHeight - RECENT_VIEWPORT_HEIGHT));
+  const recentStartIndex = Math.max(0, Math.floor(scrollOffset / RECENT_ROW_HEIGHT) - RECENT_OVERSCAN);
   const recentEndIndex = Math.min(
-    recentResults.length,
-    Math.ceil((recentScrollTop + RECENT_VIEWPORT_HEIGHT) / RECENT_ROW_HEIGHT) + RECENT_OVERSCAN
+    results.length,
+    Math.ceil((scrollOffset + RECENT_VIEWPORT_HEIGHT) / RECENT_ROW_HEIGHT) + RECENT_OVERSCAN
   );
-  const visibleRecentResults = recentResults.slice(recentStartIndex, recentEndIndex);
+  const visibleRecentResults = results.slice(recentStartIndex, recentEndIndex);
 
   return (
     <div className="relative min-h-screen bg-black -mt-16 pt-16">
@@ -259,7 +233,7 @@ export default function Dashboard() {
                     <p className="text-[10px] text-gray-500">Son yapılan işlemler</p>
                   </div>
                 </div>
-                {recentResults.length > 0 ? (
+                {results.length > 0 ? (
                   <div
                     className="h-[320px] overflow-y-auto pr-1"
                     onScroll={(e) => setRecentScrollTop(e.currentTarget.scrollTop)}

@@ -16,7 +16,7 @@ import {
     Filler,
 } from 'chart.js';
 import { Bar, Doughnut, Pie, Line } from 'react-chartjs-2';
-import { ScrapeResult } from '@/types';
+import type { ResultsChartsProps } from './ResultsCharts';
 import { BarChart3, PieChart, TrendingUp, Building2, MapPin, DollarSign, Layers, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Chart.js bileşenlerini kaydet
@@ -90,20 +90,6 @@ const commonOptions = {
     }
 };
 
-interface PriceData {
-    city: string;
-    platform: string;
-    category: string;
-    listing_type: string;
-    price: number;
-}
-
-interface ResultsChartsProps {
-    results: ScrapeResult[];
-    priceData: PriceData[];
-    categoryFilter: string;
-    listingTypeFilter: string;
-}
 
 // Sabit kart yüksekliği (header + chart + padding)
 const CARD_HEIGHT = 'h-[420px]';
@@ -145,241 +131,106 @@ function PlaceholderCard({ title, icon: Icon }: { title: string; icon: React.Ele
     );
 }
 
-export default function ResultsChartsInner({ results, priceData, categoryFilter, listingTypeFilter }: ResultsChartsProps) {
-    // Fiyat grafikleri yalnızca kategori VE ilan tipi filtreleri seçiliyken gösterilir
+export default function ResultsChartsInner({ overview, priceData, categoryFilter, listingTypeFilter }: ResultsChartsProps) {
     const showPriceCharts = categoryFilter !== 'all' && listingTypeFilter !== 'all';
 
-    // 1. Şehir dağılımı - İlan sayısına göre ilk 10
-    const cityDistributionData = useMemo(() => {
-        const cityCount: Record<string, number> = {};
-        results.forEach(r => {
-            if (r.city) {
-                cityCount[r.city] = (cityCount[r.city] || 0) + (r.count || 0);
-            }
-        });
-
-        const sorted = Object.entries(cityCount)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10);
-
+    const { cityDistributionData, platformData, listingTypeData, categoryData, scrapingHistoryData } = useMemo(() => {
+        const topCities = overview.cities.slice(0, 10);
         return {
-            labels: sorted.map(([city]) => city),
-            datasets: [{
-                label: 'İlan Sayısı',
-                data: sorted.map(([, count]) => count),
-                backgroundColor: CHART_PALETTE,
-                borderColor: CHART_PALETTE.map(c => c.replace('0.8', '1')),
-                borderWidth: 1,
-            }]
+            cityDistributionData: {
+                labels: topCities.map(({ city }) => city),
+                datasets: [{
+                    label: 'İlan Sayısı',
+                    data: topCities.map(({ count }) => count),
+                    backgroundColor: CHART_PALETTE,
+                    borderColor: CHART_PALETTE.map(c => c.replace('0.8', '1')),
+                    borderWidth: 1,
+                }],
+            },
+            platformData: {
+                labels: Object.keys(overview.platforms),
+                datasets: [{
+                    data: Object.values(overview.platforms),
+                    backgroundColor: [COLORS.purple, COLORS.blue, COLORS.emerald],
+                    borderColor: ['rgba(139, 92, 246, 1)', 'rgba(59, 130, 246, 1)', 'rgba(16, 185, 129, 1)'],
+                    borderWidth: 2,
+                }],
+            },
+            listingTypeData: {
+                labels: Object.keys(overview.listing_types),
+                datasets: [{
+                    data: Object.values(overview.listing_types),
+                    backgroundColor: [COLORS.amber, COLORS.orange, COLORS.slate],
+                    borderColor: ['rgba(245, 158, 11, 1)', 'rgba(249, 115, 22, 1)', 'rgba(100, 116, 139, 1)'],
+                    borderWidth: 2,
+                }],
+            },
+            categoryData: {
+                labels: Object.keys(overview.categories),
+                datasets: [{
+                    data: Object.values(overview.categories),
+                    backgroundColor: [COLORS.emerald, COLORS.cyan, COLORS.purple, COLORS.pink],
+                    borderColor: ['rgba(16, 185, 129, 1)', 'rgba(6, 182, 212, 1)', 'rgba(139, 92, 246, 1)', 'rgba(236, 72, 153, 1)'],
+                    borderWidth: 2,
+                }],
+            },
+            scrapingHistoryData: {
+                labels: overview.history.map(({ date }) => date.split('-').reverse().join('.')),
+                datasets: [{
+                    label: 'Toplam İlan',
+                    data: overview.history.map(({ count }) => count),
+                    fill: true,
+                    backgroundColor: COLORS.blueBg,
+                    borderColor: COLORS.blue,
+                    borderWidth: 2,
+                    tension: 0.4,
+                }],
+            },
         };
-    }, [results]);
+    }, [overview]);
 
-    // 2. Platform karşılaştırması
-    const platformData = useMemo(() => {
-        const platformCount: Record<string, number> = {};
-        results.forEach(r => {
-            platformCount[r.platform] = (platformCount[r.platform] || 0) + (r.count || 0);
-        });
-
-        return {
-            labels: Object.keys(platformCount),
-            datasets: [{
-                data: Object.values(platformCount),
-                backgroundColor: [COLORS.purple, COLORS.blue, COLORS.emerald],
-                borderColor: ['rgba(139, 92, 246, 1)', 'rgba(59, 130, 246, 1)', 'rgba(16, 185, 129, 1)'],
-                borderWidth: 2,
-            }]
+    const { cityPriceData, priceHistogramData, platformPriceData } = useMemo(() => {
+        const cities = priceData?.cities ?? [];
+        const bins = priceData?.histogram ?? [];
+        const platforms = priceData?.platforms ?? [];
+        const formatPrice = (price: number) => {
+            if (price >= 1000000) return (price / 1000000).toFixed(1) + 'M';
+            if (price >= 1000) return (price / 1000).toFixed(0) + 'K';
+            return price.toFixed(0);
         };
-    }, [results]);
-
-    // 3. İlan tipi (Satılık vs Kiralık)
-    const listingTypeData = useMemo(() => {
-        const typeCount: Record<string, number> = {};
-        results.forEach(r => {
-            const type = r.listing_type || 'Bilinmiyor';
-            typeCount[type] = (typeCount[type] || 0) + (r.count || 0);
-        });
-
         return {
-            labels: Object.keys(typeCount),
-            datasets: [{
-                data: Object.values(typeCount),
-                backgroundColor: [COLORS.amber, COLORS.orange, COLORS.slate],
-                borderColor: ['rgba(245, 158, 11, 1)', 'rgba(249, 115, 22, 1)', 'rgba(100, 116, 139, 1)'],
-                borderWidth: 2,
-            }]
-        };
-    }, [results]);
-
-    // 4. Kategori dağılımı
-    const categoryData = useMemo(() => {
-        const catCount: Record<string, number> = {};
-        results.forEach(r => {
-            catCount[r.category] = (catCount[r.category] || 0) + (r.count || 0);
-        });
-
-        return {
-            labels: Object.keys(catCount),
-            datasets: [{
-                data: Object.values(catCount),
-                backgroundColor: [COLORS.emerald, COLORS.cyan, COLORS.purple, COLORS.pink],
-                borderColor: ['rgba(16, 185, 129, 1)', 'rgba(6, 182, 212, 1)', 'rgba(139, 92, 246, 1)', 'rgba(236, 72, 153, 1)'],
-                borderWidth: 2,
-            }]
-        };
-    }, [results]);
-
-    // 5. Şehir ortalama fiyat - İlk 10
-    const cityPriceData = useMemo(() => {
-        const cityPrices: Record<string, number[]> = {};
-        priceData.forEach(p => {
-            if (!cityPrices[p.city]) cityPrices[p.city] = [];
-            cityPrices[p.city].push(p.price);
-        });
-
-        const avgPrices = Object.entries(cityPrices)
-            .map(([city, prices]) => ({
-                city,
-                avg: prices.reduce((a, b) => a + b, 0) / prices.length
-            }))
-            .sort((a, b) => b.avg - a.avg)
-            .slice(0, 10);
-
-        return {
-            labels: avgPrices.map(p => p.city),
-            datasets: [{
-                label: 'Ortalama Fiyat (₺)',
-                data: avgPrices.map(p => Math.round(p.avg)),
-                backgroundColor: COLORS.emeraldBg,
-                borderColor: COLORS.emerald,
-                borderWidth: 2,
-            }]
+            cityPriceData: {
+                labels: cities.map(({ city }) => city),
+                datasets: [{
+                    label: 'Ortalama Fiyat (₺)',
+                    data: cities.map(({ avg_price }) => Math.round(avg_price)),
+                    backgroundColor: COLORS.emeraldBg,
+                    borderColor: COLORS.emerald,
+                    borderWidth: 2,
+                }],
+            },
+            priceHistogramData: {
+                labels: bins.map(({ min, max }) => formatPrice(min) + ' - ' + formatPrice(max)),
+                datasets: [{
+                    label: 'İlan Sayısı',
+                    data: bins.map(({ count }) => count),
+                    backgroundColor: COLORS.purpleBg,
+                    borderColor: COLORS.purple,
+                    borderWidth: 2,
+                }],
+            },
+            platformPriceData: {
+                labels: platforms.map(({ platform }) => platform),
+                datasets: [{
+                    label: 'Ortalama Fiyat (₺)',
+                    data: platforms.map(({ avg_price }) => Math.round(avg_price)),
+                    backgroundColor: [COLORS.purple, COLORS.blue, COLORS.emerald],
+                    borderColor: ['rgba(139, 92, 246, 1)', 'rgba(59, 130, 246, 1)', 'rgba(16, 185, 129, 1)'],
+                    borderWidth: 2,
+                }],
+            },
         };
     }, [priceData]);
-
-    // 6. Fiyat histogramı - Anlamlı dağılım için kantil tabanlı aralıklar
-    const priceHistogramData = useMemo(() => {
-        if (priceData.length === 0) {
-            return { labels: [], datasets: [{ label: 'İlan Sayısı', data: [], backgroundColor: COLORS.blue }] };
-        }
-
-        const prices = priceData.map(p => p.price).sort((a, b) => a - b);
-        const n = prices.length;
-
-        // Fiyat değerine göre dinamik formatlama
-        const formatPrice = (price: number): string => {
-            if (price >= 1000000) {
-                return `${(price / 1000000).toFixed(1)}M`;
-            } else if (price >= 1000) {
-                return `${(price / 1000).toFixed(0)}K`;
-            } else {
-                return `${price.toFixed(0)}`;
-            }
-        };
-
-        // Kantil kenarlarını hesapla (10 aralık = 9 kesim noktası)
-        const numBins = 10;
-        const edges: number[] = [prices[0]]; // Start with min
-
-        for (let i = 1; i < numBins; i++) {
-            const idx = Math.floor((i / numBins) * n);
-            edges.push(prices[idx]);
-        }
-        edges.push(prices[n - 1]); // End with max
-
-        // Tekrar eden kenarları kaldır
-        const uniqueEdges: number[] = [edges[0]];
-        for (let i = 1; i < edges.length; i++) {
-            if (edges[i] > uniqueEdges[uniqueEdges.length - 1]) {
-                uniqueEdges.push(edges[i]);
-            }
-        }
-
-        // Etiketler oluştur ve her aralıktaki öğeleri say
-        const bins: number[] = [];
-        const labels: string[] = [];
-
-        for (let i = 0; i < uniqueEdges.length - 1; i++) {
-            const low = uniqueEdges[i];
-            const high = uniqueEdges[i + 1];
-            labels.push(`${formatPrice(low)} - ${formatPrice(high)}`);
-
-            // Count items in this range
-            let count = 0;
-            if (i === uniqueEdges.length - 2) {
-                // Son aralık üst sınırı da içerir
-                count = prices.filter(p => p >= low && p <= high).length;
-            } else {
-                count = prices.filter(p => p >= low && p < high).length;
-            }
-            bins.push(count);
-        }
-
-        return {
-            labels,
-            datasets: [{
-                label: 'İlan Sayısı',
-                data: bins,
-                backgroundColor: COLORS.purpleBg,
-                borderColor: COLORS.purple,
-                borderWidth: 2,
-            }]
-        };
-    }, [priceData]);
-
-    // 7. Platform fiyat karşılaştırması
-    const platformPriceData = useMemo(() => {
-        const platformPrices: Record<string, number[]> = {};
-        priceData.forEach(p => {
-            if (!platformPrices[p.platform]) platformPrices[p.platform] = [];
-            platformPrices[p.platform].push(p.price);
-        });
-
-        const platforms = Object.keys(platformPrices);
-        const avgPrices = platforms.map(platform => {
-            const prices = platformPrices[platform];
-            return Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-        });
-
-        return {
-            labels: platforms,
-            datasets: [{
-                label: 'Ortalama Fiyat (₺)',
-                data: avgPrices,
-                backgroundColor: [COLORS.purple, COLORS.blue, COLORS.emerald],
-                borderColor: ['rgba(139, 92, 246, 1)', 'rgba(59, 130, 246, 1)', 'rgba(16, 185, 129, 1)'],
-                borderWidth: 2,
-            }]
-        };
-    }, [priceData]);
-
-    // 8. Tarama geçmişi (tarihe göre)
-    const scrapingHistoryData = useMemo(() => {
-        const dateCount: Record<string, number> = {};
-        results.forEach(r => {
-            if (r.date) {
-                const datePart = r.date.split(' ')[0]; // Sadece tarih kısmını al
-                dateCount[datePart] = (dateCount[datePart] || 0) + (r.count || 0);
-            }
-        });
-
-        const sorted = Object.entries(dateCount)
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .slice(-10); // Last 10 dates
-
-        return {
-            labels: sorted.map(([date]) => date),
-            datasets: [{
-                label: 'Toplam İlan',
-                data: sorted.map(([, count]) => count),
-                fill: true,
-                backgroundColor: COLORS.blueBg,
-                borderColor: COLORS.blue,
-                borderWidth: 2,
-                tension: 0.4,
-            }]
-        };
-    }, [results]);
 
     // Pasta grafik seçenekleri
     const pieOptions = {
@@ -472,7 +323,7 @@ export default function ResultsChartsInner({ results, priceData, categoryFilter,
         scrollToIndex(Math.min(totalSlides - 1, activeIndex + 1));
     }, [activeIndex, totalSlides, scrollToIndex]);
 
-    if (results.length === 0) {
+    if (overview.cities.length === 0) {
         return (
             <div className="text-center py-20 text-gray-400">
                 <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
