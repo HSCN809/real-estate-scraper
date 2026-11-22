@@ -21,9 +21,6 @@ def save_listings_to_db(
     try:
         from database import crud
 
-        new_count = 0
-        updated_count = 0
-        unchanged_count = 0
         records_to_save = listings
 
         if platform == "hepsiemlak":
@@ -56,22 +53,15 @@ def save_listings_to_db(
 
             records_to_save = filtered_records
 
-        for data in records_to_save:
-            _listing, status = crud.upsert_listing(
-                db,
-                data=data,
-                platform=platform,
-                kategori=kategori,
-                ilan_tipi=ilan_tipi,
-                alt_kategori=alt_kategori,
-                scrape_session_id=scrape_session_id,
-            )
-            if status == "created":
-                new_count += 1
-            elif status == "updated":
-                updated_count += 1
-            elif status == "unchanged":
-                unchanged_count += 1
+        new_count, updated_count, unchanged_count = crud.upsert_listings(
+            db,
+            records_to_save,
+            platform=platform,
+            kategori=kategori,
+            ilan_tipi=ilan_tipi,
+            alt_kategori=alt_kategori,
+            scrape_session_id=scrape_session_id,
+        )
 
         db.commit()
         if log_db_save:

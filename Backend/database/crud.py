@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from datetime import datetime
 from typing import Any, cast
 
@@ -12,7 +13,7 @@ from core.task_status import (
     SCRAPE_SESSION_STATUS_VALUES,
     normalize_scrape_session_status,
 )
-from sqlalchemy import func
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from utils.timezone import format_istanbul, latest_datetime, now_utc_naive
@@ -157,26 +158,16 @@ def parse_price(price_str: str) -> float | None:
         return None
 
 
-def create_listing(
-    db: Session,
-    data: dict[str, Any],
-    platform: str,
-    kategori: str,
-    ilan_tipi: str,
-    alt_kategori: str | None = None,
-    scrape_session_id: int | None = None,
-) -> tuple[Listing | None, bool]:
-    """Yeni ilan olustur, (ilan, yeni_mi) dondur."""
-    # Tekrar kontrolü için ilan_url al
-    ilan_url = data.get("ilan_linki") or data.get("ilan_url")
+_LocationKey = tuple[str, str | None, str | None]
+_LISTING_BATCH_SIZE = 500
+_LOCATION_BATCH_SIZE = 250
 
-    # Tekrar kontrolü
-    if ilan_url:
-        existing = db.query(Listing).filter(Listing.ilan_url == ilan_url).first()
-        if existing:
-            return (None, False)  # Tekrar
 
-    # Lokasyon al veya olustur
+def _listing_url(data: dict[str, Any]) -> str | None:
+    return data.get("ilan_linki") or data.get("ilan_url")
+
+
+def _listing_location_key(data: dict[str, Any]) -> _LocationKey:
     il = data.get("il")
     ilce = data.get("ilce")
     mahalle = data.get("mahalle")
@@ -196,11 +187,22 @@ def create_listing(
                 ilce = parts[1]
             if not mahalle and len(parts) > 2:
                 mahalle = parts[2]
-    if not il:
-        il = "Belirtilmemiş"
+    return (
+        (il or "").strip() or "Belirtilmemiş",
+        (ilce or "").strip() or None,
+        (mahalle or "").strip() or None,
+    )
 
-    location = get_or_create_location(db, il, ilce, mahalle)
 
+def _new_listing(
+    data: dict[str, Any],
+    location: Location,
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: str | None,
+    scrape_session_id: int | None,
+) -> Listing:
     # Fiyati ayristir
     fiyat_text = data.get("fiyat", "")
     fiyat = parse_price(fiyat_text)
@@ -247,7 +249,7 @@ def create_listing(
     content_hash = compute_content_hash(data)
 
     # Ilan olustur
-    listing = Listing(
+    return Listing(
         baslik=data.get("baslik", "Başlık Yok"),
         fiyat=fiyat,
         fiyat_text=str(fiyat_text) if fiyat_text else None,
@@ -255,8 +257,8 @@ def create_listing(
         kategori=kategori,
         ilan_tipi=ilan_tipi,
         alt_kategori=alt_kategori,
-        location_id=location.id,
-        ilan_url=ilan_url,
+        location=location,
+        ilan_url=_listing_url(data),
         ilan_tarihi=ilan_tarihi,
         emlak_ofisi=data.get("emlak_ofisi"),
         resim_url=data.get("resim_url"),
@@ -265,17 +267,8 @@ def create_listing(
         content_hash=content_hash,
     )
 
-    db.add(listing)
 
-    try:
-        db.flush()
-        return (listing, True)
-    except IntegrityError:
-        db.rollback()
-        return (None, False)  # Tekrar URL
-
-
-def upsert_listing(
+def create_listing(
     db: Session,
     data: dict[str, Any],
     platform: str,
@@ -283,32 +276,31 @@ def upsert_listing(
     ilan_tipi: str,
     alt_kategori: str | None = None,
     scrape_session_id: int | None = None,
-) -> tuple[Listing | None, str]:
-    """İlan upsert - yeniyse ekle, varsa güncelle"""
-    # Tekrar kontrolü için ilan_url al
-    ilan_url = data.get("ilan_linki") or data.get("ilan_url")
+) -> tuple[Listing | None, bool]:
+    """Yeni ilan olustur, (ilan, yeni_mi) dondur."""
+    ilan_url = _listing_url(data)
+    if ilan_url and db.query(Listing).filter(Listing.ilan_url == ilan_url).first():
+        return None, False
 
-    if not ilan_url:
-        # URL yoksa tekrar kontrolu yapilamaz - dogrudan olustur
-        listing, is_new = create_listing(
-            db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id
-        )
-        if listing:
-            cast(Any, listing).content_hash = compute_content_hash(data)
-        return (listing, "created" if is_new else "error")
+    location = get_or_create_location(db, *_listing_location_key(data))
+    listing = _new_listing(
+        data, location, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id
+    )
+    db.add(listing)
+    try:
+        db.flush()
+        return listing, True
+    except IntegrityError:
+        db.rollback()
+        return None, False
 
-    # Mevcut ilan kontrolü
-    existing = cast(Any, db.query(Listing).filter(Listing.ilan_url == ilan_url).first())
 
-    if not existing:
-        # Yeni ilan - olustur
-        listing, is_new = create_listing(
-            db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id
-        )
-        if listing:
-            cast(Any, listing).content_hash = compute_content_hash(data)
-        return (listing, "created" if is_new else "error")
-
+def _update_listing(
+    db: Session,
+    existing: Listing,
+    data: dict[str, Any],
+    scrape_session_id: int | None,
+) -> str:
     # Mevcut ilan bulundu - yeni hash hesapla
     new_content_hash = compute_content_hash(data)
     new_fiyat_text = data.get("fiyat", "")
@@ -326,7 +318,7 @@ def upsert_listing(
     # Degisiklik yoksa guncellemeyi atla
     if not price_changed and not content_changed:
         existing.scrape_session_id = scrape_session_id
-        return (existing, "unchanged")
+        return "unchanged"
 
     # Uygunsa fiyat degisikligini kaydet
     if price_changed and old_price is not None and new_fiyat is not None:
@@ -334,7 +326,7 @@ def upsert_listing(
         price_change_percent = (price_change / old_price) * 100 if old_price > 0 else 0
 
         price_record = PriceHistory(
-            listing_id=existing.id,
+            listing=existing,
             old_price=old_price,
             new_price=new_fiyat,
             price_change=price_change,
@@ -389,8 +381,131 @@ def upsert_listing(
     existing.updated_at = datetime.utcnow()
     existing.scrape_session_id = scrape_session_id
 
+    return "updated"
+
+
+def upsert_listing(
+    db: Session,
+    data: dict[str, Any],
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: str | None = None,
+    scrape_session_id: int | None = None,
+) -> tuple[Listing | None, str]:
+    """İlan upsert - yeniyse ekle, varsa güncelle."""
+    url = _listing_url(data)
+    if url:
+        existing = db.query(Listing).filter(Listing.ilan_url == url).first()
+        if existing is not None:
+            status = _update_listing(db, existing, data, scrape_session_id)
+            if status == "updated":
+                db.flush()
+            return existing, status
+
+    listing, is_new = create_listing(
+        db, data, platform, kategori, ilan_tipi, alt_kategori, scrape_session_id
+    )
+    return listing, "created" if is_new else "error"
+
+
+def _load_listing_locations(
+    db: Session, location_keys: list[_LocationKey]
+) -> dict[_LocationKey, Location]:
+    locations: dict[_LocationKey, Location] = {}
+    # Treat legacy empty strings and NULL as the same missing district or neighborhood.
+    location_tuple = tuple_(
+        Location.il,
+        func.coalesce(Location.ilce, ""),
+        func.coalesce(Location.mahalle, ""),
+    )
+    for start in range(0, len(location_keys), _LOCATION_BATCH_SIZE):
+        keys = [
+            (city, district or "", neighborhood or "")
+            for city, district, neighborhood in location_keys[
+                start : start + _LOCATION_BATCH_SIZE
+            ]
+        ]
+        query = select(Location).where(location_tuple.in_(keys)).order_by(Location.id)
+        for location in db.scalars(query):
+            locations.setdefault(
+                (location.il, location.ilce or None, location.mahalle or None), location
+            )
+    return locations
+
+
+def upsert_listings(
+    db: Session,
+    listings: list[dict],
+    platform: str,
+    kategori: str,
+    ilan_tipi: str,
+    alt_kategori: str | None = None,
+    scrape_session_id: int | None = None,
+) -> tuple[int, int, int]:
+    """Upsert in input order and leave the transaction to the caller."""
+    if not listings:
+        return 0, 0, 0
+
     db.flush()
-    return (existing, "updated")
+    counts: Counter[str] = Counter()
+    for start in range(0, len(listings), _LISTING_BATCH_SIZE):
+        batch = listings[start : start + _LISTING_BATCH_SIZE]
+        urls = [_listing_url(data) for data in batch]
+        unique_urls = {url for url in urls if url}
+        existing: dict[str, Listing] = {}
+        if unique_urls:
+            # Serialize updates to existing prices so history uses the current value.
+            query = (
+                select(Listing)
+                .where(Listing.ilan_url.in_(unique_urls))
+                .order_by(Listing.ilan_url)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            existing = {listing.ilan_url: listing for listing in db.scalars(query)}
+
+        # Only the first occurrence of a new URL decides its location.
+        seen_urls = set(existing)
+        keys_by_index = {}
+        for index, (data, url) in enumerate(zip(batch, urls)):
+            if not url or url not in seen_urls:
+                keys_by_index[index] = _listing_location_key(data)
+                if url:
+                    seen_urls.add(url)
+        locations = _load_listing_locations(
+            db, list(dict.fromkeys(keys_by_index.values()))
+        )
+
+        for index, (data, url) in enumerate(zip(batch, urls)):
+            listing = existing.get(url) if url else None
+            if listing is not None:
+                counts[_update_listing(db, listing, data, scrape_session_id)] += 1
+                continue
+
+            key = keys_by_index[index]
+            location = locations.get(key)
+            if location is None:
+                city, district, neighborhood = key
+                location = Location(il=city, ilce=district, mahalle=neighborhood)
+                locations[key] = location
+            listing = _new_listing(
+                data,
+                location,
+                platform,
+                kategori,
+                ilan_tipi,
+                alt_kategori,
+                scrape_session_id,
+            )
+            db.add(listing)
+            if url:
+                existing[url] = listing
+            counts["created"] += 1
+
+        db.flush()
+
+    return counts["created"], counts["updated"], counts["unchanged"]
 
 
 def get_listings(

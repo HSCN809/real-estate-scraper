@@ -27,9 +27,6 @@ def save_listings_to_db(
         from database import crud
 
         records_to_save = listings
-        new_count = 0
-        updated_count = 0
-        unchanged_count = 0
 
         if platform == "emlakjet":
             expected_primary_slugs = get_expected_primary_slugs(ilan_tipi, kategori)
@@ -84,22 +81,15 @@ def save_listings_to_db(
             else:
                 records_to_save = filtered_records
 
-        for data in records_to_save:
-            _, status = crud.upsert_listing(
-                db,
-                data=data,
-                platform=platform,
-                kategori=kategori,
-                ilan_tipi=ilan_tipi,
-                alt_kategori=alt_kategori,
-                scrape_session_id=scrape_session_id,
-            )
-            if status == "created":
-                new_count += 1
-            elif status == "updated":
-                updated_count += 1
-            elif status == "unchanged":
-                unchanged_count += 1
+        new_count, updated_count, unchanged_count = crud.upsert_listings(
+            db,
+            records_to_save,
+            platform=platform,
+            kategori=kategori,
+            ilan_tipi=ilan_tipi,
+            alt_kategori=alt_kategori,
+            scrape_session_id=scrape_session_id,
+        )
 
         db.commit()
         if log_db_save:
