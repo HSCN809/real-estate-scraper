@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from anyio import Lock
+from anyio.to_process import run_sync as run_in_process
 from auth.dependencies import get_current_user
 from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
@@ -13,8 +15,9 @@ from core.task_status import get_task_status_store, is_final_task_status
 from database import crud
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
 
 from api.schemas import (
@@ -670,18 +673,18 @@ async def get_districts(city: str, db: Session = Depends(get_db)):
     return {"city": city, "districts": districts}
 
 
-@router.post("/export/excel")
-async def export_to_excel(
-    platform: str | None = None,
-    kategori: str | None = None,
-    ilan_tipi: str | None = None,
-    city: str | None = None,
-    district: str | None = None,
-    db: Session = Depends(get_db),
-):
-    """Filtrelere göre verileri Excel'e aktar ve indir"""
-    import pandas as pd
-    from utils.timezone import format_istanbul, now_istanbul
+_excel_export_lock = Lock()
+
+
+def _get_excel_rows(
+    db: Session,
+    platform: str | None,
+    kategori: str | None,
+    ilan_tipi: str | None,
+    city: str | None,
+    district: str | None,
+) -> list[dict[str, Any]]:
+    from utils.timezone import format_istanbul
 
     # Ilanlari al (disa aktarim icin maks 10000)
     listings, _total = crud.get_listings(
@@ -713,9 +716,7 @@ async def export_to_excel(
             "Mahalle": listing.location.mahalle if listing.location else "",
             "İlan URL": listing.ilan_url,
             "Emlak Ofisi": listing.emlak_ofisi,
-            "Tarih": format_istanbul(listing.created_at)
-            if listing.created_at
-            else "",
+            "Tarih": format_istanbul(listing.created_at) if listing.created_at else "",
         }
         # Add details
         if listing.details:
@@ -723,20 +724,41 @@ async def export_to_excel(
                 row[k] = v
         data.append(row)
 
-    df = pd.DataFrame(data)
+    return data
 
-    # Bellekte olustur, diske yazmadan stream olarak gonder
-    from fastapi.responses import StreamingResponse
+
+def _build_excel_workbook(rows: list[dict[str, Any]]) -> bytes:
+    import pandas as pd
 
     buffer = io.BytesIO()
-    df.to_excel(buffer, index=False, engine="openpyxl")
-    buffer.seek(0)
+    pd.DataFrame(rows).to_excel(buffer, index=False, engine="openpyxl")
+    return buffer.getvalue()
+
+
+@router.post("/export/excel")
+async def export_to_excel(
+    platform: str | None = None,
+    kategori: str | None = None,
+    ilan_tipi: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Filtrelere göre verileri Excel'e aktar ve indir"""
+    from utils.timezone import now_istanbul
+
+    # Bound concurrent exports before loading rows and keep XLSX CPU work off the API process.
+    async with _excel_export_lock:
+        rows = await run_in_threadpool(
+            _get_excel_rows, db, platform, kategori, ilan_tipi, city, district
+        )
+        content = await run_in_process(_build_excel_workbook, rows)
 
     timestamp = now_istanbul().strftime("%Y%m%d_%H%M%S")
     filename = f"export_{timestamp}.xlsx"
 
-    return StreamingResponse(
-        buffer,
+    return Response(
+        content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

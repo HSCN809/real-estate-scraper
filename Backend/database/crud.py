@@ -14,7 +14,7 @@ from core.task_status import (
 )
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from utils.timezone import format_istanbul, latest_datetime, now_utc_naive, to_iso
 
 from .models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
@@ -435,7 +435,11 @@ def get_listings(
     # Sayfalama
     offset = (page - 1) * limit
     listings = (
-        query.order_by(Listing.created_at.desc()).offset(offset).limit(limit).all()
+        query.options(selectinload(Listing.location))
+        .order_by(Listing.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
     )
 
     return (listings, total)
