@@ -58,9 +58,7 @@ def _clear_auth_cookie(response: Response):
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-async def register(
-    user_data: UserCreate, response: Response, db: Session = Depends(get_db)
-):
+def register(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
     """Yeni kullanıcı kaydı"""
     # Kullanıcı adı var mı kontrol et
     existing = (
@@ -105,9 +103,7 @@ async def register(
 
 
 @router.post("/login", response_model=UserResponse)
-async def login(
-    credentials: UserLogin, response: Response, db: Session = Depends(get_db)
-):
+def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Kullanıcı doğrulama ve cookie ile token döndür"""
     # Kullanıcı adı veya e-posta ile kullanıcıyı bul
     user = (
@@ -155,7 +151,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 
 @router.put("/me", response_model=UserResponse)
-async def update_profile(
+def update_profile(
     update_data: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -194,7 +190,7 @@ async def update_profile(
 
 
 @router.post("/change-password")
-async def change_password(
+def change_password(
     password_data: ChangePasswordRequest,
     response: Response,
     current_user: User = Depends(get_current_user),

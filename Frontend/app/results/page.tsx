@@ -29,7 +29,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { API_BASE_URL, exportToExcel } from '@/lib/api';
-import { usePriceSummary, useResults, useResultsFilters, useResultsOverview, useStats } from '@/lib/api-hooks';
+import { usePriceSummary, useResults, useResultsFilters, useResultsOverview } from '@/lib/api-hooks';
 import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
 import { formatAppDateTime, formatIstanbulDate } from '@/lib/datetime';
@@ -115,16 +115,16 @@ export default function ResultsPage() {
         subtype: subtypeFilter,
     };
     const tableView = viewMode === 'table';
+    const hasOverviewFilters = Object.values(filters).some(value => value !== 'all');
     const showPrices = viewMode === 'charts' && categoryFilter !== 'all' && listingTypeFilter !== 'all';
     const pageQuery = useResults(
         { ...filters, city: cityFilter, district: districtFilter, page: requestedPage, limit: itemsPerPage },
         tableView,
     );
-    const overviewQuery = useResultsOverview(filters, !tableView);
+    const overviewQuery = useResultsOverview(filters, !tableView && hasOverviewFilters);
     const priceQuery = usePriceSummary(filters, showPrices);
-    const facetsQuery = useResultsFilters();
-    const statsQuery = useStats();
-    const activeResults = tableView ? pageQuery : overviewQuery;
+    const facetsQuery = useResultsFilters(!tableView);
+    const activeResults = tableView ? pageQuery : hasOverviewFilters ? overviewQuery : facetsQuery;
     const loading = activeResults.isPending || facetsQuery.isPending || (showPrices && priceQuery.isPending);
     const error = activeResults.isError || facetsQuery.isError || (showPrices && priceQuery.isError)
         ? 'Veriler alınırken bir hata oluştu'
@@ -267,11 +267,11 @@ export default function ResultsPage() {
     }, []);
 
     const resultPage = pageQuery.data;
-    const overview = overviewQuery.data;
     const facets = facetsQuery.data;
+    const overview = hasOverviewFilters ? overviewQuery.data : facets?.overview;
     const totalFiles = facets?.total_groups ?? 0;
     const totalRecords = facets?.total_listings ?? 0;
-    const latestDate = statsQuery.data?.last_scrape || '-';
+    const latestDate = facets?.last_scrape || '-';
     const platforms = facets?.platforms ?? [];
     const categories = facets?.categories ?? [];
     const listingTypes = facets?.listing_types ?? [];

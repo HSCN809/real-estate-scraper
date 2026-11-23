@@ -3,11 +3,12 @@
 import os
 import sys
 from datetime import datetime
+from threading import get_ident
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -61,6 +62,17 @@ def client():
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_current_user] = lambda: None
+    app.state.sql_queries = []
+
+    @app.middleware("http")
+    async def record_loop_thread(request, call_next):
+        app.state.loop_thread = get_ident()
+        return await call_next(request)
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def record_sql(_conn, _cursor, statement, _params, _context, _many):
+        app.state.sql_queries.append((statement, get_ident()))
+
     try:
         with TestClient(app) as test_client:
             yield test_client
@@ -113,3 +125,34 @@ def test_prices_return_aggregates_and_cover_every_valid_price(client):
     empty = client.get("/api/v1/analytics/prices?city=Yokşehir").json()
     assert empty["summary"]["total_count"] == 0
     assert empty["histogram"] == []
+
+
+def test_result_filters_return_overview_from_the_same_group_query(client):
+    overview = client.get("/api/v1/results/overview").json()
+    last_scrape = client.get("/api/v1/stats").json()["last_scrape"]
+    client.app.state.sql_queries.clear()
+
+    response = client.get("/api/v1/results/filters?include_overview=true")
+
+    assert response.status_code == 200
+    assert response.json()["overview"] == overview
+    assert response.json()["last_scrape"] == last_scrape
+    statements = [query for query, _thread in client.app.state.sql_queries]
+    assert len(statements) == 2
+    assert sum("GROUP BY" in query for query in statements) == 1
+
+    filters_only = client.get("/api/v1/results/filters").json()
+    assert "overview" not in filters_only
+    assert filters_only["last_scrape"] == last_scrape
+
+
+def test_listing_statistics_queries_run_off_the_event_loop(client):
+    response = client.get("/api/v1/analytics/stats")
+
+    assert response.status_code == 200
+    assert response.json()["total_listings"] == 5
+    assert client.app.state.sql_queries
+    assert all(
+        thread != client.app.state.loop_thread
+        for _query, thread in client.app.state.sql_queries
+    )

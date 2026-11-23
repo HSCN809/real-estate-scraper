@@ -69,8 +69,9 @@ export function getResults(params: ResultsPageParams = {}, signal?: AbortSignal)
     return getResultsData<ResultsPageResponse>('/results', params, signal);
 }
 
-export function getResultsFilters(signal?: AbortSignal) {
-    return getResultsData<ResultsFacets>('/results/filters', {}, signal);
+export function getResultsFilters(signal?: AbortSignal, includeOverview = false) {
+    const path = includeOverview ? '/results/filters?include_overview=true' : '/results/filters';
+    return getResultsData<ResultsFacets>(path, {}, signal);
 }
 
 export function getResultsOverview(filters: ResultsFilters = {}, signal?: AbortSignal) {

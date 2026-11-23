@@ -171,14 +171,51 @@ def get_results_page(db: Session, filters: ResultsPageQuery) -> dict[str, Any]:
     }
 
 
-def get_results_filters(db: Session) -> dict[str, Any]:
+class _Overview:
+    def __init__(self) -> None:
+        self.cities: Counter[str] = Counter()
+        self.platforms: Counter[str] = Counter()
+        self.categories: Counter[str] = Counter()
+        self.listing_types: Counter[str] = Counter()
+        self.history: Counter[str] = Counter()
+
+    def add(self, row, city: str) -> None:
+        self.cities[city] += row.count
+        self.platforms[_PLATFORM.get(row.platform, row.platform)] += row.count
+        self.categories[_CATEGORY.get(row.kategori, row.kategori)] += row.count
+        self.listing_types[_LISTING_TYPE.get(row.ilan_tipi, row.ilan_tipi)] += row.count
+        if row.last_date:
+            local_day = to_istanbul(row.last_date).date().isoformat()
+            self.history[local_day] += row.count
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cities": [
+                {"city": name, "count": count}
+                for name, count in self.cities.most_common()
+            ],
+            "platforms": dict(self.platforms),
+            "categories": dict(self.categories),
+            "listing_types": dict(self.listing_types),
+            "history": [
+                {"date": day, "count": self.history[day]}
+                for day in sorted(self.history)[-10:]
+            ],
+        }
+
+
+def get_results_filters(
+    db: Session, *, include_overview: bool = False
+) -> dict[str, Any]:
     locations: dict[str, set[str]] = defaultdict(set)
     platforms, categories, listing_types, subtypes = set(), set(), set(), set()
     total_groups = total_listings = 0
+    overview = _Overview() if include_overview else None
     for row in db.execute(_groups()):
         total_groups += 1
         total_listings += row.count
-        districts = locations[_location_name(row.il) or _UNKNOWN]
+        city = _location_name(row.il) or _UNKNOWN
+        districts = locations[city]
         district = _location_name(row.ilce)
         if district:
             districts.add(district)
@@ -187,7 +224,9 @@ def get_results_filters(db: Session) -> dict[str, Any]:
         listing_types.add(_LISTING_TYPE.get(row.ilan_tipi, row.ilan_tipi))
         if row.alt_kategori:
             subtypes.add(row.alt_kategori.replace("_", " ").title())
-    return {
+        if overview is not None:
+            overview.add(row, city)
+    metadata = {
         "platforms": sorted(platforms),
         "categories": sorted(categories),
         "listing_types": sorted(listing_types),
@@ -196,33 +235,16 @@ def get_results_filters(db: Session) -> dict[str, Any]:
         "total_groups": total_groups,
         "total_listings": total_listings,
     }
+    if overview is not None:
+        metadata["overview"] = overview.to_dict()
+    return metadata
 
 
 def get_results_overview(db: Session, filters: ResultsFilters) -> dict[str, Any]:
-    cities: Counter[str] = Counter()
-    platforms: Counter[str] = Counter()
-    categories: Counter[str] = Counter()
-    listing_types: Counter[str] = Counter()
-    history: Counter[str] = Counter()
+    overview = _Overview()
     for row in db.execute(_groups(_conditions(db, filters))):
-        cities[_location_name(row.il) or _UNKNOWN] += row.count
-        platforms[_PLATFORM.get(row.platform, row.platform)] += row.count
-        categories[_CATEGORY.get(row.kategori, row.kategori)] += row.count
-        listing_types[_LISTING_TYPE.get(row.ilan_tipi, row.ilan_tipi)] += row.count
-        if row.last_date:
-            local_day = to_istanbul(row.last_date).date().isoformat()
-            history[local_day] += row.count
-    return {
-        "cities": [
-            {"city": name, "count": count} for name, count in cities.most_common()
-        ],
-        "platforms": dict(platforms),
-        "categories": dict(categories),
-        "listing_types": dict(listing_types),
-        "history": [
-            {"date": date, "count": history[date]} for date in sorted(history)[-10:]
-        ],
-    }
+        overview.add(row, _location_name(row.il) or _UNKNOWN)
+    return overview.to_dict()
 
 
 def _price_histogram(db: Session, prices, count: int) -> list[dict[str, Any]]:

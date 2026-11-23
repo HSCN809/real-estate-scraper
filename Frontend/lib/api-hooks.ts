@@ -40,10 +40,10 @@ export function useResults(params: ResultsPageParams = {}, enabled = true) {
     });
 }
 
-export function useResultsFilters() {
+export function useResultsFilters(includeOverview: boolean) {
     return useQuery({
-        queryKey: ['results', 'filters'],
-        queryFn: ({ signal }) => getResultsFilters(signal),
+        queryKey: ['results', 'filters', includeOverview],
+        queryFn: ({ signal }) => getResultsFilters(signal, includeOverview),
         staleTime: 0,
     });
 }

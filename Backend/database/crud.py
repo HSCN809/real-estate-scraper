@@ -13,7 +13,7 @@ from core.task_status import (
     SCRAPE_SESSION_STATUS_VALUES,
     normalize_scrape_session_status,
 )
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, select, true, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from utils.timezone import format_istanbul, latest_datetime, now_utc_naive
@@ -847,6 +847,24 @@ def get_city_analytics(
     }
 
 
+def get_last_scrape(db: Session) -> str:
+    latest_listing = select(func.max(Listing.created_at).label("created_at")).subquery()
+    latest_session = (
+        select(ScrapeSession.started_at, ScrapeSession.completed_at)
+        .order_by(ScrapeSession.started_at.desc())
+        .limit(1)
+        .subquery()
+    )
+    dates = db.execute(
+        select(
+            latest_listing.c.created_at,
+            latest_session.c.started_at,
+            latest_session.c.completed_at,
+        ).select_from(latest_listing.outerjoin(latest_session, true()))
+    ).one()
+    return format_istanbul(latest_datetime(*dates))
+
+
 def get_stats_summary(db: Session) -> dict[str, Any]:
     """Kontrol paneli için genel istatistikleri getir"""
     from datetime import timedelta
@@ -865,23 +883,12 @@ def get_stats_summary(db: Session) -> dict[str, Any]:
         db.query(ScrapeSession).filter(ScrapeSession.started_at >= month_ago).count()
     )
 
-    last_listing_at = db.query(func.max(Listing.created_at)).scalar()
-    last_session = (
-        db.query(ScrapeSession).order_by(ScrapeSession.started_at.desc()).first()
-    )
-    last_dt = latest_datetime(
-        last_listing_at,
-        last_session.started_at if last_session else None,
-        last_session.completed_at if last_session else None,
-    )
-    last_scrape = format_istanbul(last_dt)
-
     return {
         "total_scrapes": total_sessions,
         "total_listings": total_listings,
         "this_week": this_week,
         "this_month": this_month,
-        "last_scrape": last_scrape,
+        "last_scrape": get_last_scrape(db),
     }
 
 

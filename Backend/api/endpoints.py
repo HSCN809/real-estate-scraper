@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from threading import Lock as ThreadLock
 from typing import Annotated, Any
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from database import crud, results
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
@@ -34,6 +36,7 @@ DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
 # İlçe GeoJSON verileri için bellek içi önbellek
 _districts_cache: dict[str, Any] = {}
 _districts_index: dict[str, Any] | None = None
+_districts_lock = ThreadLock()
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("api")
@@ -116,7 +119,7 @@ async def get_categories():
 
 
 @router.get("/config/subtypes")
-async def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
+def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak"):
     """Belirli kategori için alt tipleri JSON'dan oku"""
     if platform == "emlakjet":
         from scrapers.emlakjet.subtype_fetcher import (
@@ -141,7 +144,7 @@ async def get_subtypes(listing_type: str, category: str, platform: str = "hepsie
 
 
 @router.post("/scrape/emlakjet", response_model=ScrapeStartResponse)
-async def scrape_emlakjet(request: ScrapeRequest):
+def scrape_emlakjet(request: ScrapeRequest):
     """Celery ile EmlakJet tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
 
@@ -170,7 +173,7 @@ async def scrape_emlakjet(request: ScrapeRequest):
 
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeStartResponse)
-async def scrape_hepsiemlak(request: ScrapeRequest):
+def scrape_hepsiemlak(request: ScrapeRequest):
     """Celery ile HepsiEmlak tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
     if not request.cities:
@@ -208,7 +211,7 @@ async def scrape_hepsiemlak(request: ScrapeRequest):
 
 
 @router.get("/tasks/active", response_model=ActiveTasksResponse)
-async def get_active_tasks():
+def get_active_tasks():
     """Tüm aktif görevleri al."""
     store = _require_task_status_store()
     tasks = [TaskStatusResponse(**item) for item in store.get_active_tasks()]
@@ -216,7 +219,7 @@ async def get_active_tasks():
 
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str):
+def get_task_status(task_id: str):
     """Belirli bir scraping görevinin kanonik durumunu al."""
     store = _require_task_status_store()
     task = store.get_task(task_id)
@@ -226,7 +229,7 @@ async def get_task_status(task_id: str):
 
 
 @router.post("/tasks/{task_id}/cancel", response_model=TaskStatusResponse)
-async def cancel_task(task_id: str):
+def cancel_task(task_id: str):
     store = _require_task_status_store()
     task = store.get_task(task_id)
     if task is None:
@@ -252,7 +255,7 @@ def get_price_analytics(
 
 
 @router.get("/analytics/city/{city_name}")
-async def get_city_analytics(
+def get_city_analytics(
     city_name: str,
     platform: str | None = None,
     category: str | None = None,
@@ -302,7 +305,7 @@ async def get_city_analytics(
 
 
 @router.get("/analytics/stats")
-async def get_listing_statistics(
+def get_listing_statistics(
     platform: str | None = None,
     kategori: str | None = None,
     ilan_tipi: str | None = None,
@@ -426,7 +429,7 @@ async def get_listing_statistics(
 
 
 @router.delete("/clear-results")
-async def clear_results(db: Session = Depends(get_db)):
+def clear_results(db: Session = Depends(get_db)):
     """Veritabanindaki tum ilanlari ve outputs klasorundeki dosyalari sil"""
     import shutil
 
@@ -497,8 +500,10 @@ def get_results(
 
 
 @router.get("/results/filters")
-def get_result_filters(db: Session = Depends(get_db)):
-    return results.get_results_filters(db)
+def get_result_filters(include_overview: bool = False, db: Session = Depends(get_db)):
+    metadata = results.get_results_filters(db, include_overview=include_overview)
+    metadata["last_scrape"] = crud.get_last_scrape(db)
+    return metadata
 
 
 @router.get("/results/overview")
@@ -510,7 +515,7 @@ def get_results_overview(
 
 
 @router.get("/listings/preview")
-async def get_listings_preview(
+def get_listings_preview(
     platform: str | None = None,
     kategori: str | None = None,
     ilan_tipi: str | None = None,
@@ -536,7 +541,7 @@ async def get_listings_preview(
 
 
 @router.get("/stats")
-async def get_stats(db: Session = Depends(get_db)):
+def get_stats(db: Session = Depends(get_db)):
     """Veritabanından genel istatistikleri döndür"""
     return crud.get_stats_summary(db)
 
@@ -545,7 +550,7 @@ async def get_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/listings")
-async def get_listings(
+def get_listings(
     platform: str | None = None,
     kategori: str | None = None,
     ilan_tipi: str | None = None,
@@ -583,7 +588,7 @@ async def get_listings(
 
 
 @router.get("/listings/{listing_id}")
-async def get_listing(listing_id: int, db: Session = Depends(get_db)):
+def get_listing(listing_id: int, db: Session = Depends(get_db)):
     """Tek bir ilan detayını getir"""
     listing = crud.get_listing_by_id(db, listing_id)
     if not listing:
@@ -592,7 +597,7 @@ async def get_listing(listing_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions")
-async def get_scrape_sessions(
+def get_scrape_sessions(
     platform: str | None = None,
     status: str | None = None,
     page: int = 1,
@@ -613,14 +618,14 @@ async def get_scrape_sessions(
 
 
 @router.get("/cities")
-async def get_cities(db: Session = Depends(get_db)):
+def get_cities(db: Session = Depends(get_db)):
     """Veritabanindaki tum sehirleri listele."""
     cities = crud.get_all_cities(db)
     return {"cities": cities}
 
 
 @router.get("/cities/{city}/districts")
-async def get_districts(city: str, db: Session = Depends(get_db)):
+def get_districts(city: str, db: Session = Depends(get_db)):
     """Bir sehrin ilcelerini listele."""
     districts = crud.get_districts_by_city(db, city)
     return {"city": city, "districts": districts}
@@ -718,7 +723,7 @@ async def export_to_excel(
 
 
 @router.delete("/listings/group")
-async def delete_listing_group(
+def delete_listing_group(
     platform: str = Query(default=None),
     kategori: str = Query(default=None),
     ilan_tipi: str = Query(default=None),
@@ -791,7 +796,7 @@ async def delete_listing_group(
 
 
 @router.delete("/listings/{listing_id}")
-async def delete_listing(listing_id: int, db: Session = Depends(get_db)):
+def delete_listing(listing_id: int, db: Session = Depends(get_db)):
     """Bir ilanı sil"""
     listing = crud.get_listing_by_id(db, listing_id)
     if not listing:
@@ -859,21 +864,25 @@ def _load_district_geojson(province_name: str) -> dict[str, Any]:
 
 
 @router.get("/districts/index")
-async def get_districts_index():
+def get_districts_index():
     """Tüm illerin ilçe sayılarıyla index'ini getir"""
-    return _load_districts_index()
+    with _districts_lock:
+        return _load_districts_index()
 
 
 @router.get("/districts/{province_name}")
-async def get_district_geojson(province_name: str):
+def get_district_geojson(province_name: str):
     """Belirli bir ilin ilçe GeoJSON verisini getir"""
-    return _load_district_geojson(province_name)
+    with _districts_lock:
+        geojson = _load_district_geojson(province_name)
+    return JSONResponse(geojson)
 
 
 @router.get("/districts/info/{province_name}")
-async def get_district_info(province_name: str):
+def get_district_info(province_name: str):
     """İl için ilçe listesini ve meta verilerini getir"""
-    index = _load_districts_index()
+    with _districts_lock:
+        index = _load_districts_index()
     province_info = index.get(province_name)
 
     if not province_info:
@@ -890,12 +899,13 @@ async def get_district_info(province_name: str):
 
 
 @router.post("/districts/cache/clear")
-async def clear_districts_cache():
+def clear_districts_cache():
     """Bellek ici ilce onbelleğini temizle."""
     global _districts_cache, _districts_index
-    cache_size = len(_districts_cache)
-    _districts_cache = {}
-    _districts_index = None
+    with _districts_lock:
+        cache_size = len(_districts_cache)
+        _districts_cache = {}
+        _districts_index = None
     return {
         "status": "success",
         "message": f"Cache cleared. {cache_size} provinces removed from cache.",
@@ -903,10 +913,11 @@ async def clear_districts_cache():
 
 
 @router.get("/districts/cache/status")
-async def get_cache_status():
+def get_cache_status():
     """Onbellek durumunu getir."""
-    return {
-        "cached_provinces": list(_districts_cache.keys()),
-        "cache_size": len(_districts_cache),
-        "index_loaded": _districts_index is not None,
-    }
+    with _districts_lock:
+        return {
+            "cached_provinces": list(_districts_cache.keys()),
+            "cache_size": len(_districts_cache),
+            "index_loaded": _districts_index is not None,
+        }

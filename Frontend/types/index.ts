@@ -90,6 +90,8 @@ export interface ResultsFacets {
   locations: Record<string, string[]>;
   total_groups: number;
   total_listings: number;
+  last_scrape: string;
+  overview?: ResultsOverview;
 }
 
 export interface ResultsOverview {

@@ -11,7 +11,7 @@ from .security import decode_token, password_stamp
 COOKIE_NAME = "session_token"
 
 
-async def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     """HTTP-only cookie'den mevcut kullanıcıyı al"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
