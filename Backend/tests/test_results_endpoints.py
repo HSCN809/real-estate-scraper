@@ -90,6 +90,41 @@ def test_results_paginate_stably_across_equal_timestamps(client):
     assert client.get("/api/v1/results?limit=2&page=99").json() == second
 
 
+def test_results_pagination_counts_groups_without_a_window(client):
+    response = client.get("/api/v1/results?limit=2&page=99")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert (payload["page"], payload["pages"], payload["total"]) == (2, 2, 4)
+    bursa = next(row for row in payload["items"] if row["city"] == "Bursa")
+    assert bursa["district"] is None and bursa["subtype"] is None
+    assert (bursa["count"], bursa["avg_price"]) == (1, 600)
+
+    statements = [
+        " ".join(statement.upper().split())
+        for statement, _thread in client.app.state.sql_queries
+    ]
+    assert len(statements) == 1
+    grouped, limited = statements[0].split(" LIMIT ", 1)
+    assert grouped.count(" GROUP BY ") == 1
+    assert "COUNT(*) AS TOTAL" in grouped
+    assert " GROUP BY " in limited
+    assert " OVER " not in statements[0]
+
+
+def test_results_keep_empty_page_metadata_with_filters(client):
+    response = client.get("/api/v1/results?category=devremulk&page=99&limit=2")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "page": 1,
+        "limit": 2,
+        "pages": 0,
+        "total": 0,
+    }
+
+
 def test_result_filters_and_overview_cover_more_than_the_current_page(client):
     filters = [("city", "Ankara"), ("city", "Bursa"), ("subtype", "Bahce Kati")]
     page = client.get("/api/v1/results", params=[*filters, ("limit", 1)]).json()

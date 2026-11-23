@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, select, true
 from sqlalchemy.orm import Session
 from utils.timezone import format_istanbul, to_iso, to_istanbul
 
@@ -143,28 +143,78 @@ def _result_item(row) -> dict[str, Any]:
     }
 
 
+def _result_order(grouped_rows):
+    return (
+        grouped_rows.c.last_date.desc().nulls_last(),
+        *(grouped_rows.c[column.key] for column in _GROUP),
+    )
+
+
 def get_results_page(db: Session, filters: ResultsPageQuery) -> dict[str, Any]:
-    groups = _groups(_conditions(db, filters))
-    page = filters.page
-    query = groups.add_columns(
-        func.avg(Listing.fiyat).label("avg_price"),
-        func.count().over().label("total"),
-    ).order_by(func.max(Listing.created_at).desc().nulls_last(), *_GROUP)
-    page_rows = db.execute(
-        query.offset((page - 1) * filters.limit).limit(filters.limit)
+    grouped_query = _groups(_conditions(db, filters))
+    groups = grouped_query.with_only_columns(
+        *_GROUP, grouped_query.selected_columns.last_date
+    ).cte("result_groups")
+    # Count and page read the same grouped snapshot, even when writes occur concurrently.
+    count = func.count()
+    last_page = (count + filters.limit - 1) // filters.limit
+    pagination = (
+        select(
+            count.label("total"),
+            case(
+                (count == 0, 1),
+                (last_page < filters.page, last_page),
+                else_=filters.page,
+            ).label("page"),
+        )
+        .select_from(groups)
+        .cte("result_pagination")
+    )
+    offset = select((pagination.c.page - 1) * filters.limit).scalar_subquery()
+    page_groups = (
+        select(groups)
+        .order_by(*_result_order(groups))
+        .offset(offset)
+        .limit(filters.limit)
+        .subquery("result_page_groups")
+    )
+    # Only displayed groups need listing counts and average prices.
+    page_rows = (
+        select(
+            page_groups,
+            func.count(Listing.id).label("count"),
+            func.avg(Listing.fiyat).label("avg_price"),
+        )
+        .select_from(page_groups)
+        .join(
+            Location,
+            and_(
+                Location.il == page_groups.c.il,
+                Location.ilce.is_not_distinct_from(page_groups.c.ilce),
+            ),
+        )
+        .join(
+            Listing,
+            and_(
+                Listing.location_id == Location.id,
+                Listing.platform == page_groups.c.platform,
+                Listing.kategori == page_groups.c.kategori,
+                Listing.ilan_tipi == page_groups.c.ilan_tipi,
+                Listing.alt_kategori.is_not_distinct_from(page_groups.c.alt_kategori),
+            ),
+        )
+        .group_by(*page_groups.c)
+        .subquery("result_page")
+    )
+    rows = db.execute(
+        select(pagination, page_rows)
+        .select_from(pagination.outerjoin(page_rows, true()))
+        .order_by(*_result_order(page_rows))
     ).all()
-    total = page_rows[0].total if page_rows else 0
-    if not page_rows and page > 1:
-        # Recover the last valid page when filtering or deletion shrinks the result set.
-        total = db.scalar(select(func.count()).select_from(groups.subquery())) or 0
-        page = max(1, (total + filters.limit - 1) // filters.limit)
-        if total:
-            page_rows = db.execute(
-                query.offset((page - 1) * filters.limit).limit(filters.limit)
-            ).all()
+    total = rows[0].total
     return {
-        "items": [_result_item(row) for row in page_rows],
-        "page": page,
+        "items": [_result_item(row) for row in rows if row.platform is not None],
+        "page": rows[0].page,
         "limit": filters.limit,
         "pages": (total + filters.limit - 1) // filters.limit,
         "total": total,
