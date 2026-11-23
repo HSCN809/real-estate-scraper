@@ -123,7 +123,7 @@ export default function ResultsPage() {
     );
     const overviewQuery = useResultsOverview(filters, !tableView && hasOverviewFilters);
     const priceQuery = usePriceSummary(filters, showPrices);
-    const facetsQuery = useResultsFilters(!tableView);
+    const facetsQuery = useResultsFilters(!tableView && !hasOverviewFilters);
     const activeResults = tableView ? pageQuery : hasOverviewFilters ? overviewQuery : facetsQuery;
     const loading = activeResults.isPending || facetsQuery.isPending || (showPrices && priceQuery.isPending);
     const error = activeResults.isError || facetsQuery.isError || (showPrices && priceQuery.isError)

@@ -17,7 +17,7 @@ import {
     exportToExcel,
     type TaskStatus
 } from './api';
-import type { Platform, ResultsFilters, ResultsPageParams, ScrapeRequest } from '@/types';
+import type { Platform, ResultsFacets, ResultsFilters, ResultsPageParams, ScrapeRequest } from '@/types';
 
 // ==================== Statistics & Data Hooks ====================
 
@@ -41,10 +41,18 @@ export function useResults(params: ResultsPageParams = {}, enabled = true) {
 }
 
 export function useResultsFilters(includeOverview: boolean) {
+    const queryClient = useQueryClient();
+    const bundled = includeOverview
+        ? undefined
+        : queryClient.getQueryState<ResultsFacets>(['results', 'filters', true]);
+    // Both responses contain the same filter options. Keep their original fetch time.
+    const reusable = bundled?.isInvalidated ? undefined : bundled;
     return useQuery({
         queryKey: ['results', 'filters', includeOverview],
         queryFn: ({ signal }) => getResultsFilters(signal, includeOverview),
-        staleTime: 0,
+        initialData: reusable?.data,
+        initialDataUpdatedAt: reusable?.dataUpdatedAt,
+        staleTime: includeOverview ? 0 : 30_000,
     });
 }
 
