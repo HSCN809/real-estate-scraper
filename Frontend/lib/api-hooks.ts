@@ -113,19 +113,17 @@ export function useTaskStatus(taskId: string | null) {
     });
 }
 
-export function useActiveTasks() {
+export function useActiveTasks(enabled: boolean, poll: boolean) {
     return useQuery({
         queryKey: ['active-tasks'],
         queryFn: getActiveTasks,
+        enabled,
         refetchInterval: (query) => {
-            const data = query.state.data as { active_tasks: TaskStatus[]; count: number } | undefined;
-            if (data?.active_tasks && data.active_tasks.length > 0) {
-                return 3000;
-            }
-            return 15000;
+            if (!poll) return false;
+            return query.state.data?.active_tasks.length ? 3000 : 15000;
         },
         staleTime: 1000,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: poll,
     });
 }
 

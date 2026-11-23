@@ -1,11 +1,13 @@
 """Task status store tests."""
 
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.task_status import (
+    ACTIVE_TASKS_KEY,
     TASK_STATUS_CANCELLED,
     TASK_STATUS_COMPLETED,
     TASK_STATUS_FAILED,
@@ -13,28 +15,11 @@ from core.task_status import (
     TASK_STATUS_RUNNING,
     TaskStatusStore,
     build_task_status_key,
+    create_task_status_payload,
     normalize_scrape_session_status,
 )
 
-
-class FakeRedis:
-    def __init__(self):
-        self.data = {}
-
-    def ping(self):
-        return True
-
-    def get(self, key):
-        return self.data.get(key)
-
-    def setex(self, key, ttl, value):
-        self.data[key] = value
-
-    def scan_iter(self, pattern):
-        prefix = pattern.rstrip("*")
-        for key in list(self.data.keys()):
-            if key.startswith(prefix):
-                yield key
+from tests.fake_task_redis import FakeRedis
 
 
 def test_task_status_store_lifecycle():
@@ -73,6 +58,60 @@ def test_build_task_status_key_and_normalize_legacy_statuses():
     assert normalize_scrape_session_status("timeout") == TASK_STATUS_FAILED
     assert normalize_scrape_session_status("terminated") == TASK_STATUS_FAILED
     assert normalize_scrape_session_status("cancelled") == TASK_STATUS_FAILED
+
+
+def test_active_index_migrates_legacy_tasks_and_keeps_order():
+    client = FakeRedis()
+    store = TaskStatusStore(redis_client=client)
+    legacy_key = build_task_status_key("legacy")
+    client.data[legacy_key] = json.dumps(
+        create_task_status_payload(
+            "legacy",
+            status=TASK_STATUS_RUNNING,
+            message="Old",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+    store.create_queued_task("new", message="New")
+    store.mark_completed("done", message="Done")
+
+    assert [task["task_id"] for task in store.get_active_tasks()] == ["new", "legacy"]
+    assert legacy_key in client.smembers(ACTIVE_TASKS_KEY)
+    assert build_task_status_key("done") not in client.smembers(ACTIVE_TASKS_KEY)
+
+    store.mark_cancelled("legacy")
+    store.mark_failed("new", message="Failed")
+    assert legacy_key not in client.smembers(ACTIVE_TASKS_KEY)
+    assert build_task_status_key("new") not in client.smembers(ACTIVE_TASKS_KEY)
+    assert store.get_active_tasks() == []
+    assert client.scan_calls == 1
+
+
+def test_active_index_removes_expired_status(monkeypatch):
+    client = FakeRedis()
+    store = TaskStatusStore(redis_client=client)
+    store.create_queued_task("expired", message="Queued")
+    store.create_queued_task("restarted", message="Queued")
+    assert len(store.get_active_tasks()) == 2
+
+    expired_key = build_task_status_key("expired")
+    restarted_key = build_task_status_key("restarted")
+    del client.data[expired_key]
+    del client.data[restarted_key]
+    original_mget = client.mget
+
+    def mget(keys):
+        snapshot = original_mget(keys)
+        store.mark_running("restarted", message="Restarted")
+        return snapshot
+
+    monkeypatch.setattr(client, "mget", mget)
+    assert store.get_active_tasks() == []
+    assert expired_key not in client.smembers(ACTIVE_TASKS_KEY)
+    assert restarted_key in client.smembers(ACTIVE_TASKS_KEY)
+    monkeypatch.setattr(client, "mget", original_mget)
+    assert [task["task_id"] for task in store.get_active_tasks()] == ["restarted"]
+    assert client.scan_calls == 1
 
 
 def test_progress_does_not_move_backwards():

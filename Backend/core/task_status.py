@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://real-estate-redis:6379/0")
 TASK_STATUS_KEY_PREFIX = "scrape_task"
 TASK_STATUS_TTL_SECONDS = 86400
+ACTIVE_TASKS_KEY = "scrape_active_tasks"
+ACTIVE_TASKS_INDEX_READY_KEY = "scrape_active_tasks:indexed"
 
 TASK_STATUS_QUEUED = "queued"
 TASK_STATUS_RUNNING = "running"
@@ -306,23 +308,64 @@ class TaskStatusStore:
         return json.loads(cast(str | bytes, data))
 
     def get_active_tasks(self) -> list[dict[str, Any]]:
+        if not self.redis_client.exists(ACTIVE_TASKS_INDEX_READY_KEY):
+            self._index_existing_active_tasks()
+
+        keys = list(
+            cast(set[str | bytes], self.redis_client.smembers(ACTIVE_TASKS_KEY))
+        )
+        if not keys:
+            return []
+
         tasks: list[dict[str, Any]] = []
-        for key in self.redis_client.scan_iter(f"{TASK_STATUS_KEY_PREFIX}:*"):
-            data = self.redis_client.get(key)
-            if not data:
+        values = cast(list[str | bytes | None], self.redis_client.mget(keys))
+        for key, data in zip(keys, values, strict=True):
+            if data is None:
+                self._sync_active_member(key, None)
                 continue
-            payload = json.loads(cast(str | bytes, data))
-            if is_active_task_status(payload.get("status")):
-                tasks.append(payload)
+            if data:
+                payload = json.loads(data)
+                if is_active_task_status(payload.get("status")):
+                    tasks.append(payload)
         tasks.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
         return tasks
 
+    def _index_existing_active_tasks(self) -> None:
+        for key in self.redis_client.scan_iter(f"{TASK_STATUS_KEY_PREFIX}:*"):
+            data = cast(str | bytes | None, self.redis_client.get(key))
+            if data and is_active_task_status(json.loads(data).get("status")):
+                self._sync_active_member(key, data)
+        self.redis_client.set(ACTIVE_TASKS_INDEX_READY_KEY, "1")
+
+    def _sync_active_member(
+        self, key: str | bytes, expected: str | bytes | None
+    ) -> None:
+        # Migration and expiry cleanup can race with a worker writing this task.
+        with self.redis_client.pipeline() as pipe:
+            while True:
+                try:
+                    pipe.watch(key)
+                    if pipe.get(key) != expected:
+                        return
+                    pipe.multi()
+                    if expected is None:
+                        pipe.srem(ACTIVE_TASKS_KEY, key)
+                    else:
+                        pipe.sadd(ACTIVE_TASKS_KEY, key)
+                    pipe.execute()
+                    return
+                except redis.WatchError:
+                    continue
+
     def _write(self, payload: dict[str, Any]) -> None:
-        self.redis_client.setex(
-            build_task_status_key(payload["task_id"]),
-            TASK_STATUS_TTL_SECONDS,
-            json.dumps(payload),
-        )
+        key = build_task_status_key(payload["task_id"])
+        with self.redis_client.pipeline() as pipe:
+            pipe.setex(key, TASK_STATUS_TTL_SECONDS, json.dumps(payload))
+            if is_active_task_status(payload["status"]):
+                pipe.sadd(ACTIVE_TASKS_KEY, key)
+            else:
+                pipe.srem(ACTIVE_TASKS_KEY, key)
+            pipe.execute()
 
 
 def get_task_status_store() -> TaskStatusStore:

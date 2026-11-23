@@ -12,7 +12,7 @@ import { useState, useMemo } from 'react';
 import type { ResultsOverview } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useScraping } from '@/contexts/ScrapingContext';
-import { useActiveTasks, useResults, useResultsOverview, useStats } from '@/lib/api-hooks';
+import { useResults, useResultsOverview, useStats } from '@/lib/api-hooks';
 import {
   formatTimeAgo,
   getIstanbulHour,
@@ -72,9 +72,7 @@ export default function Dashboard() {
   const results = useResults({ limit: 50 }).data?.items ?? [];
   const overview = useResultsOverview().data;
   const [recentScrollTop, setRecentScrollTop] = useState(0);
-  const { startTracking, showPanel } = useScraping();
-  const { data: activeTasksData } = useActiveTasks();
-  const activeTasks = activeTasksData?.active_tasks ?? [];
+  const { activeTasks, startTracking, showPanel } = useScraping();
 
   const chartData = useMemo(() => getChartData(overview?.history ?? []), [overview]);
   const maxChart = useMemo(() => Math.max(...chartData.map((d) => d.count), 1), [chartData]);

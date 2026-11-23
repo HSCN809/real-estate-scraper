@@ -1,7 +1,10 @@
 'use client';
 
 import { createContext, startTransition, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { cancelTask, getTaskStatus, getActiveTasks, TaskRequestError, type TaskStatus } from '@/lib/api';
+import { usePathname } from 'next/navigation';
+import { cancelTask, getTaskStatus, TaskRequestError, type TaskStatus } from '@/lib/api';
+import { useActiveTasks } from '@/lib/api-hooks';
+import { useAuth } from './AuthContext';
 
 const MAX_LOG_LINES = 40;
 const MAX_POLL_FAILURES = 8;
@@ -21,6 +24,7 @@ interface ScrapingTask {
 
 interface ScrapingContextType {
     activeTask: ScrapingTask | null;
+    activeTasks: TaskStatus[];
     isPanelVisible: boolean;
     isCancelling: boolean;
     startTracking: (taskId: string, platform?: string) => void;
@@ -68,6 +72,11 @@ function appendLog(
 }
 
 export function ScrapingProvider({ children }: { children: ReactNode }) {
+    const { isAuthenticated, isLoading } = useAuth();
+    const isDashboard = usePathname() === '/';
+    const [shouldRestore, setShouldRestore] = useState(true);
+    const authReady = isAuthenticated && !isLoading;
+    const { data: activeTasksData } = useActiveTasks(authReady && (isDashboard || shouldRestore), isDashboard);
     const [activeTask, setActiveTask] = useState<ScrapingTask | null>(null);
     const [isPanelVisible, setIsPanelVisible] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
@@ -83,6 +92,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
                 if (parsed.taskId) {
                     taskIdRef.current = parsed.taskId;
                     startTransition(() => {
+                        setShouldRestore(false);
                         setActiveTask({
                             taskId: parsed.taskId,
                             platform: parsed.platform,
@@ -96,29 +106,26 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             } catch {
                 sessionStorage.removeItem(TASK_STORAGE_KEY);
             }
-        } else {
-            getActiveTasks()
-                .then(response => {
-                    if (response.count > 0 && response.active_tasks.length > 0) {
-                        const task = response.active_tasks[0];
-                        if (task.task_id) {
-                            taskIdRef.current = task.task_id;
-                            startTransition(() => {
-                                setActiveTask({
-                                    taskId: task.task_id,
-                                    platform: task.platform,
-                                    status: task,
-                                    isFinished: false,
-                                    logs: logsFromStatus(task) || appendLog([], task.message),
-                                });
-                                setIsPanelVisible(true);
-                            });
-                        }
-                    }
-                })
-                .catch(() => {});
         }
     }, []);
+
+    useEffect(() => {
+        if (!authReady || !shouldRestore || !activeTasksData) return;
+        const task = activeTasksData.active_tasks[0];
+        startTransition(() => {
+            setShouldRestore(false);
+            if (!task?.task_id || taskIdRef.current) return;
+            taskIdRef.current = task.task_id;
+            setActiveTask({
+                taskId: task.task_id,
+                platform: task.platform,
+                status: task,
+                isFinished: false,
+                logs: logsFromStatus(task) || appendLog([], task.message),
+            });
+            setIsPanelVisible(true);
+        });
+    }, [activeTasksData, authReady, shouldRestore]);
 
     useEffect(() => {
         if (activeTask) {
@@ -262,6 +269,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
     return (
         <ScrapingContext.Provider value={{
             activeTask,
+            activeTasks: activeTasksData?.active_tasks ?? [],
             isPanelVisible,
             isCancelling,
             startTracking,

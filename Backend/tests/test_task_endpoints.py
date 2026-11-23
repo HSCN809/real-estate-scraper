@@ -12,25 +12,7 @@ from api import endpoints
 from auth.dependencies import get_current_user
 from core.task_status import TaskStatusStore
 
-
-class FakeRedis:
-    def __init__(self):
-        self.data = {}
-
-    def ping(self):
-        return True
-
-    def get(self, key):
-        return self.data.get(key)
-
-    def setex(self, key, ttl, value):
-        self.data[key] = value
-
-    def scan_iter(self, pattern):
-        prefix = pattern.rstrip("*")
-        for key in list(self.data.keys()):
-            if key.startswith(prefix):
-                yield key
+from tests.fake_task_redis import FakeRedis
 
 
 class DummyTaskCallable:
