@@ -108,7 +108,7 @@ def test_results_pagination_counts_groups_without_a_window(client):
     grouped, limited = statements[0].split(" LIMIT ", 1)
     assert grouped.count(" GROUP BY ") == 1
     assert "COUNT(*) AS TOTAL" in grouped
-    assert " GROUP BY " in limited
+    assert " GROUP BY " not in limited
     assert " OVER " not in statements[0]
 
 
@@ -255,3 +255,20 @@ def test_gzip_and_cache_control_headers():
             assert idx.headers.get("content-encoding") == "gzip"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_results_read_cache_hits_and_invalidates_on_delete(client):
+    assert client.get("/api/v1/results?limit=2").status_code == 200
+    assert client.get("/api/v1/stats").status_code == 200
+    client.app.state.sql_queries.clear()
+
+    cached_results = client.get("/api/v1/results?limit=2")
+    cached_stats = client.get("/api/v1/stats")
+    assert cached_results.status_code == 200
+    assert cached_stats.status_code == 200
+    assert client.app.state.sql_queries == []
+
+    deleted = client.delete("/api/v1/listings/group", params={"city": "Bursa"})
+    assert deleted.status_code == 200
+    refreshed = client.get("/api/v1/results?limit=2").json()
+    assert refreshed["total"] == 3

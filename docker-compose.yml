@@ -32,16 +32,16 @@ services:
       - IDLE_CONN_TIMEOUT=90
 
       # Retry Configuration
-      - MAX_RETRIES=3
-      - RETRY_DELAY=2000
+      - MAX_RETRIES=2
+      - RETRY_DELAY=1000
 
       # Security Configuration
       - PROXY_API_KEY=${PROXY_API_KEY:-}
       - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://real-estate-frontend:3000,http://localhost:8000,http://real-estate-api:8000
 
       # Rate Limiting
-      - RATE_LIMIT=2
-      - RATE_LIMIT_BURST=5
+      - RATE_LIMIT=5
+      - RATE_LIMIT_BURST=15
 
       # Debug mode
       - DEBUG=false

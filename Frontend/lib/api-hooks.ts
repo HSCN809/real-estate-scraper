@@ -52,7 +52,7 @@ export function useResultsFilters(includeOverview: boolean) {
         queryFn: ({ signal }) => getResultsFilters(signal, includeOverview),
         initialData: reusable?.data,
         initialDataUpdatedAt: reusable?.dataUpdatedAt,
-        staleTime: includeOverview ? 0 : 30_000,
+        staleTime: 30_000,
     });
 }
 

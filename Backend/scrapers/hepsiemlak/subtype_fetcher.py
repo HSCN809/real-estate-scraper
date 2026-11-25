@@ -15,14 +15,24 @@ logger = get_logger(__name__)
 
 # JSON dosya yolu
 SUBCATEGORIES_JSON_PATH = Path(__file__).parent / "subcategories.json"
+_SUBCATEGORIES_CACHE: tuple[tuple[str, int], dict[str, dict[str, list[dict]]]] | None = None
 
 
 def load_subcategories_from_json() -> dict[str, dict[str, list[dict]]]:
-    """JSON dosyasından subcategories yükle"""
+    """JSON dosyasından subcategories yükle (mtime tabanlı bellek önbellekli)."""
+    global _SUBCATEGORIES_CACHE
     if SUBCATEGORIES_JSON_PATH.exists():
         try:
+            cache_key = (
+                str(SUBCATEGORIES_JSON_PATH),
+                SUBCATEGORIES_JSON_PATH.stat().st_mtime_ns,
+            )
+            if _SUBCATEGORIES_CACHE is not None and _SUBCATEGORIES_CACHE[0] == cache_key:
+                return _SUBCATEGORIES_CACHE[1]
             with open(SUBCATEGORIES_JSON_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            _SUBCATEGORIES_CACHE = (cache_key, data)
+            return data
         except Exception as e:
             logger.error(f"JSON okuma hatası: {e}")
     return {}
@@ -30,9 +40,11 @@ def load_subcategories_from_json() -> dict[str, dict[str, list[dict]]]:
 
 def save_subcategories_to_json(data: dict[str, dict[str, list[dict]]]):
     """Subcategories'i JSON dosyasına kaydet"""
+    global _SUBCATEGORIES_CACHE
     try:
         with open(SUBCATEGORIES_JSON_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        _SUBCATEGORIES_CACHE = None
         logger.info(f"Subcategories kaydedildi: {SUBCATEGORIES_JSON_PATH}")
     except Exception as e:
         logger.error(f"JSON yazma hatası: {e}")

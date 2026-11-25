@@ -253,7 +253,12 @@ def get_price_analytics(
     db: Session = Depends(get_db),
 ):
     """Return price averages and histogram bins for the active filters."""
-    return results.get_price_summary(db, filters)
+    return results.cached_read(
+        db,
+        "api_prices",
+        filters.model_dump_json(),
+        lambda: results.get_price_summary(db, filters),
+    )
 
 
 @router.get("/analytics/city/{city_name}")
@@ -296,13 +301,18 @@ def get_city_analytics(
     if subtype and subtype != "all":
         db_subtype = subtype.strip().lower().replace(" ", "_").replace("-", "_")
 
-    return crud.get_city_analytics(
+    return results.cached_read(
         db,
-        city_name=city_name,
-        platform=db_platform,
-        kategori=db_category,
-        ilan_tipi=db_listing_type,
-        alt_kategori=db_subtype,
+        "api_city_analytics",
+        (city_name, db_platform, db_category, db_listing_type, db_subtype),
+        lambda: crud.get_city_analytics(
+            db,
+            city_name=city_name,
+            platform=db_platform,
+            kategori=db_category,
+            ilan_tipi=db_listing_type,
+            alt_kategori=db_subtype,
+        ),
     )
 
 
@@ -351,16 +361,23 @@ def get_listing_statistics(
         stmt = stmt.select_from(Listing)
 
     price_subquery = stmt.where(*conditions).subquery()
-    describe_stats, price_ranges = crud.compute_price_stats_sql(db, price_subquery)
 
-    if describe_stats is None:
-        return {"error": "Fiyat verisi bulunamadı", "stats": None}
+    def _compute_stats():
+        describe_stats, price_ranges = crud.compute_price_stats_sql(db, price_subquery)
+        if describe_stats is None:
+            return {"error": "Fiyat verisi bulunamadı", "stats": None}
+        return {
+            "stats": describe_stats,
+            "price_ranges": price_ranges,
+            "total_listings": describe_stats["count"],
+        }
 
-    return {
-        "stats": describe_stats,
-        "price_ranges": price_ranges,
-        "total_listings": describe_stats["count"],
-    }
+    return results.cached_read(
+        db,
+        "api_analytics_stats",
+        (platform, kategori, ilan_tipi, city, district),
+        _compute_stats,
+    )
 
 
 @router.delete("/clear-results")
@@ -381,6 +398,7 @@ def clear_results(db: Session = Depends(get_db)):
         deleted_listings = db.query(Listing).delete(synchronize_session=False)
         deleted_sessions = db.query(ScrapeSession).delete(synchronize_session=False)
         db.commit()
+        results.invalidate_results_cache()
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -431,14 +449,22 @@ def get_results(
     db: Session = Depends(get_db),
 ):
     """Return one page of grouped listing results."""
-    return results.get_results_page(db, filters)
+    return results.cached_read(
+        db,
+        "api_results",
+        filters.model_dump_json(),
+        lambda: results.get_results_page(db, filters),
+    )
 
 
 @router.get("/results/filters")
 def get_result_filters(include_overview: bool = False, db: Session = Depends(get_db)):
-    metadata = results.get_results_filters(db, include_overview=include_overview)
-    metadata["last_scrape"] = crud.get_last_scrape(db)
-    return metadata
+    def _load_filters():
+        metadata = results.get_results_filters(db, include_overview=include_overview)
+        metadata["last_scrape"] = crud.get_last_scrape(db)
+        return metadata
+
+    return results.cached_read(db, "api_filters", include_overview, _load_filters)
 
 
 @router.get("/results/overview")
@@ -446,7 +472,12 @@ def get_results_overview(
     filters: Annotated[results.ResultsFilters, Query()],
     db: Session = Depends(get_db),
 ):
-    return results.get_results_overview(db, filters)
+    return results.cached_read(
+        db,
+        "api_overview",
+        filters.model_dump_json(),
+        lambda: results.get_results_overview(db, filters),
+    )
 
 
 @router.get("/listings/preview")
@@ -478,7 +509,7 @@ def get_listings_preview(
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
     """Veritabanından genel istatistikleri döndür"""
-    return crud.get_stats_summary(db)
+    return results.cached_read(db, "api_stats", (), lambda: crud.get_stats_summary(db))
 
 
 # ==================== NEW DB-BASED ENDPOINTS ====================
@@ -722,6 +753,7 @@ def delete_listing_group(
 
     query.delete(synchronize_session=False)
     db.commit()
+    results.invalidate_results_cache()
 
     return {
         "status": "success",
@@ -739,6 +771,7 @@ def delete_listing(listing_id: int, db: Session = Depends(get_db)):
 
     db.delete(listing)
     db.commit()
+    results.invalidate_results_cache()
 
     return {"status": "success", "message": f"İlan {listing_id} silindi"}
 

@@ -99,7 +99,8 @@ class ProxyFetchClient:
                         f"Proxy response too short ({len(body)} bytes) for {url}"
                     )
                 else:
-                    decoded = body.decode("utf-8", errors="ignore")
+                    # Cloudflare challenge markers appear in document head / early body.
+                    decoded = body[:16384].decode("utf-8", errors="ignore")
                     if self._is_cloudflare_challenge(decoded):
                         last_error = f"Cloudflare challenge still detected for {url}"
                     else:

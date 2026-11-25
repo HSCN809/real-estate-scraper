@@ -15,7 +15,7 @@ from scrapling.fetchers import (
     StealthySession,
 )
 from scrapling.parser import Selector
-from scrapling.spiders import Response, Spider
+from scrapling.spiders import Request, Response, Spider
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -573,139 +573,186 @@ class HepsiemlakScraplingScraper:
         )
         self._log_location_plan(location_name, pages_to_scrape)
 
-        logging.getLogger("scrapling").setLevel(logging.ERROR)
-        logging.getLogger("scrapling.spiders").setLevel(logging.ERROR)
-
-        class HepsiemlakSpider(Spider):
-            name = f"hepsiemlak_{session_mode}_{outer._normalize_text(location_name)}"
-            start_urls = [location_url]
-            allowed_domains = {"hepsiemlak.com"}
-            concurrent_requests = mode_settings["concurrent_requests"]
-            download_delay = mode_settings["download_delay"]
-            max_blocked_retries = mode_settings["max_blocked_retries"]
-            logging_level = logging.WARNING
-
-            def configure_sessions(self, manager):
-                if session_mode == "fetcher":
-                    manager.add(
-                        "default",
-                        FetcherSession(
-                            stealthy_headers=True,
-                            follow_redirects=True,
-                            timeout=mode_settings["timeout_ms"] // 1000,
-                            retries=mode_settings["retries"],
-                            retry_delay=mode_settings["retry_delay"],
-                        ),
-                        default=True,
-                    )
-                elif session_mode == "dynamic":
-                    manager.add(
-                        "default",
-                        AsyncDynamicSession(
-                            headless=outer.headless,
-                            disable_resources=True,
-                            timeout=mode_settings["timeout_ms"],
-                            retries=mode_settings["retries"],
-                            retry_delay=mode_settings["retry_delay"],
-                            network_idle=False,
-                        ),
-                        default=True,
-                    )
-                else:
-                    manager.add(
-                        "default",
-                        AsyncStealthySession(
-                            headless=outer.headless,
-                            solve_cloudflare=True,
-                            disable_resources=True,
-                            timeout=mode_settings["timeout_ms"],
-                            retries=mode_settings["retries"],
-                            retry_delay=mode_settings["retry_delay"],
-                            network_idle=False,
-                        ),
-                        default=True,
-                    )
-
-            async def on_error(self, request, error):
-                spider_errors.append(
-                    {
-                        "url": getattr(request, "url", ""),
-                        "sid": getattr(request, "sid", ""),
-                        "error": f"{type(error).__name__}: {error}",
-                    }
-                )
-                task_log.line(
-                    f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}",
-                    level="warning",
-                )
-
-            async def parse(self, response: Response):
-                status = response_http_status(response)
-                if status >= 400:
-                    spider_errors.append(
-                        {
-                            "url": getattr(response, "url", ""),
-                            "error": f"HTTP {status}",
-                        }
-                    )
-                    task_log.line(
-                        f"{outer.scraping_method} blocked: {response.url} -> HTTP {status}",
-                        level="warning",
-                    )
-                    return
-
-                current_page = outer._get_page_number(response.url)
-                visited_pages.add(current_page)
-                if current_page in processed_pages:
-                    return
-
-                done_pages = len(processed_pages) + 1
-                task_log.line(
-                    f"🔍 [{done_pages}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor..."
-                )
+        seed_reused = False
+        if seed_page is not None:
+            seed_listings = self.extract_listings_from_page(
+                seed_page,
+                city=city,
+                district=district,
+                page_url=location_url,
+            )
+            if seed_listings or pages_to_scrape == 1:
+                seed_reused = True
+                visited_pages.add(1)
+                processed_pages.add(1)
+                for listing in seed_listings:
+                    listing["page"] = 1
+                    listing["scraping_method"] = self.scraping_method
                 if progress_callback:
                     progress_callback(
-                        f"{location_name} - Sayfa {done_pages}/{pages_to_scrape}",
-                        current=done_pages,
+                        f"{location_name} - Sayfa 1/{pages_to_scrape}",
+                        current=1,
                         total=pages_to_scrape,
-                        progress=int((done_pages / max(1, pages_to_scrape)) * 100),
+                        progress=int((1 / max(1, pages_to_scrape)) * 100),
                     )
-
-                page_listings = outer.extract_listings_from_page(
-                    response,
-                    city=city,
-                    district=district,
-                    page_url=response.url,
+                new_count, updated_count, unchanged_count = self._persist_listings(
+                    seed_listings
                 )
-                for listing in page_listings:
-                    listing["page"] = current_page
-                    listing["scraping_method"] = outer.scraping_method
-
-                new_count, updated_count, unchanged_count = outer._persist_listings(
-                    page_listings
-                )
-                outer._report_page_persist_result(
-                    page_num=current_page,
-                    extracted_count=len(page_listings),
+                self._report_page_persist_result(
+                    page_num=1,
+                    extracted_count=len(seed_listings),
                     new_count=new_count,
                     updated_count=updated_count,
                     unchanged_count=unchanged_count,
                     location_name=location_name,
                 )
-                nonlocal location_count
-                processed_pages.add(current_page)
-                location_count += len(page_listings)
-                if outer._retain_listings:
-                    collected_items.extend(page_listings)
+                location_count += len(seed_listings)
+                if self._retain_listings:
+                    collected_items.extend(seed_listings)
 
-                if current_page < pages_to_scrape:
-                    next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs: dict[str, Any] = {"callback": self.parse}
+        start_page = 2 if seed_reused else 1
+        target_urls = [
+            self._build_page_url(location_url, page_num)
+            for page_num in range(start_page, pages_to_scrape + 1)
+        ]
+
+        if target_urls:
+            logging.getLogger("scrapling").setLevel(logging.ERROR)
+            logging.getLogger("scrapling.spiders").setLevel(logging.ERROR)
+
+            class HepsiemlakSpider(Spider):
+                name = f"hepsiemlak_{session_mode}_{outer._normalize_text(location_name)}"
+                start_urls = target_urls
+                allowed_domains = {"hepsiemlak.com"}
+                concurrent_requests = mode_settings["concurrent_requests"]
+                download_delay = mode_settings["download_delay"]
+                max_blocked_retries = mode_settings["max_blocked_retries"]
+                logging_level = logging.WARNING
+
+                def configure_sessions(self, manager):
+                    if session_mode == "fetcher":
+                        manager.add(
+                            "default",
+                            FetcherSession(
+                                stealthy_headers=True,
+                                follow_redirects=True,
+                                timeout=mode_settings["timeout_ms"] // 1000,
+                                retries=mode_settings["retries"],
+                                retry_delay=mode_settings["retry_delay"],
+                            ),
+                            default=True,
+                        )
+                    elif session_mode == "dynamic":
+                        manager.add(
+                            "default",
+                            AsyncDynamicSession(
+                                headless=outer.headless,
+                                disable_resources=True,
+                                timeout=mode_settings["timeout_ms"],
+                                retries=mode_settings["retries"],
+                                retry_delay=mode_settings["retry_delay"],
+                                network_idle=False,
+                            ),
+                            default=True,
+                        )
+                    else:
+                        manager.add(
+                            "default",
+                            AsyncStealthySession(
+                                headless=outer.headless,
+                                solve_cloudflare=True,
+                                disable_resources=True,
+                                timeout=mode_settings["timeout_ms"],
+                                retries=mode_settings["retries"],
+                                retry_delay=mode_settings["retry_delay"],
+                                network_idle=False,
+                            ),
+                            default=True,
+                        )
+
+                async def start_requests(self):
+                    start_kwargs: dict[str, Any] = {}
                     if session_mode != "fetcher" and listing_results:
-                        follow_kwargs["wait_selector"] = listing_results
-                    yield response.follow(next_url, **follow_kwargs)
+                        start_kwargs["wait_selector"] = listing_results
+                    sid = self._session_manager.default_session_id
+                    for url in self.start_urls:
+                        yield Request(url, sid=sid, callback=self.parse, **start_kwargs)
 
-        HepsiemlakSpider().start()
+                async def on_error(self, request, error):
+                    spider_errors.append(
+                        {
+                            "url": getattr(request, "url", ""),
+                            "sid": getattr(request, "sid", ""),
+                            "error": f"{type(error).__name__}: {error}",
+                        }
+                    )
+                    task_log.line(
+                        f"{outer.scraping_method} request error: {request.url} -> {type(error).__name__}: {error}",
+                        level="warning",
+                    )
+
+                async def parse(self, response: Response):
+                    if False:
+                        yield None
+                    status = response_http_status(response)
+                    if status >= 400:
+                        spider_errors.append(
+                            {
+                                "url": getattr(response, "url", ""),
+                                "error": f"HTTP {status}",
+                            }
+                        )
+                        task_log.line(
+                            f"{outer.scraping_method} blocked: {response.url} -> HTTP {status}",
+                            level="warning",
+                        )
+                        return
+
+                    current_page = outer._get_page_number(response.url)
+                    visited_pages.add(current_page)
+                    if current_page in processed_pages:
+                        return
+
+                    done_pages = len(processed_pages) + 1
+                    task_log.line(
+                        f"🔍 [{done_pages}/{pages_to_scrape}] {location_name} - Sayfa {current_page} taranıyor..."
+                    )
+                    if progress_callback:
+                        progress_callback(
+                            f"{location_name} - Sayfa {done_pages}/{pages_to_scrape}",
+                            current=done_pages,
+                            total=pages_to_scrape,
+                            progress=int((done_pages / max(1, pages_to_scrape)) * 100),
+                        )
+
+                    page_listings = outer.extract_listings_from_page(
+                        response,
+                        city=city,
+                        district=district,
+                        page_url=response.url,
+                    )
+                    for listing in page_listings:
+                        listing["page"] = current_page
+                        listing["scraping_method"] = outer.scraping_method
+
+                    new_count, updated_count, unchanged_count = outer._persist_listings(
+                        page_listings
+                    )
+                    outer._report_page_persist_result(
+                        page_num=current_page,
+                        extracted_count=len(page_listings),
+                        new_count=new_count,
+                        updated_count=updated_count,
+                        unchanged_count=unchanged_count,
+                        location_name=location_name,
+                    )
+                    nonlocal location_count
+                    processed_pages.add(current_page)
+                    location_count += len(page_listings)
+                    if outer._retain_listings:
+                        collected_items.extend(page_listings)
+
+            HepsiemlakSpider().start()
         method_items = list(collected_items)
         method_items.sort(
             key=lambda item: (item.get("page", 1), item.get("ilan_linki", ""))

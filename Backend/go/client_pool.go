@@ -38,6 +38,7 @@ type ClientPool struct {
 	tlsManager *TLSFingerprintManager
 	clients    chan *PooledClient
 	sessions   map[string]*sessionLease
+	lastSweep  time.Time
 	mu         sync.RWMutex
 	maxSize    int
 }
@@ -125,10 +126,14 @@ func (cp *ClientPool) evictOldestLocked() *PooledClient {
 }
 
 func (cp *ClientPool) dropIdleSessions() []*PooledClient {
+	now := time.Now()
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
 
-	now := time.Now()
+	if len(cp.sessions) == 0 || now.Sub(cp.lastSweep) < 10*time.Second {
+		return nil
+	}
+	cp.lastSweep = now
 	stale := make([]*PooledClient, 0)
 	for id, lease := range cp.sessions {
 		if now.Sub(lease.used) > sessionIdle {

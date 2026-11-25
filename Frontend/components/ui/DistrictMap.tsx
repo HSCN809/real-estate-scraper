@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { geoMercator, geoPath } from 'd3-geo';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
@@ -33,7 +33,7 @@ export function DistrictMap({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
-    const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
+    const mapBoxRef = useRef<HTMLDivElement>(null);
     const [zoomLevel, setZoomLevel] = useState(1);
 
     const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.2, 3));
@@ -121,7 +121,7 @@ export function DistrictMap({
         };
     }, [geoData]);
 
-    // İlçe listesi
+    // İlçe listesi ve memoize SVG path stringleri
     const districtList = useMemo(() => {
         if (!geoData) return [];
         return geoData.features
@@ -129,6 +129,25 @@ export function DistrictMap({
             .filter((name): name is string => !!name)
             .sort((a, b) => a.localeCompare(b, 'tr'));
     }, [geoData]);
+
+    const districtPaths = useMemo(() => {
+        if (!geoData || !pathGenerator) return [];
+        return geoData.features.map((feature, index) => ({
+            key: `${feature.properties.feature_name || `district-${index}`}-${index}`,
+            districtName: feature.properties.feature_name || `district-${index}`,
+            pathD: pathGenerator(feature as Feature<Geometry>) || '',
+        }));
+    }, [geoData, pathGenerator]);
+
+    const handleSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (mapBoxRef.current) {
+            mapBoxRef.current.style.setProperty('--tooltip-x', `${x + 10}px`);
+            mapBoxRef.current.style.setProperty('--tooltip-y', `${y + 10}px`);
+        }
+    }, []);
 
     if (loading) {
         return (
@@ -157,33 +176,22 @@ export function DistrictMap({
     return (
         <div className="flex flex-col lg:flex-row gap-4">
             {/* Harita */}
-            <div className="flex-1 bg-slate-800/50 rounded-lg p-4 relative">
+            <div ref={mapBoxRef} className="flex-1 bg-slate-800/50 rounded-lg p-4 relative">
                 <svg
                     viewBox={`0 0 ${bounds.width} ${bounds.height}`}
                     className="w-full h-auto max-h-[400px]"
-                    onMouseMove={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setMousePosition({
-                            x: e.clientX - rect.left,
-                            y: e.clientY - rect.top
-                        });
-                    }}
-                    onMouseLeave={() => {
-                        setHoveredDistrict(null);
-                        setMousePosition(null);
-                    }}
+                    onMouseMove={handleSvgMouseMove}
+                    onMouseLeave={() => setHoveredDistrict(null)}
                 >
                     <g transform={`scale(${zoomLevel})`} style={{ transformOrigin: 'center' }}>
-                        {geoData.features.map((feature, index) => {
-                            const districtName = feature.properties.feature_name || `district-${index}`;
+                        {districtPaths.map(({ key, districtName, pathD }) => {
                             const isSelected = selectedDistricts.includes(districtName);
                             const isHovered = hoveredDistrict === districtName;
-                            const pathD = pathGenerator(feature as Feature<Geometry>);
 
                             return (
                                 <path
-                                    key={`${districtName}-${index}`}
-                                    d={pathD || ''}
+                                    key={key}
+                                    d={pathD}
                                     fill={isSelected ? 'rgba(16, 185, 129, 0.6)' : isHovered ? 'rgba(14, 165, 233, 0.4)' : 'rgba(51, 65, 85, 0.8)'}
                                     stroke={isSelected ? '#10b981' : isHovered ? '#0ea5e9' : '#475569'}
                                     strokeWidth={isSelected || isHovered ? 2 / zoomLevel : 1 / zoomLevel}
@@ -224,12 +232,12 @@ export function DistrictMap({
                     </button>
                 </div>
 
-                {hoveredDistrict && mousePosition && (
+                {hoveredDistrict && (
                     <div
                         className="absolute pointer-events-none z-50 px-2 py-1 rounded bg-slate-900/95 border border-sky-500/50 shadow-lg"
                         style={{
-                            left: `${mousePosition.x + 10}px`,
-                            top: `${mousePosition.y + 10}px`
+                            left: 'var(--tooltip-x, 10px)',
+                            top: 'var(--tooltip-y, 10px)'
                         }}
                     >
                         <span className="text-xs text-sky-300 font-semibold whitespace-nowrap">

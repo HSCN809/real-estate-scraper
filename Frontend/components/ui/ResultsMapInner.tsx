@@ -1,6 +1,6 @@
 'use client';
 
-import React, { startTransition, useState, useMemo, useCallback, useEffect } from 'react';
+import React, { startTransition, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { X, Building2, BarChart3, TrendingUp, MapPin, Database, Sparkles, TrendingUp as TrendIcon } from 'lucide-react';
 import type { ResultsOverview } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
@@ -10,6 +10,26 @@ import { motion } from 'framer-motion';
 
 // GeoJSON adresi
 const GEOJSON_URL = 'https://raw.githubusercontent.com/alpers/Turkey-Maps-GeoJSON/master/tr-cities.json';
+let cachedGeoFeatures: GeoFeature[] | null = null;
+let geoFetchPromise: Promise<GeoFeature[]> | null = null;
+
+function loadGeoFeatures(): Promise<GeoFeature[]> {
+    if (cachedGeoFeatures) return Promise.resolve(cachedGeoFeatures);
+    if (!geoFetchPromise) {
+        geoFetchPromise = fetch(GEOJSON_URL)
+            .then(res => res.json())
+            .then(data => {
+                const features: GeoFeature[] = data.features || [];
+                cachedGeoFeatures = features;
+                return features;
+            })
+            .catch(err => {
+                geoFetchPromise = null;
+                throw err;
+            });
+    }
+    return geoFetchPromise;
+}
 
 // GeoJSON şehir adlarını veri kaynağı adlarına eşleştirme
 const CITY_NAME_MAP: Record<string, string> = {
@@ -98,17 +118,23 @@ export default function ResultsMapInner({
 }: ResultsMapProps) {
     const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
     const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-    const [geoData, setGeoData] = useState<GeoFeature[]>([]);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [geoData, setGeoData] = useState<GeoFeature[]>(() => cachedGeoFeatures || []);
     const [cityStats, setCityStats] = useState<FileStats | null>(null);
     const [statsLoading, setStatsLoading] = useState(false);
 
     // GeoJSON yükle
     useEffect(() => {
-        fetch(GEOJSON_URL)
-            .then(res => res.json())
-            .then(data => setGeoData(data.features || []))
+        if (cachedGeoFeatures) return;
+        let cancelled = false;
+        loadGeoFeatures()
+            .then(features => {
+                if (!cancelled) setGeoData(features);
+            })
             .catch(err => console.error('GeoJSON yüklenemedi:', err));
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     // Türkçe karakterleri ASCII'ye çevir (helper function)
@@ -197,25 +223,39 @@ export default function ResultsMapInner({
         return { pathGenerator: geoPath().projection(projection), width: w, height: h };
     }, []);
 
+    const provincePaths = useMemo(
+        () =>
+            geoData.map(feature => {
+                const geoName = feature.properties.name;
+                const dataName = CITY_NAME_MAP[geoName] || geoName;
+                return {
+                    dataName,
+                    normalizedName: normalizeCity(dataName),
+                    d: pathGenerator(feature.geometry) || '',
+                };
+            }),
+        [geoData, pathGenerator],
+    );
+
     const handleCityClick = useCallback((cityName: string) => {
         const result = cityDataMap.get(normalizeCity(cityName));
         if (result) setSelectedCityName(cityName);
     }, [cityDataMap]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
-        setMousePosition({ x: e.clientX, y: e.clientY });
+        if (containerRef.current) {
+            containerRef.current.style.setProperty('--tooltip-x', `${e.clientX + 15}px`);
+            containerRef.current.style.setProperty('--tooltip-y', `${e.clientY + 15}px`);
+        }
     }, []);
 
     return (
-        <div className="flex flex-col gap-6" onMouseMove={handleMouseMove}>
+        <div ref={containerRef} className="flex flex-col gap-6" onMouseMove={handleMouseMove}>
             <SpotlightCard className="p-4 md:p-8 min-h-[600px]">
                 <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
-                    {geoData.map((feature, i) => {
-                        const geoName = feature.properties.name;
-                        const dataName = CITY_NAME_MAP[geoName] || geoName;
-                        const result = cityDataMap.get(normalizeCity(dataName));
+                    {provincePaths.map(({ dataName, normalizedName, d }, i) => {
+                        const result = cityDataMap.get(normalizedName);
                         const fillColor = result ? getColorByCount(result.count || 0) : '#334155';
-                        const d = pathGenerator(feature.geometry) || '';
 
                         return (
                             <motion.path
@@ -224,7 +264,7 @@ export default function ResultsMapInner({
                                 fill={fillColor}
                                 stroke="#1e293b"
                                 strokeWidth="0.5"
-                                 className={`${result ? 'cursor-pointer' : 'cursor-not-allowed'} transition-opacity`}
+                                className={`${result ? 'cursor-pointer' : 'cursor-not-allowed'} transition-opacity`}
                                 initial={{ opacity: 0.8 }}
                                 whileHover={{ opacity: 0.6, scale: 1.02 }}
                                 transition={{ duration: 0.2 }}
@@ -246,7 +286,7 @@ export default function ResultsMapInner({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     className="fixed pointer-events-none z-50 px-4 py-2 bg-gradient-to-br from-slate-900 to-slate-800 text-white text-sm rounded-xl shadow-2xl border border-slate-600/50 backdrop-blur-sm"
-                    style={{ left: mousePosition.x + 15, top: mousePosition.y + 15 }}
+                    style={{ left: 'var(--tooltip-x, 15px)', top: 'var(--tooltip-y, 15px)' }}
                 >
                     <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-emerald-400" />

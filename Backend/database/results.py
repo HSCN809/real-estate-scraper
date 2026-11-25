@@ -3,8 +3,11 @@
 import hashlib
 import json
 import re
-from collections import Counter, defaultdict
-from typing import Any
+from collections import Counter, OrderedDict, defaultdict
+from threading import Lock
+from time import monotonic
+from typing import Any, Callable, TypeVar
+from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, func, select, true
@@ -12,6 +15,66 @@ from sqlalchemy.orm import Session
 from utils.timezone import format_istanbul, to_iso, to_istanbul
 
 from .models import Listing, Location
+
+T = TypeVar("T")
+_READ_CACHE_TTL_SECONDS = 15.0
+_READ_CACHE_MAX_ENTRIES = 256
+_read_cache: OrderedDict[tuple[Any, ...], tuple[float, Any]] = OrderedDict()
+_bind_ids: WeakKeyDictionary[Any, int] = WeakKeyDictionary()
+_cache_lock = Lock()
+_cache_epoch = 0
+_next_bind_seq = 0
+
+
+def invalidate_results_cache() -> None:
+    """Clear in-process read-model cache after listing mutations."""
+    global _cache_epoch
+    with _cache_lock:
+        _cache_epoch += 1
+        _read_cache.clear()
+
+
+def _bind_token(db: Session) -> int:
+    global _next_bind_seq
+    bind = db.get_bind()
+    bind = getattr(bind, "engine", bind)
+    token = _bind_ids.get(bind)
+    if token is None:
+        _next_bind_seq += 1
+        token = _next_bind_seq
+        _bind_ids[bind] = token
+    return token
+
+
+def cached_read(
+    db: Session,
+    namespace: str,
+    key: Any,
+    loader: Callable[[], T],
+    ttl: float = _READ_CACHE_TTL_SECONDS,
+) -> T:
+    """Return a short-lived TTL-cached read result scoped to the active engine and write epoch."""
+    with _cache_lock:
+        cache_key = (_bind_token(db), _cache_epoch, namespace, key)
+        entry = _read_cache.get(cache_key)
+        now = monotonic()
+        if entry is not None:
+            expires_at, value = entry
+            if now < expires_at:
+                _read_cache.move_to_end(cache_key)
+                return value
+            del _read_cache[cache_key]
+        epoch_before = _cache_epoch
+
+    value = loader()
+
+    with _cache_lock:
+        if _cache_epoch == epoch_before:
+            _read_cache[cache_key] = (monotonic() + ttl, value)
+            _read_cache.move_to_end(cache_key)
+            while len(_read_cache) > _READ_CACHE_MAX_ENTRIES:
+                _read_cache.popitem(last=False)
+    return value
 
 _PLATFORM = {"hepsiemlak": "HepsiEmlak", "emlakjet": "Emlakjet"}
 _CATEGORY = {
@@ -99,13 +162,19 @@ def _conditions(db: Session, filters: ResultsFilters):
     return conditions
 
 
-def _groups(conditions=()):
+def _groups(conditions=(), *, include_avg_price: bool = False):
+    cols = [
+        *_GROUP,
+        func.count(Listing.id).label("count"),
+        *(
+            [func.avg(Listing.fiyat).label("avg_price")]
+            if include_avg_price
+            else []
+        ),
+        func.max(Listing.created_at).label("last_date"),
+    ]
     return (
-        select(
-            *_GROUP,
-            func.count(Listing.id).label("count"),
-            func.max(Listing.created_at).label("last_date"),
-        )
+        select(*cols)
         .join_from(Listing, Location)
         .where(*conditions)
         .group_by(*_GROUP)
@@ -151,11 +220,10 @@ def _result_order(grouped_rows):
 
 
 def get_results_page(db: Session, filters: ResultsPageQuery) -> dict[str, Any]:
-    grouped_query = _groups(_conditions(db, filters))
-    groups = grouped_query.with_only_columns(
-        *_GROUP, grouped_query.selected_columns.last_date
+    groups = _groups(
+        _conditions(db, filters), include_avg_price=True
     ).cte("result_groups")
-    # Count and page read the same grouped snapshot, even when writes occur concurrently.
+    # Count and page read the same grouped snapshot without re-joining base tables.
     count = func.count()
     last_page = (count + filters.limit - 1) // filters.limit
     pagination = (
@@ -171,39 +239,11 @@ def get_results_page(db: Session, filters: ResultsPageQuery) -> dict[str, Any]:
         .cte("result_pagination")
     )
     offset = select((pagination.c.page - 1) * filters.limit).scalar_subquery()
-    page_groups = (
+    page_rows = (
         select(groups)
         .order_by(*_result_order(groups))
         .offset(offset)
         .limit(filters.limit)
-        .subquery("result_page_groups")
-    )
-    # Only displayed groups need listing counts and average prices.
-    page_rows = (
-        select(
-            page_groups,
-            func.count(Listing.id).label("count"),
-            func.avg(Listing.fiyat).label("avg_price"),
-        )
-        .select_from(page_groups)
-        .join(
-            Location,
-            and_(
-                Location.il == page_groups.c.il,
-                Location.ilce.is_not_distinct_from(page_groups.c.ilce),
-            ),
-        )
-        .join(
-            Listing,
-            and_(
-                Listing.location_id == Location.id,
-                Listing.platform == page_groups.c.platform,
-                Listing.kategori == page_groups.c.kategori,
-                Listing.ilan_tipi == page_groups.c.ilan_tipi,
-                Listing.alt_kategori.is_not_distinct_from(page_groups.c.alt_kategori),
-            ),
-        )
-        .group_by(*page_groups.c)
         .subquery("result_page")
     )
     rows = db.execute(

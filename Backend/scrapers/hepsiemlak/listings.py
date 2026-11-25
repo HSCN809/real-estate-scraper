@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
 from core.selectors import get_common_selectors, get_selectors
+from scrapling.parser import Selector
 
 from scrapers.common.html import as_html
 from scrapers.common.pagination import (
@@ -28,6 +28,15 @@ _LISTING_FALLBACKS = [
 ]
 
 
+def _to_selector(source) -> Selector:
+    return source if isinstance(source, Selector) else Selector(as_html(source))
+
+
+def _first(element, selector: str):
+    matches = element.css(selector)
+    return matches[0] if matches else None
+
+
 def _text(element, css_selector: str | list[str] | None, default: str = _MISSING) -> str:
     selectors = (
         [item for item in css_selector if item]
@@ -35,9 +44,9 @@ def _text(element, css_selector: str | list[str] | None, default: str = _MISSING
         else ([css_selector] if css_selector else [])
     )
     for selector in selectors:
-        selected = element.select_one(selector)
-        if selected:
-            value = " ".join(selected.get_text(" ", strip=True).split())
+        selected = _first(element, selector)
+        if selected is not None:
+            value = " ".join(selected.get_all_text(" ", strip=True).split())
             if value:
                 return value
     return default
@@ -55,13 +64,10 @@ def _attr(
         else ([css_selector] if css_selector else [])
     )
     for selector in selectors:
-        selected = element.select_one(selector)
-        if not selected:
+        selected = _first(element, selector)
+        if selected is None:
             continue
-        value = selected.get(attribute, "")
-        if isinstance(value, list):
-            value = value[0] if value else ""
-        value = str(value or "").strip()
+        value = str(selected.attrib.get(attribute, "") or "").strip()
         if value:
             return value
     return default
@@ -73,24 +79,27 @@ def _is_missing(value: Any) -> bool:
 
 def _spec_values(element, common_selectors: dict[str, Any]) -> dict[str, str]:
     values: dict[str, str] = {}
-    for item in element.select(
-        common_selectors.get(
-            "specs", "dl.listingCard__specs div.listingCard__spec-item"
-        )
-    ):
-        label = _text(
-            item,
-            common_selectors.get("spec_label", "dt.listingCard__spec-label"),
-            default="",
-        )
-        value = _text(item, common_selectors.get("spec_value", "dd"), default="")
+    spec_selector = common_selectors.get(
+        "specs", "dl.listingCard__specs div.listingCard__spec-item"
+    )
+    label_selector = common_selectors.get("spec_label", "dt.listingCard__spec-label")
+    value_selector = common_selectors.get("spec_value", "dd")
+    for item in element.css(spec_selector):
+        label = _text(item, label_selector, default="")
+        value = _text(item, value_selector, default="")
         if label and value:
             values[label.strip()] = value.strip()
     return values
 
 
-def _category_data(element, category: str, common_selectors: dict[str, Any]) -> dict[str, Any]:
-    spec_map = get_selectors("hepsiemlak", category).get("spec_map") or {}
+def _category_data(
+    element,
+    category: str,
+    common_selectors: dict[str, Any],
+    spec_map: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if spec_map is None:
+        spec_map = get_selectors("hepsiemlak", category).get("spec_map") or {}
     values = _spec_values(element, common_selectors)
     return {
         field: next((values[label] for label in labels if label in values), _MISSING)
@@ -107,8 +116,11 @@ def extract_listing_from_card(
     district: str | None = None,
     scraping_method: str = "",
     scraped_at: str | None = None,
+    common_selectors: dict[str, Any] | None = None,
+    spec_map: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    common_selectors = get_common_selectors("hepsiemlak")
+    if common_selectors is None:
+        common_selectors = get_common_selectors("hepsiemlak")
     listing_link = _attr(element, common_selectors.get("link", "a.card-link"), "href")
     if _is_missing(listing_link):
         return None
@@ -145,7 +157,7 @@ def extract_listing_from_card(
             element, common_selectors.get("firm", "p.listingCard__owner-firm")
         ),
     }
-    data.update(_category_data(element, category, common_selectors))
+    data.update(_category_data(element, category, common_selectors, spec_map=spec_map))
 
     if city and _is_missing(data.get("il")):
         data["il"] = city
@@ -166,8 +178,9 @@ def extract_listings_from_html(
     district: str | None = None,
     scraping_method: str = "",
 ) -> list[dict[str, Any]]:
-    soup = BeautifulSoup(as_html(source), "html.parser")
+    tree = _to_selector(source)
     common_selectors = get_common_selectors("hepsiemlak")
+    spec_map = get_selectors("hepsiemlak", category).get("spec_map") or {}
     selectors = [
         common_selectors.get("listing_container", "article.listingCard__box"),
         *_LISTING_FALLBACKS,
@@ -176,7 +189,7 @@ def extract_listings_from_html(
     for selector in selectors:
         if not selector:
             continue
-        listing_elements = soup.select(selector)
+        listing_elements = tree.css(selector)
         if listing_elements:
             break
 
@@ -191,6 +204,8 @@ def extract_listings_from_html(
             district=district,
             scraping_method=scraping_method,
             scraped_at=scraped_at,
+            common_selectors=common_selectors,
+            spec_map=spec_map,
         )
         if data:
             listings.append(data)
@@ -198,18 +213,21 @@ def extract_listings_from_html(
 
 
 def extract_total_pages(source) -> int:
-    soup = BeautifulSoup(as_html(source), "html.parser")
-    count_el = soup.select_one("span.applied-filters__count")
-    count_text = count_el.get_text(" ", strip=True) if count_el else ""
-    page_links = soup.select(
+    tree = _to_selector(source)
+    count_el = _first(tree, "span.applied-filters__count")
+    count_text = (
+        " ".join(count_el.get_all_text(" ", strip=True).split())
+        if count_el is not None
+        else ""
+    )
+    page_links = tree.css(
         "ul.he-pagination__links a, ul.he-pagination a, a[href*='page=']"
     )
     hrefs = []
     texts = []
     for link in page_links:
-        raw_href = link.get("href")
-        hrefs.append(raw_href[0] if isinstance(raw_href, list) else raw_href)
-        texts.append(link.get_text(" ", strip=True))
+        hrefs.append(link.attrib.get("href"))
+        texts.append(" ".join(link.get_all_text(" ", strip=True).split()))
     return max(
         max_page_from_hrefs(hrefs, "page"),
         max_page_from_texts(texts),

@@ -1,21 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
+import { ResultsBackground } from '@/components/ui/ResultsBackground';
 import { useScraping } from '@/contexts/ScrapingContext';
 import { motion } from 'framer-motion';
 import { Play, Loader2, XCircle, Sparkles, X, MapPin, Info } from 'lucide-react';
 import Link from 'next/link';
-import { startScrape, getCategories, getSubtypes } from '@/lib/api';
-import type { Platform, ListingType, Category, HepsiemlakScrapingMethod } from '@/types';
+import { startScrape } from '@/lib/api';
+import { useCategories, useSubtypes } from '@/lib/api-hooks';
+import type { Platform, ListingType, HepsiemlakScrapingMethod } from '@/types';
 import type { Subtype } from '@/lib/api';
-import dynamic from 'next/dynamic';
-
-const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
 
 export default function PlatformScraperPage() {
     const params = useParams();
@@ -43,14 +42,26 @@ export default function PlatformScraperPage() {
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const { startTracking, activeTask } = useScraping();
 
-    // API'den dinamik kategoriler
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [categoriesLoading, setCategoriesLoading] = useState(true);
+    const { data: categoriesResponse, isLoading: categoriesLoading } = useCategories();
+    const categories = useMemo(
+        () => categoriesResponse?.[platform]?.[listingType] || [],
+        [categoriesResponse, platform, listingType],
+    );
+    const activeCategory = useMemo(
+        () =>
+            categories.length > 0 && !categories.some(c => c.id === category)
+                ? categories[0].id
+                : category,
+        [categories, category],
+    );
 
-    // API'den alt kategoriler
-    const [subtypes, setSubtypes] = useState<Subtype[]>([]);
+    const { data: subtypesResponse, isLoading: subtypesLoading } = useSubtypes(
+        listingType,
+        activeCategory,
+        platform,
+    );
+    const subtypes = useMemo(() => subtypesResponse?.subtypes || [], [subtypesResponse]);
     const [selectedSubtype, setSelectedSubtype] = useState<Subtype | null>(null);
-    const [subtypesLoading, setSubtypesLoading] = useState(false);
     const [scrapingMethod, setScrapingMethod] = useState<HepsiemlakScrapingMethod>('selenium');
     const [proxyEnabled, setProxyEnabled] = useState(false);
     const isProxyToggleDisabled = scrapingMethod === 'selenium';
@@ -66,52 +77,15 @@ export default function PlatformScraperPage() {
         { value: 'scrapling_spider_stealth_session', label: 'Scrapling Spider + AsyncStealthySession' },
     ];
 
-    // Platform/ilan tipi değiştiğinde API'den kategorileri çek
     useEffect(() => {
-        const fetchCategories = async () => {
-            setCategoriesLoading(true);
-            try {
-                const response = await getCategories();
-                const platformCategories = response[platform]?.[listingType] || [];
-                setCategories(platformCategories);
+        if (activeCategory !== category) {
+            setCategory(activeCategory);
+        }
+    }, [activeCategory, category]);
 
-                // Mevcut kategori listede yoksa sıfırla
-                if (platformCategories.length > 0) {
-                    const currentCategoryExists = platformCategories.some(c => c.id === category);
-                    if (!currentCategoryExists) {
-                        setCategory(platformCategories[0].id);
-                    }
-                }
-            } catch (error) {
-                console.error('Kategoriler alınamadı:', error);
-                setCategories([]);
-            } finally {
-                setCategoriesLoading(false);
-            }
-        };
-
-        fetchCategories();
-    }, [platform, listingType, category]);
-
-    // Kategori değiştiğinde alt kategorileri çek
     useEffect(() => {
-        const fetchSubtypesData = async () => {
-            setSubtypesLoading(true);
-            setSelectedSubtype(null);
-
-            try {
-                const response = await getSubtypes(listingType, category, platform);
-                setSubtypes(response.subtypes || []);
-            } catch (error) {
-                console.error('Alt kategoriler alınamadı:', error);
-                setSubtypes([]);
-            } finally {
-                setSubtypesLoading(false);
-            }
-        };
-
-        fetchSubtypesData();
-    }, [platform, listingType, category]);
+        setSelectedSubtype(null);
+    }, [platform, listingType, activeCategory]);
 
     useEffect(() => {
         if (isProxyToggleDisabled && proxyEnabled) {
@@ -186,18 +160,7 @@ export default function PlatformScraperPage() {
     return (
         <div className="relative min-h-screen bg-black">
             {/* Floating Lines Background */}
-            <div className="fixed inset-0 z-0">
-                <FloatingLines
-                    linesGradient={['#38bdf8', '#0ea5e9', '#34d399', '#818cf8']}
-                    enabledWaves={['top', 'middle', 'bottom']}
-                    lineCount={5}
-                    lineDistance={5}
-                    bendRadius={5}
-                    bendStrength={-0.5}
-                    interactive
-                    parallax
-                />
-            </div>
+            <ResultsBackground />
 
             {/* Dark Gradient Overlay */}
             <div className="fixed inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/50 to-black/85 pointer-events-none" />

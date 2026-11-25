@@ -101,7 +101,12 @@ class Listing(Base):
 
     __table_args__ = (
         Index(
-            "idx_listings_filter", "platform", "kategori", "ilan_tipi", "location_id"
+            "idx_listings_filter",
+            "platform",
+            "kategori",
+            "ilan_tipi",
+            "alt_kategori",
+            "location_id",
         ),
         Index("idx_listings_price", "fiyat"),
         Index("idx_listings_created", "created_at"),

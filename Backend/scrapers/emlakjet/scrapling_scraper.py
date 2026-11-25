@@ -16,7 +16,7 @@ from scrapling.fetchers import (
     StealthySession,
 )
 from scrapling.parser import Selector
-from scrapling.spiders import Response, Spider
+from scrapling.spiders import Request, Response, Spider
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -739,12 +739,61 @@ class EmlakJetScraplingScraper:
         )
         self._log_location_plan(location_name, pages_to_scrape)
 
+        seed_reused = False
+        if seed_page is not None and not self._is_listing_limit_reached():
+            seed_listings = self.extract_listings_from_page(
+                seed_page,
+                page_url=location_url,
+                city=city,
+                district=district,
+                neighborhood=neighborhood,
+            )
+            seed_listings = self._trim_page_listings(seed_listings)
+            if seed_listings or pages_to_scrape == 1:
+                seed_reused = True
+                visited_pages.add(1)
+                processed_pages.add(1)
+                for listing in seed_listings:
+                    listing["page"] = 1
+                    listing["scraping_method"] = self.scraping_method
+                if progress_callback:
+                    progress_callback(
+                        f"{location_name} - Sayfa 1/{pages_to_scrape}",
+                        current=1,
+                        total=pages_to_scrape,
+                        progress=int((1 / max(1, pages_to_scrape)) * 100),
+                    )
+                if self._retain_listings:
+                    self.all_listings.extend(seed_listings)
+                    collected_items.extend(seed_listings)
+                new_count, updated_count, unchanged_count = self._persist_listings(
+                    seed_listings
+                )
+                self._report_page_persist_result(
+                    page_num=1,
+                    extracted_count=len(seed_listings),
+                    new_count=new_count,
+                    updated_count=updated_count,
+                    unchanged_count=unchanged_count,
+                    location_name=location_name,
+                )
+
+        start_page = 2 if seed_reused else 1
+        target_urls = (
+            []
+            if self._is_listing_limit_reached()
+            else [
+                self._build_page_url(location_url, page_num)
+                for page_num in range(start_page, pages_to_scrape + 1)
+            ]
+        )
+
         logging.getLogger("scrapling").setLevel(logging.ERROR)
         logging.getLogger("scrapling.spiders").setLevel(logging.ERROR)
 
         class EmlakjetSpider(Spider):
             name = f"emlakjet_{session_mode}_{outer._normalize_text(location_name).replace(' ', '-')}"
-            start_urls = [location_url]
+            start_urls = target_urls
             allowed_domains = {"emlakjet.com"}
             concurrent_requests = mode_settings["concurrent_requests"]
             download_delay = mode_settings["download_delay"]
@@ -792,6 +841,14 @@ class EmlakJetScraplingScraper:
                         default=True,
                     )
 
+            async def start_requests(self):
+                start_kwargs: dict[str, Any] = {}
+                if session_mode != "fetcher" and listing_selector:
+                    start_kwargs["wait_selector"] = listing_selector
+                sid = self._session_manager.default_session_id
+                for url in self.start_urls:
+                    yield Request(url, sid=sid, callback=self.parse, **start_kwargs)
+
             async def on_error(self, request, error):
                 spider_errors.append(
                     {
@@ -806,6 +863,8 @@ class EmlakJetScraplingScraper:
                 )
 
             async def parse(self, response: Response):
+                if False:
+                    yield None
                 status = response_http_status(response)
                 if status >= 400:
                     spider_errors.append(
@@ -868,16 +927,8 @@ class EmlakJetScraplingScraper:
                 if outer._retain_listings:
                     collected_items.extend(page_listings)
 
-                if outer._is_listing_limit_reached():
-                    return
-                if current_page < pages_to_scrape:
-                    next_url = outer._build_page_url(location_url, current_page + 1)
-                    follow_kwargs: dict[str, Any] = {"callback": self.parse}
-                    if session_mode != "fetcher" and listing_selector:
-                        follow_kwargs["wait_selector"] = listing_selector
-                    yield response.follow(next_url, **follow_kwargs)
-
-        EmlakjetSpider().start()
+        if target_urls:
+            EmlakjetSpider().start()
         method_items = list(collected_items)
         method_items.sort(
             key=lambda item: (item.get("page", 1), item.get("ilan_url", ""))

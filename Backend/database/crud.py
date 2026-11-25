@@ -505,6 +505,11 @@ def upsert_listings(
 
         db.flush()
 
+    if counts["created"] or counts["updated"]:
+        from .results import invalidate_results_cache
+
+        invalidate_results_cache()
+
     return counts["created"], counts["updated"], counts["unchanged"]
 
 
