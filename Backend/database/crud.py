@@ -13,7 +13,7 @@ from core.task_status import (
     SCRAPE_SESSION_STATUS_VALUES,
     normalize_scrape_session_status,
 )
-from sqlalchemy import func, select, true, tuple_
+from sqlalchemy import and_, case, func, select, true, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from utils.timezone import format_istanbul, latest_datetime, now_utc_naive
@@ -777,6 +777,136 @@ def compute_price_stats_and_ranges(
     return stats, price_ranges
 
 
+def compute_price_stats_sql(
+    db: Session, price_subquery: Any, num_bins: int = 5
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Compute summary stats and quantile-based price ranges directly in SQL."""
+    import math
+
+    price_col = price_subquery.c.price
+    n, mean_val, min_val, max_val = db.execute(
+        select(
+            func.count(price_col),
+            func.avg(price_col),
+            func.min(price_col),
+            func.max(price_col),
+        ).select_from(price_subquery)
+    ).one()
+
+    if not n:
+        return None, []
+
+    n = int(n)
+    mean = float(mean_val)
+    min_p = float(min_val)
+    max_p = float(max_val)
+
+    def _interp_ranks(p: float) -> tuple[int, int, float]:
+        k = (n - 1) * p / 100.0
+        f = int(k)
+        c = f + 1 if f + 1 < n else f
+        return f + 1, c + 1, k - f
+
+    needed_ranks: set[int] = set()
+    for p in (25.0, 75.0):
+        r1, r2, _ = _interp_ranks(p)
+        needed_ranks.update((r1, r2))
+
+    mid = n // 2
+    if n % 2 == 1:
+        needed_ranks.add(mid + 1)
+    else:
+        needed_ranks.update((mid, mid + 1))
+
+    bin_specs = [_interp_ranks(i * 100.0 / num_bins) for i in range(num_bins + 1)]
+    for r1, r2, _ in bin_specs:
+        needed_ranks.update((r1, r2))
+
+    ranked = select(
+        price_col.label("price"),
+        func.row_number().over(order_by=price_col).label("rn"),
+    ).select_from(price_subquery).subquery()
+
+    rank_map = {
+        int(rn): float(val)
+        for rn, val in db.execute(
+            select(ranked.c.rn, ranked.c.price).where(ranked.c.rn.in_(needed_ranks))
+        )
+    }
+
+    def percentile(p: float) -> float:
+        r1, r2, frac = _interp_ranks(p)
+        v1 = rank_map[r1]
+        v2 = rank_map[r2]
+        return v1 + (v2 - v1) * frac
+
+    median = (
+        rank_map[mid + 1]
+        if n % 2 == 1
+        else (rank_map[mid] + rank_map[mid + 1]) / 2.0
+    )
+
+    unique_edges: list[float] = []
+    for r1, r2, frac in bin_specs:
+        edge = rank_map[r1] + (rank_map[r2] - rank_map[r1]) * frac
+        if not unique_edges or edge > unique_edges[-1]:
+            unique_edges.append(edge)
+
+    if len(unique_edges) < 3:
+        bin_width = (max_p - min_p) / num_bins
+        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
+
+    ss_expr = func.coalesce(func.sum((price_col - mean) * (price_col - mean)), 0.0)
+    last_idx = len(unique_edges) - 2
+    bin_exprs = []
+    for i in range(len(unique_edges) - 1):
+        low = unique_edges[i]
+        high = unique_edges[i + 1]
+        upper = price_col <= high if i == last_idx else price_col < high
+        bin_exprs.append(
+            func.coalesce(
+                func.sum(case((and_(price_col >= low, upper), 1), else_=0)), 0
+            )
+        )
+
+    agg_row = db.execute(select(ss_expr, *bin_exprs).select_from(price_subquery)).one()
+    ss = float(agg_row[0] or 0.0)
+    std = math.sqrt(ss / (n - 1)) if n > 1 else 0.0
+
+    stats = {
+        "count": n,
+        "mean": round(mean, 2),
+        "std": round(std, 2) if n > 1 else 0,
+        "min": round(min_p, 2),
+        "q25": round(percentile(25.0), 2),
+        "median": round(median, 2),
+        "q75": round(percentile(75.0), 2),
+        "max": round(max_p, 2),
+    }
+
+    def format_price(p: float) -> str:
+        if p >= 1_000_000:
+            return f"{p / 1_000_000:.1f}M"
+        if p >= 1_000:
+            return f"{p / 1_000:.0f}K"
+        return f"{p:.0f}"
+
+    price_ranges: list[dict[str, Any]] = []
+    for i, count_val in enumerate(agg_row[1:]):
+        low = unique_edges[i]
+        high = unique_edges[i + 1]
+        cnt = int(count_val or 0)
+        price_ranges.append(
+            {
+                "range": f"{format_price(low)} - {format_price(high)}",
+                "count": cnt,
+                "percentage": round(cnt / n * 100, 1),
+            }
+        )
+
+    return stats, price_ranges
+
+
 def get_city_analytics(
     db: Session,
     city_name: str,
@@ -788,16 +918,14 @@ def get_city_analytics(
     """Belirli bir sehrin detayli analizlerini getir."""
     city_normalized = _normalize_turkish(city_name)
 
-    # Sadece id/il/ilce tuple'larini cek (ORM nesnesi olusturmadan)
-    matching_location_ids: list[int] = []
-    district_set: set[str] = set()
-    for loc_id, loc_il, loc_ilce in db.query(Location.id, Location.il, Location.ilce):
-        if loc_il and _normalize_turkish(loc_il) == city_normalized:
-            matching_location_ids.append(loc_id)
-            if loc_ilce:
-                district_set.add(loc_ilce)
+    # Sadece benzersiz il adlarini cek (tum locations tablosu yerine ~81 satir)
+    matching_cities = [
+        loc_il
+        for loc_il in db.scalars(select(Location.il).distinct())
+        if loc_il and _normalize_turkish(loc_il) == city_normalized
+    ]
 
-    if not matching_location_ids:
+    if not matching_cities:
         return {
             "city": city_name,
             "total_listings": 0,
@@ -807,28 +935,43 @@ def get_city_analytics(
             "price_ranges": [],
         }
 
-    district_names = sorted(district_set)
-
-    # Sadece gereken kolonlari sorgula (full Listing ORM yukleme)
-    base_query = db.query(Listing).filter(Listing.location_id.in_(matching_location_ids))
-    if platform and platform != "all":
-        base_query = base_query.filter(Listing.platform == platform)
-    if kategori and kategori != "all":
-        base_query = base_query.filter(Listing.kategori == kategori)
-    if ilan_tipi and ilan_tipi != "all":
-        base_query = base_query.filter(Listing.ilan_tipi == ilan_tipi)
-    if alt_kategori and alt_kategori != "all":
-        base_query = base_query.filter(Listing.alt_kategori == alt_kategori)
-
-    total_listings = base_query.with_entities(func.count(Listing.id)).scalar() or 0
-    prices = [
-        float(price)
-        for (price,) in base_query.with_entities(Listing.fiyat).filter(
-            Listing.fiyat.isnot(None), Listing.fiyat > 0
+    district_names = list(
+        db.scalars(
+            select(Location.ilce)
+            .where(Location.il.in_(matching_cities), Location.ilce.isnot(None))
+            .distinct()
+            .order_by(Location.ilce)
         )
-    ]
+    )
 
-    if not prices:
+    conditions = [Location.il.in_(matching_cities)]
+    if platform and platform != "all":
+        conditions.append(Listing.platform == platform)
+    if kategori and kategori != "all":
+        conditions.append(Listing.kategori == kategori)
+    if ilan_tipi and ilan_tipi != "all":
+        conditions.append(Listing.ilan_tipi == ilan_tipi)
+    if alt_kategori and alt_kategori != "all":
+        conditions.append(Listing.alt_kategori == alt_kategori)
+
+    total_listings = (
+        db.scalar(
+            select(func.count(Listing.id))
+            .join_from(Listing, Location)
+            .where(*conditions)
+        )
+        or 0
+    )
+
+    price_subquery = (
+        select(Listing.fiyat.label("price"))
+        .join_from(Listing, Location)
+        .where(*conditions, Listing.fiyat.isnot(None), Listing.fiyat > 0)
+        .subquery()
+    )
+    stats, price_ranges = compute_price_stats_sql(db, price_subquery)
+
+    if stats is None:
         return {
             "city": city_name,
             "total_listings": total_listings,
@@ -837,9 +980,6 @@ def get_city_analytics(
             "stats": None,
             "price_ranges": [],
         }
-
-    prices.sort()
-    stats, price_ranges = compute_price_stats_and_ranges(prices)
 
     return {
         "city": city_name,
@@ -876,21 +1016,24 @@ def get_stats_summary(db: Session) -> dict[str, Any]:
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    total_listings = db.query(Listing).count()
-    total_sessions = db.query(ScrapeSession).count()
-
-    this_week = (
-        db.query(ScrapeSession).filter(ScrapeSession.started_at >= week_ago).count()
-    )
-    this_month = (
-        db.query(ScrapeSession).filter(ScrapeSession.started_at >= month_ago).count()
-    )
+    total_listings = db.scalar(select(func.count(Listing.id))) or 0
+    total_sessions, this_week, this_month = db.execute(
+        select(
+            func.count(ScrapeSession.id),
+            func.coalesce(
+                func.sum(case((ScrapeSession.started_at >= week_ago, 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((ScrapeSession.started_at >= month_ago, 1), else_=0)), 0
+            ),
+        )
+    ).one()
 
     return {
-        "total_scrapes": total_sessions,
-        "total_listings": total_listings,
-        "this_week": this_week,
-        "this_month": this_month,
+        "total_scrapes": int(total_sessions or 0),
+        "total_listings": int(total_listings),
+        "this_week": int(this_week or 0),
+        "this_month": int(this_month or 0),
         "last_scrape": get_last_scrape(db),
     }
 

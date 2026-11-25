@@ -191,3 +191,67 @@ def test_listing_statistics_queries_run_off_the_event_loop(client):
         thread != client.app.state.loop_thread
         for _query, thread in client.app.state.sql_queries
     )
+
+
+def test_sql_price_stats_match_python_reference_on_edge_cases():
+    from database import crud
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+
+    cases = [
+        ("single", [1_250_000.0]),
+        ("equal", [500_000.0, 500_000.0, 500_000.0, 500_000.0]),
+        ("multi", [100_000.0, 250_000.0, 400_000.0, 750_000.0, 1_200_000.0, 3_500_000.0, 8_000_000.0]),
+    ]
+
+    with Session(engine) as db:
+        for idx, (city_name, prices) in enumerate(cases):
+            loc = Location(il=city_name, ilce="Merkez")
+            db.add(loc)
+            db.flush()
+            for j, price in enumerate(prices):
+                db.add(
+                    Listing(
+                        baslik=f"{city_name}-{j}",
+                        platform="hepsiemlak",
+                        kategori="konut",
+                        ilan_tipi="satilik",
+                        location_id=loc.id,
+                        fiyat=price,
+                        ilan_url=f"https://example.com/{idx}/{j}",
+                    )
+                )
+        db.commit()
+
+        for city_name, prices in cases:
+            expected_stats, expected_ranges = crud.compute_price_stats_and_ranges(
+                sorted(prices)
+            )
+            result = crud.get_city_analytics(db, city_name)
+            assert result["stats"] == expected_stats
+            assert result["price_ranges"] == expected_ranges
+
+    engine.dispose()
+
+
+def test_gzip_and_cache_control_headers():
+    from main import app
+
+    app.dependency_overrides[get_current_user] = lambda: None
+    try:
+        with TestClient(app) as real_client:
+            cats = real_client.get("/api/v1/config/categories")
+            assert cats.status_code == 200
+            assert cats.headers.get("cache-control") == "public, max-age=86400"
+
+            idx = real_client.get(
+                "/api/v1/districts/index", headers={"Accept-Encoding": "gzip"}
+            )
+            assert idx.status_code == 200
+            assert idx.headers.get("cache-control") == "public, max-age=86400"
+            assert idx.headers.get("content-encoding") == "gzip"
+    finally:
+        app.dependency_overrides.clear()

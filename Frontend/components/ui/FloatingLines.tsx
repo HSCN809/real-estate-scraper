@@ -280,8 +280,8 @@ export default function FloatingLines({
     const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     camera.position.z = 1;
 
-    const renderer = new WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const renderer = new WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'low-power' });
+    renderer.setPixelRatio(1);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     container.appendChild(renderer.domElement);
@@ -379,6 +379,10 @@ export default function FloatingLines({
 
     let raf = 0;
     const renderLoop = () => {
+      if (document.hidden) {
+        raf = 0;
+        return;
+      }
       uniforms.iTime.value = clock.getElapsedTime();
 
       if (interactive) {
@@ -396,10 +400,24 @@ export default function FloatingLines({
       renderer.render(scene, camera);
       raf = requestAnimationFrame(renderLoop);
     };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (raf) {
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
+      } else if (!raf) {
+        clock.getDelta();
+        renderLoop();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     renderLoop();
 
     return () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (ro) ro.disconnect();
       if (interactive) {
         renderer.domElement.removeEventListener('pointermove', handlePointerMove);

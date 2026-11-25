@@ -25,7 +25,7 @@ export function useStats() {
     return useQuery({
         queryKey: ['stats'],
         queryFn: getStats,
-        staleTime: 0,
+        staleTime: 30_000,
         refetchOnWindowFocus: false,
     });
 }
@@ -35,7 +35,7 @@ export function useResults(params: ResultsPageParams = {}, enabled = true) {
         queryKey: ['results', 'page', params],
         queryFn: ({ signal }) => getResults(params, signal),
         enabled,
-        staleTime: 0,
+        staleTime: 30_000,
         refetchOnWindowFocus: false,
     });
 }
@@ -61,7 +61,7 @@ export function useResultsOverview(filters: ResultsFilters = {}, enabled = true)
         queryKey: ['results', 'overview', filters],
         queryFn: ({ signal }) => getResultsOverview(filters, signal),
         enabled,
-        staleTime: 0,
+        staleTime: 30_000,
     });
 }
 
@@ -70,7 +70,7 @@ export function usePriceSummary(filters: ResultsFilters, enabled: boolean) {
         queryKey: ['results', 'prices', filters],
         queryFn: ({ signal }) => getPriceSummary(filters, signal),
         enabled,
-        staleTime: 0,
+        staleTime: 30_000,
     });
 }
 

@@ -118,8 +118,9 @@ export function CitySelectionModal({
         onClose();
     };
 
-    // Load district index from backend API
+    // Load district index from backend API only when modal opens
     useEffect(() => {
+        if (!isOpen || districtIndex) return;
         const loadDistrictIndex = async () => {
             try {
                 const data = await getDistrictsIndex();
@@ -129,7 +130,7 @@ export function CitySelectionModal({
             }
         };
         loadDistrictIndex();
-    }, []);
+    }, [isOpen, districtIndex]);
 
     // Preload - Hover edilen şehrin verisini arka planda yükle (backend API)
     const preloadDistrictData = async (provinceName: string) => {
@@ -157,11 +158,7 @@ export function CitySelectionModal({
             setDistrictGeoData(null);
         });
 
-        const MIN_LOADING_TIME = 2000; // Minimum 2 saniye animasyon
-
         const loadDistrictGeoJSON = async () => {
-            const startTime = Date.now();
-
             let data: FeatureCollection<Geometry, DistrictProperties>;
 
             // Cache'de varsa oradan al, yoksa API'den çek
@@ -178,14 +175,6 @@ export function CitySelectionModal({
                     setLoadingDistricts(false);
                     return;
                 }
-            }
-
-            // Minimum 2 saniye bekleme süresi
-            const elapsed = Date.now() - startTime;
-            const remainingTime = MIN_LOADING_TIME - elapsed;
-
-            if (remainingTime > 0) {
-                await new Promise(resolve => setTimeout(resolve, remainingTime));
             }
 
             setDistrictGeoData(data);

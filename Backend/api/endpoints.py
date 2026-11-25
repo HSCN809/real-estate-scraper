@@ -18,6 +18,7 @@ from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from tasks.scraping_tasks import scrape_emlakjet_task, scrape_hepsiemlak_task
@@ -95,8 +96,9 @@ def _enqueue_scrape_task(
 
 
 @router.get("/config/categories")
-async def get_categories():
+async def get_categories(response: Response):
     """Tüm platform kategorilerini getir"""
+    response.headers["Cache-Control"] = "public, max-age=86400"
     emlakjet = get_emlakjet_config()
     hepsiemlak = get_hepsiemlak_config()
 
@@ -314,14 +316,12 @@ def get_listing_statistics(
     db: Session = Depends(get_db),
 ):
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
-    # Sorgu olustur
-    query = db.query(Listing.fiyat).filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
+    conditions = [Listing.fiyat.isnot(None), Listing.fiyat > 0]
 
-    # Filtreleri uygula
     if platform and platform != "all":
         platform_map = {"HepsiEmlak": "hepsiemlak", "Emlakjet": "emlakjet"}
         db_platform = platform_map.get(platform, platform.lower())
-        query = query.filter(Listing.platform == db_platform)
+        conditions.append(Listing.platform == db_platform)
 
     if kategori and kategori != "all":
         category_map = {
@@ -331,36 +331,35 @@ def get_listing_statistics(
             "Devremülk": "devremulk",
         }
         db_kategori = category_map.get(kategori, kategori.lower())
-        query = query.filter(Listing.kategori == db_kategori)
+        conditions.append(Listing.kategori == db_kategori)
 
     if ilan_tipi and ilan_tipi != "all":
         type_map = {"Satılık": "satilik", "Kiralık": "kiralik"}
         db_type = type_map.get(ilan_tipi, ilan_tipi.lower())
-        query = query.filter(Listing.ilan_tipi == db_type)
+        conditions.append(Listing.ilan_tipi == db_type)
 
-    # Şehir/ilçe filtresi
-    if city or district:
-        location_query = db.query(Location.id)
-        if city and city != "Belirtilmemiş":
-            location_query = location_query.filter(Location.il == city)
-        if district and district != "Belirtilmemiş":
-            location_query = location_query.filter(Location.ilce == district)
-        location_ids = [loc_id for (loc_id,) in location_query.all()]
-        if location_ids:
-            query = query.filter(Listing.location_id.in_(location_ids))
+    has_city = bool(city and city != "Belirtilmemiş")
+    has_district = bool(district and district != "Belirtilmemiş")
+    stmt = select(Listing.fiyat.label("price"))
+    if has_city or has_district:
+        stmt = stmt.join_from(Listing, Location)
+        if has_city:
+            conditions.append(Location.il == city)
+        if has_district:
+            conditions.append(Location.ilce == district)
+    else:
+        stmt = stmt.select_from(Listing)
 
-    # Fiyatları al
-    prices = [float(p) for (p,) in query]
+    price_subquery = stmt.where(*conditions).subquery()
+    describe_stats, price_ranges = crud.compute_price_stats_sql(db, price_subquery)
 
-    if not prices:
+    if describe_stats is None:
         return {"error": "Fiyat verisi bulunamadı", "stats": None}
 
-    prices.sort()
-    describe_stats, price_ranges = crud.compute_price_stats_and_ranges(prices)
     return {
         "stats": describe_stats,
         "price_ranges": price_ranges,
-        "total_listings": len(prices),
+        "total_listings": describe_stats["count"],
     }
 
 
@@ -800,8 +799,9 @@ def _load_district_geojson(province_name: str) -> dict[str, Any]:
 
 
 @router.get("/districts/index")
-def get_districts_index():
+def get_districts_index(response: Response):
     """Tüm illerin ilçe sayılarıyla index'ini getir"""
+    response.headers["Cache-Control"] = "public, max-age=86400"
     with _districts_lock:
         return _load_districts_index()
 
@@ -811,12 +811,15 @@ def get_district_geojson(province_name: str):
     """Belirli bir ilin ilçe GeoJSON verisini getir"""
     with _districts_lock:
         geojson = _load_district_geojson(province_name)
-    return JSONResponse(geojson)
+    return JSONResponse(
+        geojson, headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 
 @router.get("/districts/info/{province_name}")
-def get_district_info(province_name: str):
+def get_district_info(province_name: str, response: Response):
     """İl için ilçe listesini ve meta verilerini getir"""
+    response.headers["Cache-Control"] = "public, max-age=86400"
     with _districts_lock:
         index = _load_districts_index()
     province_info = index.get(province_name)

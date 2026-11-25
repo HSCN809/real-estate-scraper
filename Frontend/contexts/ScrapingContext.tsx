@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, startTransition, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { createContext, startTransition, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { cancelTask, getTaskStatus, TaskRequestError, type TaskStatus } from '@/lib/api';
 import { useActiveTasks } from '@/lib/api-hooks';
@@ -36,6 +36,7 @@ interface ScrapingContextType {
 }
 
 const TASK_STORAGE_KEY = 'scraping_active_task';
+const EMPTY_TASKS: TaskStatus[] = [];
 
 const ScrapingContext = createContext<ScrapingContextType | undefined>(undefined);
 
@@ -266,10 +267,12 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
     const showPanel = useCallback(() => setIsPanelVisible(true), []);
     const hidePanel = useCallback(() => setIsPanelVisible(false), []);
 
-    return (
-        <ScrapingContext.Provider value={{
+    const activeTasks = activeTasksData?.active_tasks ?? EMPTY_TASKS;
+
+    const contextValue = useMemo(
+        () => ({
             activeTask,
-            activeTasks: activeTasksData?.active_tasks ?? [],
+            activeTasks,
             isPanelVisible,
             isCancelling,
             startTracking,
@@ -278,7 +281,23 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
             togglePanel,
             showPanel,
             hidePanel,
-        }}>
+        }),
+        [
+            activeTask,
+            activeTasks,
+            isPanelVisible,
+            isCancelling,
+            startTracking,
+            stopTracking,
+            cancelActiveTask,
+            togglePanel,
+            showPanel,
+            hidePanel,
+        ],
+    );
+
+    return (
+        <ScrapingContext.Provider value={contextValue}>
             {children}
         </ScrapingContext.Provider>
     );
