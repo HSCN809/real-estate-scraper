@@ -120,3 +120,32 @@ def test_iter_bounded_stops_early_and_caps_workers():
 
     assert peak <= 2
     assert len(processed) < 10
+
+
+def test_proxy_fetch_shares_cooldown_on_429(monkeypatch):
+    from scrapers.common import proxy_fetch
+
+    client = proxy_fetch.ProxyFetchClient(enabled=True, max_retries=2, initial_delay=1.0)
+    sleeps = []
+    attempts = {"count": 0}
+
+    def fake_fetch(url, max_retries=1, initial_delay=1.0):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return ProxyResponse(
+                status=429,
+                headers={"Retry-After": "4"},
+                body=b"Too Many Requests",
+            )
+        return ProxyResponse(status=200, headers={}, body=b"x" * 200)
+
+    monkeypatch.setattr(client.client, "fetch_with_retry", fake_fetch)
+    monkeypatch.setattr(proxy_fetch.time, "sleep", lambda s: sleeps.append(s))
+
+    try:
+        sel = client.fetch_selector("https://www.hepsiemlak.com/istanbul-kiralik")
+        assert sel is not None
+        assert attempts["count"] == 2
+        assert any(3.5 <= s <= 4.1 for s in sleeps)
+    finally:
+        client.close()

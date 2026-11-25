@@ -200,3 +200,35 @@ def test_emlakjet_skips_similar_listings():
     """
     listings = extract_listings_from_html(html, category="konut")
     assert [item["baslik"] for item in listings] == ["Ana ilan"]
+
+
+def test_emlakjet_reads_listing_row_card_markup():
+    html = """
+    <html><body>
+    <article data-listing-id="20120402" class="listing-row-card">
+      <h3 class="listing-row-card-title" data-listing-title="true">
+        <a href="/ilan/bahcelievler-de-kiralik-52-genis-dubleks-kiralik-daire-20120402">Kiralık 5+2 Daire</a>
+      </h3>
+      <p class="listing-row-card-meta">İstanbul, Bahçelievler</p>
+      <p class="listing-row-card-meta">5+2<span aria-hidden="true"> · </span>250 m²<span aria-hidden="true"> · </span>4. Kat</p>
+      <div class="listing-price-row listing-row-card-price">
+        <span>135.000 ₺</span>
+        <span class="listing-row-favorite-slot"></span>
+      </div>
+      <img src="https://imaj.emlakjet.com/resize/640/0/listing/20120402/a.jpg" />
+      <span class="property-card-badge-pill">Yeni</span>
+    </article>
+    </body></html>
+    """
+    listings = extract_listings_from_html(
+        html,
+        page_url="https://www.emlakjet.com/kiralik-konut/istanbul",
+        category="konut",
+    )
+    assert len(listings) == 1
+    item = listings[0]
+    assert item["baslik"] == "Kiralık 5+2 Daire"
+    assert item["lokasyon"] == "İstanbul, Bahçelievler"
+    assert item["fiyat"] == "135.000 ₺"
+    assert item["oda_sayisi"] == "5+2"
+    assert item["yeni"] is True

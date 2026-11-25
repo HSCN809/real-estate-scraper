@@ -4,7 +4,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import os
 import threading
 import time
-from typing import Callable, Iterable, Iterator, TypeVar
+from typing import Any, Callable, Iterable, Iterator, TypeVar
 
 from python_proxy.go_proxy_client import CloudflareBypassClient
 from scrapling.parser import Selector
@@ -92,6 +92,8 @@ class ProxyFetchClient:
         self._owner_thread_id = threading.get_ident()
         self._thread_local = threading.local()
         self._clients_lock = threading.Lock()
+        self._cooldown_lock = threading.Lock()
+        self._cooldown_until = 0.0
         self._clients: list[CloudflareBypassClient] = []
         self.client = (
             CloudflareBypassClient(
@@ -152,6 +154,31 @@ class ProxyFetchClient:
             return
         getattr(task_log, level, task_log.info)(message)
 
+    @staticmethod
+    def _retry_after_seconds(headers: dict[str, Any] | None) -> float | None:
+        if not headers:
+            return None
+        for key, value in headers.items():
+            if str(key).lower() == "retry-after":
+                raw = value[0] if isinstance(value, (list, tuple)) and value else value
+                try:
+                    return max(1.0, min(30.0, float(str(raw).strip())))
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    def _wait_cooldown(self) -> None:
+        with self._cooldown_lock:
+            remaining = self._cooldown_until - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+
+    def _set_cooldown(self, delay: float) -> None:
+        target = time.monotonic() + max(0.0, delay)
+        with self._cooldown_lock:
+            if target > self._cooldown_until:
+                self._cooldown_until = target
+
     def fetch_selector(self, url: str, task_log=None) -> Selector | None:
         client = self._get_client()
         if not self.enabled or client is None:
@@ -161,18 +188,24 @@ class ProxyFetchClient:
         last_error = "Proxy fetch failed"
 
         for attempt in range(max_attempts):
+            self._wait_cooldown()
             response = client.fetch_with_retry(
                 url=url,
                 max_retries=1,
                 initial_delay=self.initial_delay,
             )
 
+            rate_limited = False
+            retry_after = None
             if response.error:
                 last_error = f"Proxy fetch failed ({response.status}): {response.error}"
             elif response.status >= 400:
                 last_error = f"Proxy returned status {response.status} for {url}"
                 if response.status in _NON_RETRYABLE_STATUSES:
                     break
+                if response.status in (429, 503):
+                    rate_limited = True
+                    retry_after = self._retry_after_seconds(response.headers)
             else:
                 body = response.body or b""
                 if len(body) <= 100:
@@ -184,17 +217,30 @@ class ProxyFetchClient:
                     decoded = body[:16384].decode("utf-8", errors="ignore")
                     if self._is_cloudflare_challenge(decoded):
                         last_error = f"Cloudflare challenge still detected for {url}"
+                        rate_limited = True
                     else:
                         return Selector(content=body, url=url)
 
+            delay = (
+                retry_after
+                if retry_after is not None
+                else (
+                    min(20.0, 5.0 * (2**attempt))
+                    if rate_limited
+                    else min(self.max_delay, self.initial_delay * (2**attempt))
+                )
+            )
+            if rate_limited:
+                self._set_cooldown(delay)
+
             if attempt < max_attempts - 1:
-                delay = min(self.max_delay, self.initial_delay * (2**attempt))
                 self._log(
                     task_log,
                     f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",
                     level="warning",
                 )
-                time.sleep(delay)
+                if not rate_limited:
+                    time.sleep(delay)
 
         self._log(task_log, last_error, level="warning")
         return None

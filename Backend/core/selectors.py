@@ -8,15 +8,15 @@ from typing import Any
 
 EMLAKJET_SELECTORS = {
     "common": {
-        # İlan seçicileri (yeni Next.js yapısı - Ağustos 2026)
+        # İlan seçicileri (Next.js güncel listing-row-card-* + eski fallback)
         "listing_container": "article[data-listing-id]",
         "title": "h3[data-listing-title] a",
         "link": "h3[data-listing-title] a, a[data-listing-image]",
-        "location": "p.text-xs",
-        "price": "span.shrink-0.whitespace-nowrap",
+        "location": "p.listing-row-card-meta, p.text-xs",
+        "price": ".listing-row-card-price > span, span.shrink-0.whitespace-nowrap",
         "image": "img[src*='/listing/']",
-        "badge_wrapper": "span[class*='px-2 py-0.5']",
-        "quick_info": "p.text-xs",
+        "badge_wrapper": ".property-card-badge-pill, span[class*='px-2 py-0.5']",
+        "quick_info": "p.listing-row-card-meta, p.text-xs",
         # Sayfalama (yeni yapı: ?sayfa=N)
         "pagination_list": "a[href*='sayfa=']",
         "active_page": "span[aria-current='page']",
