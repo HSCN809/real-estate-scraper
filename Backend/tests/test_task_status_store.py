@@ -176,3 +176,37 @@ def test_single_roundtrip_update_logs_and_checks_cancellation():
             log_message="İstanbul - Sayfa 2/5",
             check_cancel=True,
         )
+
+
+def test_update_retries_on_watch_conflict_and_preserves_cancellation(monkeypatch):
+    import pytest
+    import redis as redis_lib
+    from core.task_status import TaskCancelled
+
+    client = FakeRedis()
+    store = TaskStatusStore(redis_client=client)
+    store.create_queued_task("task-1", message="Queued", platform="hepsiemlak")
+    store.mark_running("task-1", message="Running", progress=10)
+
+    orig_pipeline = client.pipeline
+    conflicts = [0]
+
+    def racing_pipeline():
+        pipe = orig_pipeline()
+        orig_execute = pipe.execute
+
+        def execute():
+            if conflicts[0] == 0:
+                conflicts[0] += 1
+                TaskStatusStore(redis_client=client).mark_cancelled("task-1")
+                raise redis_lib.WatchError("concurrent cancel")
+            return orig_execute()
+
+        pipe.execute = execute
+        return pipe
+
+    monkeypatch.setattr(client, "pipeline", racing_pipeline)
+    with pytest.raises(TaskCancelled):
+        store.update("task-1", progress=50, check_cancel=True)
+    assert conflicts[0] == 1
+    assert store.get_task("task-1")["status"] == TASK_STATUS_CANCELLED

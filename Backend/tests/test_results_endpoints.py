@@ -272,3 +272,13 @@ def test_results_read_cache_hits_and_invalidates_on_delete(client):
     assert deleted.status_code == 200
     refreshed = client.get("/api/v1/results?limit=2").json()
     assert refreshed["total"] == 3
+
+
+def test_filtered_city_locations_cache_reuses_distinct_lookup(client):
+    assert client.get("/api/v1/results?city=Ankara&page=1&limit=1").status_code == 200
+    client.app.state.sql_queries.clear()
+
+    second = client.get("/api/v1/results?city=Ankara&page=2&limit=1")
+    assert second.status_code == 200
+    statements = [statement.upper() for statement, _ in client.app.state.sql_queries]
+    assert not any("SELECT DISTINCT" in stmt for stmt in statements)

@@ -155,7 +155,7 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
 
     const pollStatus = useCallback(async () => {
         const currentTaskId = taskIdRef.current;
-        if (!currentTaskId) return;
+        if (!currentTaskId || document.hidden) return;
 
         try {
             const data = await getTaskStatus(currentTaskId);
@@ -206,23 +206,44 @@ export function ScrapingProvider({ children }: { children: ReactNode }) {
     const activeTaskFinished = activeTask?.isFinished ?? false;
 
     useEffect(() => {
-        if (!activeTaskId || activeTaskFinished) {
+        const stopPolling = () => {
             if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
             }
+        };
+
+        if (!activeTaskId || activeTaskFinished) {
+            stopPolling();
             return;
         }
 
-        const initialTimer = setTimeout(pollStatus, 500);
-        pollIntervalRef.current = setInterval(pollStatus, 2000);
+        const startPolling = () => {
+            stopPolling();
+            pollIntervalRef.current = setInterval(pollStatus, 2000);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                void pollStatus();
+                startPolling();
+            }
+        };
+
+        let initialTimer: ReturnType<typeof setTimeout> | null = null;
+        if (!document.hidden) {
+            initialTimer = setTimeout(pollStatus, 500);
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            clearTimeout(initialTimer);
-            if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
-            }
+            if (initialTimer) clearTimeout(initialTimer);
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [activeTaskFinished, activeTaskId, pollStatus]);
 

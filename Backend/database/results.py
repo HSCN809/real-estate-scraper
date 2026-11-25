@@ -10,7 +10,7 @@ from typing import Any, Callable, TypeVar
 from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, case, func, select, true
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.orm import Session
 from utils.timezone import format_istanbul, to_iso, to_istanbul
 
@@ -135,6 +135,18 @@ def _code(value: str, labels: dict[str, str]) -> str:
     )
 
 
+def _location_values_map(
+    db: Session, cache_name: str, column: Any, missing: str
+) -> dict[str, tuple[str, ...]]:
+    def _build() -> dict[str, tuple[str, ...]]:
+        grouped: dict[str, list[str]] = defaultdict(list)
+        for name in db.scalars(select(column).distinct()):
+            grouped[_location_name(name) or missing].append(name)
+        return {key: tuple(values) for key, values in grouped.items()}
+
+    return cached_read(db, "_location_map", cache_name, _build)
+
+
 def _conditions(db: Session, filters: ResultsFilters):
     conditions = []
     for column, value, labels in (
@@ -147,16 +159,16 @@ def _conditions(db: Session, filters: ResultsFilters):
     if filters.subtype and filters.subtype != "all":
         subtype = re.sub(r"[\s\-]+", "_", filters.subtype.strip().casefold())
         conditions.append(Listing.alt_kategori == subtype)
-    for column, values, missing in (
-        (Location.il, filters.city, _UNKNOWN),
-        (Location.ilce, filters.district, ""),
+    for cache_name, column, values, missing in (
+        ("city", Location.il, filters.city, _UNKNOWN),
+        ("district", Location.ilce, filters.district, ""),
     ):
         if values:
-            selected = set(values)
+            mapping = _location_values_map(db, cache_name, column, missing)
             raw_values = [
-                name
-                for name in db.scalars(select(column).distinct())
-                if (_location_name(name) or missing) in selected
+                raw
+                for canonical in dict.fromkeys(values)
+                for raw in mapping.get(canonical, ())
             ]
             conditions.append(column.in_(raw_values))
     return conditions
@@ -337,29 +349,53 @@ def get_results_overview(db: Session, filters: ResultsFilters) -> dict[str, Any]
     return overview.to_dict()
 
 
-def _price_histogram(db: Session, prices, count: int) -> list[dict[str, Any]]:
-    # Preserve the chart's decile edges. The database returns only the selected ranks.
+def _price_histogram(
+    db: Session, prices, count: int, minimum: float, maximum: float
+) -> list[dict[str, Any]]:
+    if minimum == maximum:
+        return [{"min": minimum, "max": maximum, "count": count}]
+
+    # Preserve the chart's decile edges and bucket counts in one CTE pass over filtered prices.
     ranks = {1, count, *(count * i // 10 + 1 for i in range(1, 10))}
     ranked = select(
-        prices.c.price, func.row_number().over(order_by=prices.c.price).label("rank")
-    ).subquery()
-    edges = sorted(
-        set(db.scalars(select(ranked.c.price).where(ranked.c.rank.in_(ranks))))
+        prices.c.price.label("price"),
+        func.row_number().over(order_by=prices.c.price).label("rn"),
+    ).cte("ranked_prices")
+    edge_vals = (
+        select(ranked.c.price.label("edge"))
+        .where(ranked.c.rn.in_(ranks))
+        .distinct()
+        .cte("price_edges")
     )
-    if len(edges) == 1:
-        return [{"min": edges[0], "max": edges[0], "count": count}]
-
-    intervals = list(zip(edges, edges[1:]))
-    buckets = []
-    for i, (low, high) in enumerate(intervals):
-        upper = (
-            prices.c.price <= high if i == len(intervals) - 1 else prices.c.price < high
+    bounds = select(
+        edge_vals.c.edge.label("low"),
+        func.lead(edge_vals.c.edge).over(order_by=edge_vals.c.edge).label("high"),
+        func.lead(edge_vals.c.edge, 2).over(order_by=edge_vals.c.edge).label("next_high"),
+    ).cte("price_bounds")
+    bucket_rows = db.execute(
+        select(bounds.c.low, bounds.c.high, func.count(ranked.c.price))
+        .select_from(
+            bounds.outerjoin(
+                ranked,
+                and_(
+                    ranked.c.price >= bounds.c.low,
+                    or_(
+                        ranked.c.price < bounds.c.high,
+                        and_(
+                            bounds.c.next_high.is_(None),
+                            ranked.c.price <= bounds.c.high,
+                        ),
+                    ),
+                ),
+            )
         )
-        buckets.append(func.sum(case((and_(prices.c.price >= low, upper), 1), else_=0)))
-    bucket_counts = db.execute(select(*buckets).select_from(prices)).one()
+        .where(bounds.c.high.isnot(None))
+        .group_by(bounds.c.low, bounds.c.high, bounds.c.next_high)
+        .order_by(bounds.c.low)
+    ).all()
     return [
         {"min": low, "max": high, "count": bucket_count}
-        for (low, high), bucket_count in zip(intervals, bucket_counts)
+        for low, high, bucket_count in bucket_rows
     ]
 
 
@@ -376,11 +412,25 @@ def get_price_summary(db: Session, filters: ResultsFilters) -> dict[str, Any]:
     )
     price = prices.c.price
     avg = func.avg(price)
-    count, average, minimum, maximum = db.execute(
-        select(func.count(price), avg, func.min(price), func.max(price))
-    ).one()
+    platform_rows = db.execute(
+        select(
+            prices.c.platform,
+            func.count(price),
+            func.sum(price),
+            func.min(price),
+            func.max(price),
+        )
+        .group_by(prices.c.platform)
+        .order_by(prices.c.platform)
+    ).all()
+    count = sum(row[1] for row in platform_rows)
     cities, platforms, histogram = [], [], []
+    average = minimum = maximum = None
     if count:
+        total_sum = sum(row[2] for row in platform_rows)
+        average = total_sum / count
+        minimum = min(row[3] for row in platform_rows)
+        maximum = max(row[4] for row in platform_rows)
         cities = [
             {"city": _location_name(city) or _UNKNOWN, "avg_price": round(value, 2)}
             for city, value in db.execute(
@@ -393,15 +443,11 @@ def get_price_summary(db: Session, filters: ResultsFilters) -> dict[str, Any]:
         platforms = [
             {
                 "platform": _PLATFORM.get(platform, platform),
-                "avg_price": round(value, 2),
+                "avg_price": round(platform_sum / platform_count, 2),
             }
-            for platform, value in db.execute(
-                select(prices.c.platform, avg)
-                .group_by(prices.c.platform)
-                .order_by(prices.c.platform)
-            )
+            for platform, platform_count, platform_sum, _pmin, _pmax in platform_rows
         ]
-        histogram = _price_histogram(db, prices, count)
+        histogram = _price_histogram(db, prices, count, minimum, maximum)
     return {
         "summary": {
             "total_count": count,

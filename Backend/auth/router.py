@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, invalidate_user_cache
 from .schemas import (
     ChangePasswordRequest,
     UpdateProfileRequest,
@@ -150,6 +150,16 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
 
+def _attached_user(db: Session, current_user: User) -> User:
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Geçersiz kimlik bilgileri",
+        )
+    return user
+
+
 @router.put("/me", response_model=UserResponse)
 def update_profile(
     update_data: UpdateProfileRequest,
@@ -157,10 +167,11 @@ def update_profile(
     db: Session = Depends(get_db),
 ):
     """Kullanıcı profilini güncelle"""
-    if update_data.username and update_data.username != current_user.username:
+    user = _attached_user(db, current_user)
+    if update_data.username and update_data.username != user.username:
         existing = (
             db.query(User)
-            .filter(User.username == update_data.username, User.id != current_user.id)
+            .filter(User.username == update_data.username, User.id != user.id)
             .first()
         )
         if existing:
@@ -168,12 +179,12 @@ def update_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Bu kullanıcı adı zaten kullanılıyor",
             )
-        current_user.username = update_data.username
+        user.username = update_data.username
 
-    if update_data.email and update_data.email != current_user.email:
+    if update_data.email and update_data.email != user.email:
         existing = (
             db.query(User)
-            .filter(User.email == update_data.email, User.id != current_user.id)
+            .filter(User.email == update_data.email, User.id != user.id)
             .first()
         )
         if existing:
@@ -181,12 +192,13 @@ def update_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Bu e-posta adresi zaten kullanılıyor",
             )
-        current_user.email = update_data.email
+        user.email = update_data.email
 
     db.commit()
-    db.refresh(current_user)
+    db.refresh(user)
+    invalidate_user_cache(user.id)
 
-    return UserResponse.model_validate(current_user)
+    return UserResponse.model_validate(user)
 
 
 @router.post("/change-password")
@@ -197,20 +209,22 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     """Kullanıcı şifresini değiştir"""
+    user = _attached_user(db, current_user)
     if not verify_password(
-        password_data.current_password, current_user.hashed_password
+        password_data.current_password, user.hashed_password
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre yanlış"
         )
 
-    current_user.hashed_password = get_password_hash(password_data.new_password)
+    user.hashed_password = get_password_hash(password_data.new_password)
     db.commit()
+    invalidate_user_cache(user.id)
     access_token = create_access_token(
         {
-            "sub": current_user.id,
-            "username": current_user.username,
-            "pwd": password_stamp(current_user.hashed_password),
+            "sub": user.id,
+            "username": user.username,
+            "pwd": password_stamp(user.hashed_password),
         }
     )
     _set_auth_cookie(response, access_token)

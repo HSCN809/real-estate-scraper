@@ -235,6 +235,25 @@ services:
     networks:
       - real-estate-network
 
+  # Frontend - Next.js (Production Standalone Mode via `--profile prod`)
+  real-estate-frontend-prod:
+    profiles: ["prod"]
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: real-estate-frontend-prod
+    ports:
+      - "${FRONTEND_PROD_PORT:-3001}:3000"
+    depends_on:
+      real-estate-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
 networks:
   real-estate-network:
     driver: bridge

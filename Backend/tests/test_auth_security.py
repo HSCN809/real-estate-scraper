@@ -39,3 +39,59 @@ def test_default_expiry_is_seven_days(monkeypatch):
 
     reloaded = importlib.reload(security)
     assert reloaded.ACCESS_TOKEN_EXPIRE_DAYS == 7
+
+
+def test_get_current_user_caches_and_invalidates_on_password_change():
+    from auth.dependencies import get_current_user, invalidate_user_cache
+    from auth.security import get_password_hash, password_stamp
+    from database.models import Base, User
+    from fastapi import HTTPException
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+    from starlette.requests import Request
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    sql_count = [0]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_args):
+        sql_count[0] += 1
+
+    old_hash = get_password_hash("OldPass123")
+    new_hash = get_password_hash("NewPass123")
+    with Session(engine) as db:
+        user = User(
+            username="cacheuser",
+            email="cache@example.com",
+            hashed_password=old_hash,
+            is_active=True,
+            is_admin=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        old_token = create_access_token(
+            {"sub": user.id, "username": user.username, "pwd": password_stamp(old_hash)}
+        )
+        req = Request(
+            {"type": "http", "headers": [(b"cookie", f"session_token={old_token}".encode("latin1"))]}
+        )
+
+        sql_count[0] = 0
+        assert get_current_user(req, db).username == "cacheuser"
+        assert get_current_user(req, db).username == "cacheuser"
+        assert sql_count[0] == 1
+
+        user.hashed_password = new_hash
+        db.commit()
+        invalidate_user_cache(user.id)
+
+        with pytest.raises(HTTPException) as exc:
+            get_current_user(req, db)
+        assert exc.value.status_code == 401
+
+    engine.dispose()

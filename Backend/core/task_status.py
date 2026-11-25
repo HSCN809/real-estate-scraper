@@ -5,11 +5,13 @@ import logging
 import os
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, cast
+from typing import Any, Callable, cast
+from weakref import WeakSet
 
 import redis
 
 logger = logging.getLogger(__name__)
+_INDEXED_CLIENTS: WeakSet[Any] = WeakSet()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://real-estate-redis:6379/0")
 TASK_STATUS_KEY_PREFIX = "scrape_task"
@@ -170,67 +172,68 @@ class TaskStatusStore:
         log_level: str = "info",
         check_cancel: bool = False,
     ) -> dict[str, Any]:
-        existing = self.get_task(task_id)
-        if existing is None:
-            if status is None:
-                raise ValueError(
-                    "status is required when creating a missing task payload"
+        def apply(existing: dict[str, Any] | None) -> tuple[dict[str, Any], bool]:
+            if existing is None:
+                if status is None:
+                    raise ValueError(
+                        "status is required when creating a missing task payload"
+                    )
+                existing = create_task_status_payload(
+                    task_id,
+                    status=status,
+                    message=message or "",
+                    platform=platform,
                 )
-            existing = create_task_status_payload(
-                task_id,
-                status=status,
-                message=message or "",
-                platform=platform,
+            else:
+                if check_cancel and (
+                    existing.get("cancel_requested")
+                    or existing.get("status") == TASK_STATUS_CANCELLED
+                ):
+                    raise TaskCancelled("Tarama iptal edildi")
+                if is_final_task_status(existing.get("status")):
+                    return existing, False
+
+            if status is not None:
+                if status not in TASK_STATUS_VALUES:
+                    raise ValueError(f"Unsupported task status: {status}")
+                existing["status"] = status
+            if message is not None:
+                existing["message"] = message
+            if progress is not None:
+                previous = int(existing.get("progress") or 0)
+                next_progress = (
+                    previous
+                    if existing.get("status") in ACTIVE_TASK_STATUSES and progress < previous
+                    else progress
+                )
+                existing["progress"] = next_progress
+            if current is not None:
+                existing["current"] = current
+            if total is not None:
+                existing["total"] = total
+            if details is not None:
+                existing["details"] = details
+            if error is not None:
+                existing["error"] = error
+            if platform is not None:
+                existing["platform"] = platform
+            if unit is not None:
+                existing["unit"] = unit
+            if cancel_requested is not None:
+                existing["cancel_requested"] = cancel_requested
+            existing.setdefault("logs", [])
+            if log_message is not None:
+                _append_log_entry(existing, log_message, log_level)
+
+            existing["updated_at"] = utcnow_iso()
+            existing["finished_at"] = (
+                existing["updated_at"] if is_final_task_status(existing["status"]) else None
             )
-        else:
-            if check_cancel and (
-                existing.get("cancel_requested")
-                or existing.get("status") == TASK_STATUS_CANCELLED
-            ):
-                raise TaskCancelled("Tarama iptal edildi")
-            if is_final_task_status(existing.get("status")):
-                return existing
+            return existing, True
 
-        if status is not None:
-            if status not in TASK_STATUS_VALUES:
-                raise ValueError(f"Unsupported task status: {status}")
-            existing["status"] = status
-        if message is not None:
-            existing["message"] = message
-        if progress is not None:
-            previous = int(existing.get("progress") or 0)
-            if (
-                existing.get("status") in ACTIVE_TASK_STATUSES
-                and progress < previous
-            ):
-                progress = previous
-            existing["progress"] = progress
-        if current is not None:
-            existing["current"] = current
-        if total is not None:
-            existing["total"] = total
-        if details is not None:
-            existing["details"] = details
-        if error is not None:
-            existing["error"] = error
-        if platform is not None:
-            existing["platform"] = platform
-        if unit is not None:
-            existing["unit"] = unit
-        if cancel_requested is not None:
-            existing["cancel_requested"] = cancel_requested
-        existing.setdefault("logs", [])
-        if log_message is not None:
-            _append_log_entry(existing, log_message, log_level)
-
-        existing["updated_at"] = utcnow_iso()
-        if is_final_task_status(existing["status"]):
-            existing["finished_at"] = existing["updated_at"]
-        else:
-            existing["finished_at"] = None
-
-        self._write(existing)
-        return existing
+        result = self._mutate(task_id, apply)
+        assert result is not None
+        return result
 
     def mark_running(
         self,
@@ -311,14 +314,13 @@ class TaskStatusStore:
         message: str,
         level: str = "info",
     ) -> dict[str, Any] | None:
-        existing = self.get_task(task_id)
-        if existing is None:
-            return None
-        if not _append_log_entry(existing, message, level):
-            return existing
-        existing["updated_at"] = utcnow_iso()
-        self._write(existing)
-        return existing
+        def apply(existing: dict[str, Any] | None) -> tuple[dict[str, Any] | None, bool]:
+            if existing is None or not _append_log_entry(existing, message, level):
+                return existing, False
+            existing["updated_at"] = utcnow_iso()
+            return existing, True
+
+        return self._mutate(task_id, apply)
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         data = self.redis_client.get(build_task_status_key(task_id))
@@ -327,8 +329,10 @@ class TaskStatusStore:
         return json.loads(cast(str | bytes, data))
 
     def get_active_tasks(self) -> list[dict[str, Any]]:
-        if not self.redis_client.exists(ACTIVE_TASKS_INDEX_READY_KEY):
-            self._index_existing_active_tasks()
+        if self.redis_client not in _INDEXED_CLIENTS:
+            if not self.redis_client.exists(ACTIVE_TASKS_INDEX_READY_KEY):
+                self._index_existing_active_tasks()
+            _INDEXED_CLIENTS.add(self.redis_client)
 
         keys = list(
             cast(set[str | bytes], self.redis_client.smembers(ACTIVE_TASKS_KEY))
@@ -376,14 +380,39 @@ class TaskStatusStore:
                 except redis.WatchError:
                     continue
 
+    def _mutate(
+        self,
+        task_id: str,
+        mutator: Callable[[dict[str, Any] | None], tuple[dict[str, Any] | None, bool]],
+    ) -> dict[str, Any] | None:
+        key = build_task_status_key(task_id)
+        with self.redis_client.pipeline() as pipe:
+            while True:
+                try:
+                    pipe.watch(key)
+                    raw = cast(str | bytes | None, pipe.get(key))
+                    existing = json.loads(raw) if raw else None
+                    payload, changed = mutator(existing)
+                    if not changed or payload is None:
+                        return payload
+                    pipe.multi()
+                    self._queue_write(pipe, key, payload)
+                    pipe.execute()
+                    return payload
+                except redis.WatchError:
+                    continue
+
+    def _queue_write(self, pipe: Any, key: str, payload: dict[str, Any]) -> None:
+        pipe.setex(key, TASK_STATUS_TTL_SECONDS, json.dumps(payload))
+        if is_active_task_status(payload["status"]):
+            pipe.sadd(ACTIVE_TASKS_KEY, key)
+        else:
+            pipe.srem(ACTIVE_TASKS_KEY, key)
+
     def _write(self, payload: dict[str, Any]) -> None:
         key = build_task_status_key(payload["task_id"])
         with self.redis_client.pipeline() as pipe:
-            pipe.setex(key, TASK_STATUS_TTL_SECONDS, json.dumps(payload))
-            if is_active_task_status(payload["status"]):
-                pipe.sadd(ACTIVE_TASKS_KEY, key)
-            else:
-                pipe.srem(ACTIVE_TASKS_KEY, key)
+            self._queue_write(pipe, key, payload)
             pipe.execute()
 
 
