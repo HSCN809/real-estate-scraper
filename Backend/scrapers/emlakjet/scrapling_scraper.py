@@ -211,8 +211,16 @@ class EmlakJetScraplingScraper:
     def _get_page_number(url: str) -> int:
         return page_number_from_url(url)
 
+    @property
+    def _retain_listings(self) -> bool:
+        """DB bagliyken ilan dict'lerini RAM'de biriktirme (sayfa bazli persist edilir)."""
+        return self.db is None
+
     def _is_listing_limit_reached(self) -> bool:
-        return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
+        return (
+            self._max_listings > 0
+            and self.total_scraped_count >= self._max_listings
+        )
 
     def _create_session(self):
         if self.proxy_enabled:
@@ -541,7 +549,7 @@ class EmlakJetScraplingScraper:
     ) -> list[dict[str, Any]]:
         if self._max_listings <= 0:
             return page_listings
-        remaining = self._max_listings - len(self.all_listings)
+        remaining = self._max_listings - self.total_scraped_count
         if remaining <= 0:
             return []
         return page_listings[:remaining]
@@ -617,6 +625,7 @@ class EmlakJetScraplingScraper:
         progress_callback=None,
     ) -> list[dict[str, Any]]:
         listings: list[dict[str, Any]] = []
+        location_count = 0
         self._log_location_start(location_name, location_url)
 
         first_page = self.fetch_page(location_url)
@@ -667,8 +676,10 @@ class EmlakJetScraplingScraper:
                 neighborhood=neighborhood,
             )
             page_listings = self._trim_page_listings(page_listings)
-            self.all_listings.extend(page_listings)
-            listings.extend(page_listings)
+            location_count += len(page_listings)
+            if self._retain_listings:
+                self.all_listings.extend(page_listings)
+                listings.extend(page_listings)
             new_count, updated_count, unchanged_count = self._persist_listings(
                 page_listings
             )
@@ -840,7 +851,8 @@ class EmlakJetScraplingScraper:
                     listing["page"] = current_page
                     listing["scraping_method"] = outer.scraping_method
 
-                outer.all_listings.extend(page_listings)
+                if outer._retain_listings:
+                    outer.all_listings.extend(page_listings)
                 new_count, updated_count, unchanged_count = outer._persist_listings(
                     page_listings
                 )
@@ -853,7 +865,8 @@ class EmlakJetScraplingScraper:
                     location_name=location_name,
                 )
                 processed_pages.add(current_page)
-                collected_items.extend(page_listings)
+                if outer._retain_listings:
+                    collected_items.extend(page_listings)
 
                 if outer._is_listing_limit_reached():
                     return
@@ -938,6 +951,7 @@ class EmlakJetScraplingScraper:
             progress_callback=progress_callback,
         )
         listings: list[dict[str, Any]] = []
+        location_count = 0
         self._log_location_start(location_name, location_url)
 
         first_page = self.fetch_page(location_url)
@@ -953,7 +967,7 @@ class EmlakJetScraplingScraper:
         for page_num in range(1, pages_to_scrape + 1):
             if self._is_listing_limit_reached():
                 task_log.line(
-                    f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                    f"🎯 Ilan limitine ulasildi: {self.total_scraped_count} / {self._max_listings}"
                 )
                 break
 
@@ -984,8 +998,10 @@ class EmlakJetScraplingScraper:
                 neighborhood=neighborhood,
             )
             page_listings = self._trim_page_listings(page_listings)
-            self.all_listings.extend(page_listings)
-            listings.extend(page_listings)
+            location_count += len(page_listings)
+            if self._retain_listings:
+                self.all_listings.extend(page_listings)
+                listings.extend(page_listings)
             new_count, updated_count, unchanged_count = self._persist_listings(
                 page_listings
             )
@@ -1001,7 +1017,7 @@ class EmlakJetScraplingScraper:
 
             if self._is_listing_limit_reached():
                 task_log.line(
-                    f"🎯 Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                    f"🎯 Ilan limitine ulasildi: {self.total_scraped_count} / {self._max_listings}"
                 )
                 break
 
@@ -1311,8 +1327,8 @@ class EmlakJetScraplingScraper:
             self.metrics["total_duration"] = (
                 self.metrics["end_time"] - self.metrics["start_time"]
             )
-            self.metrics["total_listings"] = len(self.all_listings)
-            if not self.all_listings and self.metrics["failed_requests"] > 0:
+            self.metrics["total_listings"] = self.total_scraped_count
+            if self.total_scraped_count == 0 and self.metrics["failed_requests"] > 0:
                 raise RuntimeError(
                     f"Tarama başarısız: 0 ilan, {self.metrics['failed_requests']} başarısız istek"
                 )
@@ -1320,7 +1336,7 @@ class EmlakJetScraplingScraper:
             task_log.divider()
             if stopped:
                 task_log.line("⚠️ ERKEN DURDURULDU", level="warning")
-            elif self.all_listings:
+            elif self.total_scraped_count > 0:
                 task_log.line("✅ TARAMA BASARIYLA TAMAMLANDI")
             else:
                 task_log.line("❌ HIC ILAN BULUNAMADI", level="warning")
@@ -1328,3 +1344,4 @@ class EmlakJetScraplingScraper:
             return scrape_stats
         finally:
             self._close_session()
+            self.proxy_fetcher.close()

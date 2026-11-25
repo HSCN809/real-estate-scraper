@@ -469,6 +469,11 @@ class HepsiemlakScraplingScraper:
             )
             return None
 
+    @property
+    def _retain_listings(self) -> bool:
+        """DB bagliyken ilan dict'lerini RAM'de biriktirme (sayfa bazli persist edilir)."""
+        return self.db is None
+
     def _scrape_location_with_session(
         self,
         location_name: str,
@@ -479,6 +484,7 @@ class HepsiemlakScraplingScraper:
         progress_callback=None,
     ) -> list[dict[str, Any]]:
         listings: list[dict[str, Any]] = []
+        location_count = 0
         self._log_location_start(location_name, location_url)
         first_page = self.fetch_page(location_url)
         if not first_page:
@@ -518,7 +524,9 @@ class HepsiemlakScraplingScraper:
                 district=district,
                 page_url=getattr(selector, "url", current_url),
             )
-            listings.extend(page_listings)
+            location_count += len(page_listings)
+            if self._retain_listings:
+                listings.extend(page_listings)
             new_count, updated_count, unchanged_count = self._persist_listings(
                 page_listings
             )
@@ -535,7 +543,7 @@ class HepsiemlakScraplingScraper:
             if page_num < pages_to_scrape:
                 time.sleep(random.SystemRandom().uniform(1, 3))
 
-        task_log.line(f"✅ {location_name} tamamlandı - {len(listings)} ilan işlendi")
+        task_log.line(f"✅ {location_name} tamamlandı - {location_count} ilan işlendi")
         return listings
 
     def _scrape_location_with_spider(
@@ -554,6 +562,7 @@ class HepsiemlakScraplingScraper:
         visited_pages: set[int] = set()
         processed_pages: set[int] = set()
         collected_items: list[dict[str, Any]] = []
+        location_count = 0
         outer = self
 
         self._log_location_start(location_name, location_url)
@@ -683,8 +692,11 @@ class HepsiemlakScraplingScraper:
                     unchanged_count=unchanged_count,
                     location_name=location_name,
                 )
+                nonlocal location_count
                 processed_pages.add(current_page)
-                collected_items.extend(page_listings)
+                location_count += len(page_listings)
+                if outer._retain_listings:
+                    collected_items.extend(page_listings)
 
                 if current_page < pages_to_scrape:
                     next_url = outer._build_page_url(location_url, current_page + 1)
@@ -702,11 +714,11 @@ class HepsiemlakScraplingScraper:
         self.metrics["successful_requests"] += len(visited_pages)
         self.metrics["failed_requests"] += len(spider_errors)
 
-        if not method_items:
+        if location_count == 0:
             task_log.line(f"⚠️ {location_name} için ilan bulunamadı", level="warning")
         else:
             task_log.line(
-                f"✅ {location_name} tamamlandı - {len(method_items)} ilan işlendi"
+                f"✅ {location_name} tamamlandı - {location_count} ilan işlendi"
             )
         return method_items
 
@@ -814,14 +826,15 @@ class HepsiemlakScraplingScraper:
             self.metrics["total_duration"] = (
                 self.metrics["end_time"] - self.metrics["start_time"]
             )
-            self.metrics["total_listings"] = len(all_listings)
-            if not all_listings and self.metrics["failed_requests"] > 0:
+            self.metrics["total_listings"] = self.total_scraped_count
+            if self.total_scraped_count == 0 and self.metrics["failed_requests"] > 0:
                 raise RuntimeError(
                     f"Tarama başarısız: 0 ilan, {self.metrics['failed_requests']} başarısız istek"
                 )
             return all_results, all_listings
         finally:
             self._close_session()
+            self.proxy_fetcher.close()
 
     def start_scraping(
         self, max_pages_per_city: int = 3, max_pages_per_district: int = 2
@@ -853,16 +866,16 @@ class HepsiemlakScraplingScraper:
         if not self.selected_cities:
             task_log.line("No cities provided for API scrape", level="error")
             return {}
-        results, listings = self._run_scraping(
+        results, _listings = self._run_scraping(
             max_pages=max_pages,
             progress_callback=progress_callback,
         )
-        if results:
+        if self.total_scraped_count > 0:
             task_log.section(
                 "SCRAPLING TARAMA TAMAMLANDI",
                 f"Yontem: {self.scraping_method}",
-                f"Taranan Sehir Sayisi: {len(results)}",
-                f"Toplam Ilan Sayisi: {len(listings)}",
+                f"Taranan Sehir Sayisi: {len(self.selected_cities)}",
+                f"Toplam Ilan Sayisi: {self.total_scraped_count}",
             )
         else:
             task_log.section("HIC ILAN BULUNAMADI", level="warning")

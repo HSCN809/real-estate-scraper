@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 
 @dataclass
@@ -88,6 +89,19 @@ class GoProxyClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self._cookies: list[dict[str, Any]] = []
+        self.session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
+    def close(self) -> None:
+        self.session.close()
+
+    def __enter__(self) -> "GoProxyClient":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
 
     def _make_proxy_request(
         self,
@@ -117,11 +131,11 @@ class GoProxyClient:
         for attempt in range(self.max_retries + 1):
             try:
                 if method == "GET":
-                    response = requests.get(
+                    response = self.session.get(
                         url, params=params, headers=headers, timeout=self.timeout
                     )
                 else:  # POST
-                    response = requests.post(
+                    response = self.session.post(
                         url, json=data, headers=headers, timeout=self.timeout
                     )
 
@@ -229,7 +243,7 @@ class GoProxyClient:
             True if server is healthy, False otherwise
         """
         try:
-            response = requests.get(f"{self.proxy_url}/", timeout=5)
+            response = self.session.get(f"{self.proxy_url}/", timeout=5)
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
@@ -249,7 +263,10 @@ class CloudflareBypassClient:
     """
 
     def __init__(
-        self, proxy_url: str = "http://127.0.0.1:8080", user_agent: str | None = None
+        self,
+        proxy_url: str = "http://127.0.0.1:8080",
+        user_agent: str | None = None,
+        transport_retries: int = 1,
     ):
         """
         Initialize the Cloudflare bypass client
@@ -257,8 +274,11 @@ class CloudflareBypassClient:
         Args:
             proxy_url: URL of the Go proxy server
             user_agent: Custom user agent string
+            transport_retries: Retries on proxy transport errors inside GoProxyClient
         """
-        self.proxy_client = GoProxyClient(proxy_url=proxy_url)
+        self.proxy_client = GoProxyClient(
+            proxy_url=proxy_url, max_retries=transport_retries
+        )
         self.user_agent = (
             user_agent
             or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
@@ -266,6 +286,9 @@ class CloudflareBypassClient:
         # Pins the Go pooled client so __cf_bm stays on one cookie jar.
         self.session_id = uuid.uuid4().hex
         self.session_cookies: dict[str, str] = {}
+
+    def close(self) -> None:
+        self.proxy_client.close()
 
     def fetch_with_retry(
         self, url: str, max_retries: int = 5, initial_delay: float = 2.0

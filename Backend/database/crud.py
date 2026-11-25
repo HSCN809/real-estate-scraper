@@ -689,6 +689,94 @@ def get_scrape_sessions(
 # ============== Analitik ==============
 
 
+_TURKISH_ASCII_MAP = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc")
+
+
+def _normalize_turkish(text: str) -> str:
+    return text.translate(_TURKISH_ASCII_MAP).lower()
+
+
+def compute_price_stats_and_ranges(
+    sorted_prices: list[float], num_bins: int = 5
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Compute summary stats and quantile-based price ranges from sorted prices."""
+    import bisect
+    import math
+
+    n = len(sorted_prices)
+
+    def percentile(p: float) -> float:
+        k = (n - 1) * p / 100
+        f = int(k)
+        c = f + 1 if f + 1 < n else f
+        return sorted_prices[f] + (sorted_prices[c] - sorted_prices[f]) * (k - f)
+
+    mid = n // 2
+    median = (
+        sorted_prices[mid]
+        if n % 2 == 1
+        else (sorted_prices[mid - 1] + sorted_prices[mid]) / 2.0
+    )
+
+    mean = math.fsum(sorted_prices) / n
+    if n > 1:
+        variance = math.fsum((p - mean) ** 2 for p in sorted_prices) / (n - 1)
+        std = math.sqrt(variance)
+    else:
+        std = 0.0
+
+    stats = {
+        "count": n,
+        "mean": round(mean, 2),
+        "std": round(std, 2) if n > 1 else 0,
+        "min": round(sorted_prices[0], 2),
+        "q25": round(percentile(25), 2),
+        "median": round(median, 2),
+        "q75": round(percentile(75), 2),
+        "max": round(sorted_prices[-1], 2),
+    }
+
+    bin_edges = [percentile(i * 100 / num_bins) for i in range(num_bins + 1)]
+    unique_edges: list[float] = []
+    for edge in bin_edges:
+        if not unique_edges or edge > unique_edges[-1]:
+            unique_edges.append(edge)
+
+    if len(unique_edges) < 3:
+        min_p, max_p = sorted_prices[0], sorted_prices[-1]
+        bin_width = (max_p - min_p) / num_bins
+        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
+
+    def format_price(p: float) -> str:
+        if p >= 1_000_000:
+            return f"{p / 1_000_000:.1f}M"
+        if p >= 1_000:
+            return f"{p / 1_000:.0f}K"
+        return f"{p:.0f}"
+
+    price_ranges: list[dict[str, Any]] = []
+    last_idx = len(unique_edges) - 2
+    for i in range(len(unique_edges) - 1):
+        low = unique_edges[i]
+        high = unique_edges[i + 1]
+        left = bisect.bisect_left(sorted_prices, low)
+        right = (
+            bisect.bisect_right(sorted_prices, high)
+            if i == last_idx
+            else bisect.bisect_left(sorted_prices, high)
+        )
+        count = max(0, right - left)
+        price_ranges.append(
+            {
+                "range": f"{format_price(low)} - {format_price(high)}",
+                "count": count,
+                "percentage": round(count / n * 100, 1),
+            }
+        )
+
+    return stats, price_ranges
+
+
 def get_city_analytics(
     db: Session,
     city_name: str,
@@ -698,36 +786,16 @@ def get_city_analytics(
     alt_kategori: str | None = None,
 ) -> dict[str, Any]:
     """Belirli bir sehrin detayli analizlerini getir."""
-    import statistics
+    city_normalized = _normalize_turkish(city_name)
 
-    # Karsilastirma icin sehir adini normalize et
-    def normalize_turkish(text):
-        replacements = {
-            "ı": "i",
-            "İ": "i",
-            "ş": "s",
-            "Ş": "s",
-            "ğ": "g",
-            "Ğ": "g",
-            "ü": "u",
-            "Ü": "u",
-            "ö": "o",
-            "Ö": "o",
-            "ç": "c",
-            "Ç": "c",
-        }
-        for tr_char, ascii_char in replacements.items():
-            text = text.replace(tr_char, ascii_char)
-        return text.lower()
-
-    city_normalized = normalize_turkish(city_name)
-
-    # Eslesen lokasyonu bul
-    locations = db.query(Location).all()
-    matching_location_ids = []
-    for loc in locations:
-        if normalize_turkish(loc.il) == city_normalized:
-            matching_location_ids.append(loc.id)
+    # Sadece id/il/ilce tuple'larini cek (ORM nesnesi olusturmadan)
+    matching_location_ids: list[int] = []
+    district_set: set[str] = set()
+    for loc_id, loc_il, loc_ilce in db.query(Location.id, Location.il, Location.ilce):
+        if loc_il and _normalize_turkish(loc_il) == city_normalized:
+            matching_location_ids.append(loc_id)
+            if loc_ilce:
+                district_set.add(loc_ilce)
 
     if not matching_location_ids:
         return {
@@ -739,108 +807,43 @@ def get_city_analytics(
             "price_ranges": [],
         }
 
-    # İlanları sorgula
-    query = db.query(Listing).filter(Listing.location_id.in_(matching_location_ids))
+    district_names = sorted(district_set)
 
+    # Sadece gereken kolonlari sorgula (full Listing ORM yukleme)
+    base_query = db.query(Listing).filter(Listing.location_id.in_(matching_location_ids))
     if platform and platform != "all":
-        query = query.filter(Listing.platform == platform)
+        base_query = base_query.filter(Listing.platform == platform)
     if kategori and kategori != "all":
-        query = query.filter(Listing.kategori == kategori)
+        base_query = base_query.filter(Listing.kategori == kategori)
     if ilan_tipi and ilan_tipi != "all":
-        query = query.filter(Listing.ilan_tipi == ilan_tipi)
+        base_query = base_query.filter(Listing.ilan_tipi == ilan_tipi)
     if alt_kategori and alt_kategori != "all":
-        query = query.filter(Listing.alt_kategori == alt_kategori)
+        base_query = base_query.filter(Listing.alt_kategori == alt_kategori)
 
-    listings = query.all()
-
-    # İlçeleri al
-    districts = (
-        db.query(Location.ilce)
-        .filter(Location.id.in_(matching_location_ids), Location.ilce.isnot(None))
-        .distinct()
-        .all()
-    )
-    district_names = sorted([d[0] for d in districts if d[0]])
-
-    # Fiyat istatistiklerini hesapla
+    total_listings = base_query.with_entities(func.count(Listing.id)).scalar() or 0
     prices = [
-        float(listing.fiyat)
-        for listing in listings
-        if listing.fiyat and listing.fiyat > 0
+        float(price)
+        for (price,) in base_query.with_entities(Listing.fiyat).filter(
+            Listing.fiyat.isnot(None), Listing.fiyat > 0
+        )
     ]
 
     if not prices:
         return {
             "city": city_name,
-            "total_listings": len(listings),
+            "total_listings": total_listings,
             "districts": district_names,
             "error": "Fiyat verisi bulunamadı",
             "stats": None,
             "price_ranges": [],
         }
 
-    sorted_prices = sorted(prices)
-    n = len(sorted_prices)
-
-    def percentile(data: list[float], p: float) -> float:
-        k = (len(data) - 1) * p / 100
-        f = int(k)
-        c = f + 1 if f + 1 < len(data) else f
-        return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
-
-    stats = {
-        "count": n,
-        "mean": round(statistics.mean(prices), 2),
-        "std": round(statistics.stdev(prices), 2) if n > 1 else 0,
-        "min": round(min(prices), 2),
-        "q25": round(percentile(sorted_prices, 25), 2),
-        "median": round(statistics.median(prices), 2),
-        "q75": round(percentile(sorted_prices, 75), 2),
-        "max": round(max(prices), 2),
-    }
-
-    # Fiyat araligi dagilimi
-    num_bins = 5
-    bin_edges = [
-        percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)
-    ]
-
-    unique_edges: list[float] = []
-    for e in bin_edges:
-        if not unique_edges or e > unique_edges[-1]:
-            unique_edges.append(e)
-
-    if len(unique_edges) < 3:
-        min_p, max_p = min(prices), max(prices)
-        bin_width = (max_p - min_p) / num_bins
-        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
-
-    def format_price(p: float) -> str:
-        if p >= 1000000:
-            return f"{p / 1000000:.1f}M"
-        elif p >= 1000:
-            return f"{p / 1000:.0f}K"
-        else:
-            return f"{p:.0f}"
-
-    price_ranges: list[dict[str, Any]] = []
-    for i in range(len(unique_edges) - 1):
-        low = unique_edges[i]
-        high = unique_edges[i + 1]
-        label = f"{format_price(low)} - {format_price(high)}"
-
-        if i == len(unique_edges) - 2:
-            count = sum(1 for p in prices if low <= p <= high)
-        else:
-            count = sum(1 for p in prices if low <= p < high)
-
-        price_ranges.append(
-            {"range": label, "count": count, "percentage": round(count / n * 100, 1)}
-        )
+    prices.sort()
+    stats, price_ranges = compute_price_stats_and_ranges(prices)
 
     return {
         "city": city_name,
-        "total_listings": len(listings),
+        "total_listings": total_listings,
         "districts": district_names,
         "stats": stats,
         "price_ranges": price_ranges,

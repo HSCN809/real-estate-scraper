@@ -314,8 +314,6 @@ def get_listing_statistics(
     db: Session = Depends(get_db),
 ):
     """Veritabanından detaylı istatistikler - describe + fiyat aralıkları"""
-    import statistics
-
     # Sorgu olustur
     query = db.query(Listing.fiyat).filter(Listing.fiyat.isnot(None), Listing.fiyat > 0)
 
@@ -352,80 +350,18 @@ def get_listing_statistics(
             query = query.filter(Listing.location_id.in_(location_ids))
 
     # Fiyatları al
-    prices = [p[0] for p in query.all()]
+    prices = [float(p) for (p,) in query]
 
     if not prices:
         return {"error": "Fiyat verisi bulunamadı", "stats": None}
 
-    # Yüzdelik hesaplamaları için fiyatları sırala
-    sorted_prices = sorted(prices)
-    n = len(sorted_prices)
-
-    # Yüzdelikleri (çeyreklikleri) hesapla
-    def percentile(data, p):
-        k = (len(data) - 1) * p / 100
-        f = int(k)
-        c = f + 1 if f + 1 < len(data) else f
-        return data[f] + (data[c] - data[f]) * (k - f) if c < len(data) else data[f]
-
-    # Tanımlayıcı istatistikler (pandas describe benzeri)
-    describe_stats = {
-        "count": n,
-        "mean": round(statistics.mean(prices), 2),
-        "std": round(statistics.stdev(prices), 2) if n > 1 else 0,
-        "min": round(min(prices), 2),
-        "q25": round(percentile(sorted_prices, 25), 2),
-        "median": round(statistics.median(prices), 2),
-        "q75": round(percentile(sorted_prices, 75), 2),
-        "max": round(max(prices), 2),
+    prices.sort()
+    describe_stats, price_ranges = crud.compute_price_stats_and_ranges(prices)
+    return {
+        "stats": describe_stats,
+        "price_ranges": price_ranges,
+        "total_listings": len(prices),
     }
-
-    # Yuzdelik tabanli gruplama ile dinamik fiyat araligi dagilimi
-    num_bins = 5
-    bin_edges = [
-        percentile(sorted_prices, i * 100 / num_bins) for i in range(num_bins + 1)
-    ]
-
-    # Benzersiz kenarlari sagla
-    unique_edges: list[float] = []
-    for e in bin_edges:
-        if not unique_edges or e > unique_edges[-1]:
-            unique_edges.append(e)
-
-    # Yeterli benzersiz kenar yoksa esit genislikli gruplara don
-    if len(unique_edges) < 3:
-        min_p, max_p = min(prices), max(prices)
-        bin_width = (max_p - min_p) / num_bins
-        unique_edges = [min_p + i * bin_width for i in range(num_bins + 1)]
-
-    # Her gruptaki ogeleri say
-    price_ranges = []
-    for i in range(len(unique_edges) - 1):
-        low = unique_edges[i]
-        high = unique_edges[i + 1]
-
-        # Aralık etiketini biçimlendir
-        def format_price(p):
-            if p >= 1000000:
-                return f"{p / 1000000:.1f}M"
-            elif p >= 1000:
-                return f"{p / 1000:.0f}K"
-            else:
-                return f"{p:.0f}"
-
-        label = f"{format_price(low)} - {format_price(high)}"
-
-        # Araliktaki ogeleri say
-        if i == len(unique_edges) - 2:  # Son grup üst sınırı dahil eder
-            count = sum(1 for p in prices if low <= p <= high)
-        else:
-            count = sum(1 for p in prices if low <= p < high)
-
-        price_ranges.append(
-            {"range": label, "count": count, "percentage": round(count / n * 100, 1)}
-        )
-
-    return {"stats": describe_stats, "price_ranges": price_ranges, "total_listings": n}
 
 
 @router.delete("/clear-results")

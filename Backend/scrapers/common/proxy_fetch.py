@@ -36,10 +36,15 @@ class ProxyFetchClient:
             CloudflareBypassClient(
                 proxy_url=self.proxy_url,
                 user_agent=user_agent,
+                transport_retries=0,
             )
             if enabled
             else None
         )
+
+    def close(self) -> None:
+        if self.client is not None:
+            self.client.close()
 
     @staticmethod
     def _is_cloudflare_challenge(body_text: str) -> bool:
