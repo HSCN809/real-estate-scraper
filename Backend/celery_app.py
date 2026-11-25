@@ -1,5 +1,7 @@
 """Celery uygulama yapılandırması"""
 
+import os
+
 from celery import Celery, Task
 from core.task_status import REDIS_URL
 
@@ -26,7 +28,7 @@ celery_app.conf.update(
     task_soft_time_limit=6900,  # Duzgun kapatma icin yumusak limit
     # Worker ayarları
     worker_prefetch_multiplier=1,  # Ayni anda tek gorev (kazima yogun kaynak kullanir)
-    worker_concurrency=1,  # Kazıma için tek worker
+    worker_concurrency=int(os.getenv("CELERY_WORKER_CONCURRENCY", "2")),
     # Sonuç backend ayarları
     result_expires=86400,  # Sonuçlar 24 saat sonra sona erer
     result_extended=True,  # Genisletilmis gorev bilgisini sakla

@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 from typing import Any
 
@@ -25,7 +26,11 @@ from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
 
 from scrapers.common.http_status import is_failed_http_response, response_http_status
-from scrapers.common.proxy_fetch import ProxyFetchClient
+from scrapers.common.proxy_fetch import (
+    DEFAULT_PROXY_CONCURRENCY,
+    ProxyFetchClient,
+    iter_bounded,
+)
 
 from .listings import CATEGORY_PARSERS, extract_listings_from_html, extract_total_pages
 from .persist import save_listings_to_db
@@ -130,9 +135,10 @@ class EmlakJetScraplingScraper:
         self.proxy_fetcher = ProxyFetchClient(
             enabled=proxy_enabled,
             proxy_url=proxy_url,
-            max_retries=6,
-            initial_delay=2.0,
+            max_retries=3,
+            initial_delay=1.5,
         )
+        self._metrics_lock = threading.Lock()
 
         self.selectors = get_selectors("emlakjet", category)
         self.common_selectors = get_common_selectors("emlakjet")
@@ -338,9 +344,11 @@ class EmlakJetScraplingScraper:
                 start_time = time.time()
                 selector = self.proxy_fetcher.fetch_selector(url, task_log=task_log)
                 if not selector:
-                    self.metrics["failed_requests"] += 1
+                    with self._metrics_lock:
+                        self.metrics["failed_requests"] += 1
                     return None
-                self.metrics["successful_requests"] += 1
+                with self._metrics_lock:
+                    self.metrics["successful_requests"] += 1
                 task_log.line(
                     f"Fetched {url} in {time.time() - start_time:.2f}s via go_proxy_client "
                     f"(method={self.scraping_method})"
@@ -614,6 +622,150 @@ class EmlakJetScraplingScraper:
             )
             return None
 
+    def _fetch_location_pages_proxy(
+        self,
+        location_url: str,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+        neighborhood: str | None = None,
+        prefetched_first_page: Selector | None = None,
+    ) -> tuple[int, list[tuple[int, str, list[dict[str, Any]]]]]:
+        first_page = (
+            prefetched_first_page
+            if prefetched_first_page is not None
+            else self.fetch_page(location_url)
+        )
+        if not first_page:
+            return 0, []
+
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(first_page), max_pages
+        )
+        first_url = self._build_page_url(location_url, 1)
+        pages_by_num: dict[int, tuple[str, list[dict[str, Any]]]] = {
+            1: (
+                first_url,
+                self.extract_listings_from_page(
+                    first_page,
+                    page_url=getattr(first_page, "url", first_url),
+                    city=city,
+                    district=district,
+                    neighborhood=neighborhood,
+                ),
+            )
+        }
+
+        if pages_to_scrape > 1:
+            def _fetch_one(page_num: int) -> tuple[str, list[dict[str, Any]] | None]:
+                page_url = self._build_page_url(location_url, page_num)
+                selector = self.fetch_page(page_url)
+                if not selector:
+                    return page_url, None
+                extracted = self.extract_listings_from_page(
+                    selector,
+                    page_url=getattr(selector, "url", page_url),
+                    city=city,
+                    district=district,
+                    neighborhood=neighborhood,
+                )
+                return page_url, extracted
+
+            for page_num, (page_url, extracted) in iter_bounded(
+                range(2, pages_to_scrape + 1),
+                _fetch_one,
+                max_workers=min(DEFAULT_PROXY_CONCURRENCY, pages_to_scrape - 1),
+            ):
+                if extracted is not None:
+                    pages_by_num[page_num] = (page_url, extracted)
+
+        ordered = [
+            (page_num, *pages_by_num[page_num]) for page_num in sorted(pages_by_num)
+        ]
+        return pages_to_scrape, ordered
+
+    def _persist_location_pages(
+        self,
+        location_name: str,
+        location_url: str,
+        pages_to_scrape: int,
+        pages_data: list[tuple[int, str, list[dict[str, Any]]]],
+        progress_callback=None,
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
+        self._log_location_start(location_name, location_url)
+        if not pages_to_scrape:
+            task_log.line(
+                f"Ilk sayfa alinamadi: {location_name}", level="warning"
+            )
+            if progress_callback:
+                progress_callback(f"{location_name} atlandı", progress=100)
+            return listings
+
+        self._log_location_plan(location_name, pages_to_scrape)
+        pages_map = {
+            page_num: (page_url, items) for page_num, page_url, items in pages_data
+        }
+
+        for page_num in range(1, pages_to_scrape + 1):
+            if self._is_listing_limit_reached():
+                task_log.line(
+                    f"Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
+                break
+
+            task_log.line(
+                f"[{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor..."
+            )
+            entry = pages_map.get(page_num)
+            if entry is None:
+                task_log.line(
+                    f"   Sayfa {page_num} alinamadi, atlaniyor", level="warning"
+                )
+                continue
+            _page_url, page_listings = entry
+
+            if progress_callback:
+                progress_callback(
+                    f"{location_name} - Sayfa {page_num}/{pages_to_scrape}",
+                    current=page_num,
+                    total=pages_to_scrape,
+                    progress=int((page_num / max(1, pages_to_scrape)) * 100),
+                )
+
+            page_listings = self._trim_page_listings(page_listings)
+            if self._retain_listings:
+                self.all_listings.extend(page_listings)
+                listings.extend(page_listings)
+            new_count, updated_count, unchanged_count = self._persist_listings(
+                page_listings
+            )
+            self._report_page_persist_result(
+                page_num,
+                len(page_listings),
+                new_count,
+                updated_count,
+                unchanged_count,
+                location_name,
+            )
+            self.metrics["total_pages"] += 1
+
+            if self._is_listing_limit_reached():
+                task_log.line(
+                    f"Ilan limitine ulasildi: {len(self.all_listings)} / {self._max_listings}"
+                )
+                break
+
+        if listings:
+            task_log.line(
+                f"{location_name} tamamlandi - {len(listings)} ilan islendi"
+            )
+        else:
+            task_log.line(
+                f"{location_name} icin ilan bulunamadi", level="warning"
+            )
+        return listings
+
     def _scrape_location_with_session(
         self,
         location_name: str,
@@ -623,12 +775,34 @@ class EmlakJetScraplingScraper:
         district: str | None = None,
         neighborhood: str | None = None,
         progress_callback=None,
+        prefetched_first_page: Selector | None = None,
     ) -> list[dict[str, Any]]:
+        if self.proxy_enabled:
+            pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                location_url=location_url,
+                max_pages=max_pages,
+                city=city,
+                district=district,
+                neighborhood=neighborhood,
+                prefetched_first_page=prefetched_first_page,
+            )
+            return self._persist_location_pages(
+                location_name=location_name,
+                location_url=location_url,
+                pages_to_scrape=pages_to_scrape,
+                pages_data=pages_data,
+                progress_callback=progress_callback,
+            )
+
         listings: list[dict[str, Any]] = []
         location_count = 0
         self._log_location_start(location_name, location_url)
 
-        first_page = self.fetch_page(location_url)
+        first_page = (
+            prefetched_first_page
+            if prefetched_first_page is not None
+            else self.fetch_page(location_url)
+        )
         if not first_page:
             task_log.line(
                 f"âš ï¸ Ilk sayfa alinamadi: {location_name}", level="warning"
@@ -961,6 +1135,7 @@ class EmlakJetScraplingScraper:
         district: str | None = None,
         neighborhood: str | None = None,
         progress_callback=None,
+        prefetched_first_page: Selector | None = None,
     ) -> list[dict[str, Any]]:
         if self.proxy_enabled or self.scraping_method in SESSION_METHODS:
             return self._scrape_location_with_session(
@@ -971,6 +1146,7 @@ class EmlakJetScraplingScraper:
                 district=district,
                 neighborhood=neighborhood,
                 progress_callback=progress_callback,
+                prefetched_first_page=prefetched_first_page,
             )
         return self._scrape_location_with_spider(
             location_name=location_name,
@@ -982,107 +1158,6 @@ class EmlakJetScraplingScraper:
             progress_callback=progress_callback,
         )
 
-    def _scrape_location_legacy_disabled(
-        self,
-        location_name: str,
-        location_url: str,
-        max_pages: int | None,
-        city: str | None = None,
-        district: str | None = None,
-        neighborhood: str | None = None,
-        progress_callback=None,
-    ) -> list[dict[str, Any]]:
-        return self._scrape_location_with_session(
-            location_name=location_name,
-            location_url=location_url,
-            max_pages=max_pages,
-            city=city,
-            district=district,
-            neighborhood=neighborhood,
-            progress_callback=progress_callback,
-        )
-        listings: list[dict[str, Any]] = []
-        location_count = 0
-        self._log_location_start(location_name, location_url)
-
-        first_page = self.fetch_page(location_url)
-        if not first_page:
-            task_log.line(f"⚠️ Ilk sayfa alinamadi: {location_name}", level="warning")
-            return listings
-
-        pages_to_scrape = self._resolve_page_limit(
-            self.get_total_pages(first_page), max_pages
-        )
-        self._log_location_plan(location_name, pages_to_scrape)
-
-        for page_num in range(1, pages_to_scrape + 1):
-            if self._is_listing_limit_reached():
-                task_log.line(
-                    f"🎯 Ilan limitine ulasildi: {self.total_scraped_count} / {self._max_listings}"
-                )
-                break
-
-            current_url = self._build_page_url(location_url, page_num)
-            task_log.line(
-                f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taraniyor..."
-            )
-            selector = first_page if page_num == 1 else self.fetch_page(current_url)
-            if not selector:
-                task_log.line(
-                    f"   ⚠️ Sayfa {page_num} alinamadi, atlaniyor", level="warning"
-                )
-                continue
-
-            if progress_callback:
-                progress_callback(
-                    f"{location_name} - Sayfa {page_num}/{pages_to_scrape}",
-                    current=page_num,
-                    total=pages_to_scrape,
-                    progress=int((page_num / max(1, pages_to_scrape)) * 100),
-                )
-
-            page_listings = self.extract_listings_from_page(
-                selector,
-                page_url=getattr(selector, "url", current_url),
-                city=city,
-                district=district,
-                neighborhood=neighborhood,
-            )
-            page_listings = self._trim_page_listings(page_listings)
-            location_count += len(page_listings)
-            if self._retain_listings:
-                self.all_listings.extend(page_listings)
-                listings.extend(page_listings)
-            new_count, updated_count, unchanged_count = self._persist_listings(
-                page_listings
-            )
-            self._report_page_persist_result(
-                page_num,
-                len(page_listings),
-                new_count,
-                updated_count,
-                unchanged_count,
-                location_name,
-            )
-            self.metrics["total_pages"] += 1
-
-            if self._is_listing_limit_reached():
-                task_log.line(
-                    f"🎯 Ilan limitine ulasildi: {self.total_scraped_count} / {self._max_listings}"
-                )
-                break
-
-            if page_num < pages_to_scrape:
-                time.sleep(random.SystemRandom().uniform(1, 3))
-
-        if listings:
-            task_log.line(
-                f"✅ {location_name} tamamlandi - {len(listings)} ilan islendi"
-            )
-        else:
-            task_log.line(f"⚠️ {location_name} icin ilan bulunamadi", level="warning")
-        return listings
-
     def _scrape_target(
         self,
         target: dict[str, str],
@@ -1091,6 +1166,7 @@ class EmlakJetScraplingScraper:
         district: str | None = None,
         neighborhood: str | None = None,
         progress_callback=None,
+        prefetched_first_page: Selector | None = None,
     ) -> tuple[bool, int]:
         before_new = self.total_new_listings
         listings = self._scrape_location(
@@ -1101,6 +1177,7 @@ class EmlakJetScraplingScraper:
             district=district,
             neighborhood=neighborhood,
             progress_callback=progress_callback,
+            prefetched_first_page=prefetched_first_page,
         )
         return len(listings) == 0, self.total_new_listings - before_new
 
@@ -1120,6 +1197,159 @@ class EmlakJetScraplingScraper:
                 )
 
         return callback
+
+    def _requested_districts_for(self, province_name: str) -> list[str] | None:
+        normalized_province = self._normalize_text(province_name)
+        for city_name, district_names in (self.selected_districts or {}).items():
+            if self._normalize_text(city_name) == normalized_province and district_names:
+                return district_names
+        return None
+
+    def _collect_province_targets_proxy(
+        self, province: dict[str, str], page_limit: int | None
+    ) -> dict[str, Any]:
+        province_name = province["name"]
+        province_url = province["url"]
+        province_selector = self.fetch_page(province_url)
+        province_count = (
+            self._parse_listing_count(province_selector) if province_selector else None
+        )
+        requested_districts = self._requested_districts_for(province_name)
+        targets_data: list[dict[str, Any]] = []
+
+        if province_selector is None:
+            return {
+                "province_name": province_name,
+                "province_count": None,
+                "empty_reason": "fetch_failed",
+                "targets": targets_data,
+            }
+        if province_count == 0:
+            return {
+                "province_name": province_name,
+                "province_count": 0,
+                "empty_reason": "zero",
+                "targets": targets_data,
+            }
+
+        if province_count is None or should_scrape_city_level(
+            page_limit,
+            province_count,
+            has_district_filter=bool(requested_districts),
+            pagination_limit=self.PAGINATION_LIMIT,
+        ):
+            pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                location_url=province_url,
+                max_pages=page_limit,
+                city=province_name,
+                prefetched_first_page=province_selector,
+            )
+            targets_data.append(
+                {
+                    "label": province_name,
+                    "url": province_url,
+                    "stat_key": "(il seviyesi)",
+                    "pages_to_scrape": pages_to_scrape,
+                    "pages_data": pages_data,
+                }
+            )
+            return {
+                "province_name": province_name,
+                "province_count": province_count,
+                "empty_reason": None,
+                "targets": targets_data,
+            }
+
+        district_list = parse_location_options(province_selector, province_url, "Ilceler")
+        if requested_districts and district_list:
+            district_list = self._match_requested_locations(
+                district_list, requested_districts
+            )
+        if not district_list:
+            return {
+                "province_name": province_name,
+                "province_count": province_count,
+                "empty_reason": "no_districts",
+                "targets": targets_data,
+            }
+
+        for district_item in district_list:
+            district_name = district_item["name"]
+            district_url = district_item["url"]
+            district_selector = self.fetch_page(district_url)
+            if not district_selector:
+                continue
+            district_count = self._parse_listing_count(district_selector)
+            if district_count == 0:
+                continue
+
+            if district_count is None or district_count <= self.PAGINATION_LIMIT:
+                pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                    location_url=district_url,
+                    max_pages=page_limit,
+                    city=province_name,
+                    district=district_name,
+                    prefetched_first_page=district_selector,
+                )
+                targets_data.append(
+                    {
+                        "label": f"{province_name} / {district_name}",
+                        "url": district_url,
+                        "stat_key": district_name,
+                        "pages_to_scrape": pages_to_scrape,
+                        "pages_data": pages_data,
+                    }
+                )
+                continue
+
+            neighborhoods = parse_location_options(
+                district_selector, district_url, "Mahalleler"
+            )
+            if not neighborhoods:
+                pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                    location_url=district_url,
+                    max_pages=page_limit,
+                    city=province_name,
+                    district=district_name,
+                    prefetched_first_page=district_selector,
+                )
+                targets_data.append(
+                    {
+                        "label": f"{province_name} / {district_name}",
+                        "url": district_url,
+                        "stat_key": district_name,
+                        "pages_to_scrape": pages_to_scrape,
+                        "pages_data": pages_data,
+                    }
+                )
+                continue
+
+            for neighborhood_item in neighborhoods:
+                neighborhood_name = neighborhood_item["name"]
+                pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                    location_url=neighborhood_item["url"],
+                    max_pages=page_limit,
+                    city=province_name,
+                    district=district_name,
+                    neighborhood=neighborhood_name,
+                )
+                targets_data.append(
+                    {
+                        "label": f"{province_name} / {district_name} / {neighborhood_name}",
+                        "url": neighborhood_item["url"],
+                        "stat_key": district_name,
+                        "accumulate_stat": True,
+                        "pages_to_scrape": pages_to_scrape,
+                        "pages_data": pages_data,
+                    }
+                )
+
+        return {
+            "province_name": province_name,
+            "province_count": province_count,
+            "empty_reason": None,
+            "targets": targets_data,
+        }
 
     def start_scraping_api(
         self,
@@ -1185,194 +1415,276 @@ class EmlakJetScraplingScraper:
                 )
                 return {}
 
-            for prov_idx, province in enumerate(provinces, 1):
-                province_name = province["name"]
-                province_callback = self._make_progress_callback(
-                    progress_callback, prov_idx, len(provinces), province_name
-                )
-                if self._is_listing_limit_reached():
-                    stopped = True
-                    break
-
-                province_count = self.get_listing_count(province["url"])
-                if province_count is None:
-                    task_log.line(
-                        f"{province_name} ilan sayisi parse edilemedi; il seviyesinde tarama yapilacak.",
-                        level="warning",
-                    )
-                    target = {
-                        "url": province["url"],
-                        "label": province_name,
-                        "type": "il",
-                    }
-                    should_skip, new_count = self._scrape_target(
-                        target,
-                        page_limit,
-                        city=province_name,
-                        progress_callback=province_callback,
-                    )
-                    if not should_skip:
-                        scrape_stats[province_name] = {"(il seviyesi)": new_count}
-                    continue
-                task_log.section(
-                    f"🏙️ IL {prov_idx}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})"
-                )
-
-                if province_count == 0:
-                    task_log.line(f"⏭️ {province_name} → 0 ilan, il atlanıyor.")
-                    province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
-                    continue
-
-                requested_districts = None
-                for city_name, district_names in (self.selected_districts or {}).items():
-                    if self._normalize_text(city_name) == self._normalize_text(
-                        province_name
-                    ) and district_names:
-                        requested_districts = district_names
-                        break
-
-                if should_scrape_city_level(
-                    page_limit,
-                    province_count,
-                    has_district_filter=bool(requested_districts),
-                    pagination_limit=self.PAGINATION_LIMIT,
+            if self.proxy_enabled:
+                completed = 0
+                for _province, result in iter_bounded(
+                    provinces,
+                    lambda prov: self._collect_province_targets_proxy(prov, page_limit),
+                    max_workers=DEFAULT_PROXY_CONCURRENCY,
+                    stop_when=self._is_listing_limit_reached,
                 ):
-                    target = {
-                        "url": province["url"],
-                        "label": province_name,
-                        "type": "il",
-                    }
-                    should_skip, new_count = self._scrape_target(
-                        target,
-                        page_limit,
-                        city=province_name,
-                        progress_callback=province_callback,
+                    completed += 1
+                    province_name = result["province_name"]
+                    province_count = result["province_count"]
+                    province_callback = self._make_progress_callback(
+                        progress_callback, completed, len(provinces), province_name
                     )
-                    if not should_skip:
-                        scrape_stats[province_name] = {"(il seviyesi)": new_count}
-                    continue
 
-                district_list, _ = self.get_location_options("Ilceler", province["url"])
-                if not district_list:
-                    task_log.line(f"⏭️ {province_name} için ilçe bulunamadı, atlanıyor.")
-                    province_callback(f"{province_name} atlandı", progress=100)
-                    continue
-
-                if requested_districts:
-                    district_list = self._match_requested_locations(
-                        district_list, requested_districts
-                    )
-                    if not district_list:
+                    if result["empty_reason"] == "fetch_failed":
                         task_log.line(
-                            f"⏭️ {province_name} için eşleşen ilçe bulunamadı."
+                            f"{province_name} sayfasi alinamadi, atlaniyor.",
+                            level="warning",
                         )
+                        province_callback(f"{province_name} atlandi", progress=100)
+                        continue
+
+                    if province_count is None:
+                        task_log.line(
+                            f"{province_name} ilan sayisi parse edilemedi; il seviyesinde tarama yapilacak.",
+                            level="warning",
+                        )
+                    else:
+                        task_log.section(
+                            f"🏙️ IL {completed}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})"
+                        )
+
+                    if result["empty_reason"] == "zero":
+                        task_log.line(f"⏭️ {province_name} → 0 ilan, il atlanıyor.")
+                        province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
+                        continue
+                    if result["empty_reason"] == "no_districts":
+                        task_log.line(f"⏭️ {province_name} için ilçe bulunamadı, atlanıyor.")
                         province_callback(f"{province_name} atlandı", progress=100)
                         continue
 
-                for district_item in district_list:
-                    district_name = district_item["name"]
+                    for item in result["targets"]:
+                        if self._is_listing_limit_reached():
+                            stopped = True
+                            break
+                        before_new = self.total_new_listings
+                        persisted = self._persist_location_pages(
+                            location_name=item["label"],
+                            location_url=item["url"],
+                            pages_to_scrape=item["pages_to_scrape"],
+                            pages_data=item["pages_data"],
+                            progress_callback=province_callback,
+                        )
+                        new_count = self.total_new_listings - before_new
+                        if persisted:
+                            stat_key = item["stat_key"]
+                            if item.get("accumulate_stat"):
+                                if new_count > 0:
+                                    scrape_stats.setdefault(province_name, {})
+                                    scrape_stats[province_name][stat_key] = (
+                                        scrape_stats[province_name].get(stat_key, 0)
+                                        + new_count
+                                    )
+                            else:
+                                scrape_stats.setdefault(province_name, {})[
+                                    stat_key
+                                ] = new_count
+                    if stopped:
+                        break
+            else:
+                for prov_idx, province in enumerate(provinces, 1):
+                    province_name = province["name"]
+                    province_callback = self._make_progress_callback(
+                        progress_callback, prov_idx, len(provinces), province_name
+                    )
                     if self._is_listing_limit_reached():
                         stopped = True
                         break
 
-                    district_count = self.get_listing_count(district_item["url"])
-                    if district_count is None:
+                    province_selector = self.fetch_page(province["url"])
+                    province_count = (
+                        self._parse_listing_count(province_selector)
+                        if province_selector
+                        else None
+                    )
+                    if province_count is None:
                         task_log.line(
-                            f"{province_name}/{district_name} ilan sayisi parse edilemedi; ilce seviyesinde tarama yapilacak.",
+                            f"{province_name} ilan sayisi parse edilemedi; il seviyesinde tarama yapilacak.",
                             level="warning",
                         )
                         target = {
-                            "url": district_item["url"],
-                            "label": f"{province_name} / {district_name}",
-                            "type": "ilce",
+                            "url": province["url"],
+                            "label": province_name,
+                            "type": "il",
                         }
                         should_skip, new_count = self._scrape_target(
                             target,
                             page_limit,
                             city=province_name,
-                            district=district_name,
                             progress_callback=province_callback,
+                            prefetched_first_page=province_selector,
                         )
                         if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[
-                                district_name
-                            ] = new_count
+                            scrape_stats[province_name] = {"(il seviyesi)": new_count}
                         continue
-                    if district_count == 0:
-                        continue
-
-                    if district_count <= self.PAGINATION_LIMIT:
-                        target = {
-                            "url": district_item["url"],
-                            "label": f"{province_name} / {district_name}",
-                            "type": "ilce",
-                        }
-                        should_skip, new_count = self._scrape_target(
-                            target,
-                            page_limit,
-                            city=province_name,
-                            district=district_name,
-                            progress_callback=province_callback,
-                        )
-                        if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[
-                                district_name
-                            ] = new_count
-                        continue
-
-                    neighborhoods, _ = self.get_location_options(
-                        "Mahalleler", district_item["url"]
+                    task_log.section(
+                        f"🏙️ IL {prov_idx}/{len(provinces)}: {province_name} (Toplam Ilan: {province_count})"
                     )
-                    if not neighborhoods:
+
+                    if province_count == 0:
+                        task_log.line(f"⏭️ {province_name} → 0 ilan, il atlanıyor.")
+                        province_callback(f"{province_name} atlandı (0 ilan)", progress=100)
+                        continue
+
+                    requested_districts = self._requested_districts_for(province_name)
+
+                    if should_scrape_city_level(
+                        page_limit,
+                        province_count,
+                        has_district_filter=bool(requested_districts),
+                        pagination_limit=self.PAGINATION_LIMIT,
+                    ):
                         target = {
-                            "url": district_item["url"],
-                            "label": f"{province_name} / {district_name}",
-                            "type": "ilce",
+                            "url": province["url"],
+                            "label": province_name,
+                            "type": "il",
                         }
                         should_skip, new_count = self._scrape_target(
                             target,
                             page_limit,
                             city=province_name,
-                            district=district_name,
                             progress_callback=province_callback,
+                            prefetched_first_page=province_selector,
                         )
                         if not should_skip:
-                            scrape_stats.setdefault(province_name, {})[
-                                district_name
-                            ] = new_count
+                            scrape_stats[province_name] = {"(il seviyesi)": new_count}
                         continue
 
-                    for neighborhood_item in neighborhoods:
-                        neighborhood_name = neighborhood_item["name"]
+                    district_list = parse_location_options(
+                        province_selector, province["url"], "Ilceler"
+                    )
+                    if not district_list:
+                        task_log.line(f"⏭️ {province_name} için ilçe bulunamadı, atlanıyor.")
+                        province_callback(f"{province_name} atlandı", progress=100)
+                        continue
+
+                    if requested_districts:
+                        district_list = self._match_requested_locations(
+                            district_list, requested_districts
+                        )
+                        if not district_list:
+                            task_log.line(
+                                f"⏭️ {province_name} için eşleşen ilçe bulunamadı."
+                            )
+                            province_callback(f"{province_name} atlandı", progress=100)
+                            continue
+
+                    for district_item in district_list:
+                        district_name = district_item["name"]
                         if self._is_listing_limit_reached():
                             stopped = True
                             break
 
-                        target = {
-                            "url": neighborhood_item["url"],
-                            "label": f"{province_name} / {district_name} / {neighborhood_name}",
-                            "type": "mahalle",
-                        }
-                        should_skip, new_count = self._scrape_target(
-                            target,
-                            page_limit,
-                            city=province_name,
-                            district=district_name,
-                            neighborhood=neighborhood_name,
-                            progress_callback=province_callback,
+                        district_selector = self.fetch_page(district_item["url"])
+                        district_count = (
+                            self._parse_listing_count(district_selector)
+                            if district_selector
+                            else None
                         )
-                        if not should_skip and new_count > 0:
-                            scrape_stats.setdefault(province_name, {})
-                            scrape_stats[province_name][district_name] = (
-                                scrape_stats[province_name].get(district_name, 0)
-                                + new_count
+                        if district_count is None:
+                            task_log.line(
+                                f"{province_name}/{district_name} ilan sayisi parse edilemedi; ilce seviyesinde tarama yapilacak.",
+                                level="warning",
                             )
+                            target = {
+                                "url": district_item["url"],
+                                "label": f"{province_name} / {district_name}",
+                                "type": "ilce",
+                            }
+                            should_skip, new_count = self._scrape_target(
+                                target,
+                                page_limit,
+                                city=province_name,
+                                district=district_name,
+                                progress_callback=province_callback,
+                                prefetched_first_page=district_selector,
+                            )
+                            if not should_skip:
+                                scrape_stats.setdefault(province_name, {})[
+                                    district_name
+                                ] = new_count
+                            continue
+                        if district_count == 0:
+                            continue
+
+                        if district_count <= self.PAGINATION_LIMIT:
+                            target = {
+                                "url": district_item["url"],
+                                "label": f"{province_name} / {district_name}",
+                                "type": "ilce",
+                            }
+                            should_skip, new_count = self._scrape_target(
+                                target,
+                                page_limit,
+                                city=province_name,
+                                district=district_name,
+                                progress_callback=province_callback,
+                                prefetched_first_page=district_selector,
+                            )
+                            if not should_skip:
+                                scrape_stats.setdefault(province_name, {})[
+                                    district_name
+                                ] = new_count
+                            continue
+
+                        neighborhoods = parse_location_options(
+                            district_selector, district_item["url"], "Mahalleler"
+                        )
+                        if not neighborhoods:
+                            target = {
+                                "url": district_item["url"],
+                                "label": f"{province_name} / {district_name}",
+                                "type": "ilce",
+                            }
+                            should_skip, new_count = self._scrape_target(
+                                target,
+                                page_limit,
+                                city=province_name,
+                                district=district_name,
+                                progress_callback=province_callback,
+                                prefetched_first_page=district_selector,
+                            )
+                            if not should_skip:
+                                scrape_stats.setdefault(province_name, {})[
+                                    district_name
+                                ] = new_count
+                            continue
+
+                        for neighborhood_item in neighborhoods:
+                            neighborhood_name = neighborhood_item["name"]
+                            if self._is_listing_limit_reached():
+                                stopped = True
+                                break
+
+                            target = {
+                                "url": neighborhood_item["url"],
+                                "label": f"{province_name} / {district_name} / {neighborhood_name}",
+                                "type": "mahalle",
+                            }
+                            should_skip, new_count = self._scrape_target(
+                                target,
+                                page_limit,
+                                city=province_name,
+                                district=district_name,
+                                neighborhood=neighborhood_name,
+                                progress_callback=province_callback,
+                            )
+                            if not should_skip and new_count > 0:
+                                scrape_stats.setdefault(province_name, {})
+                                scrape_stats[province_name][district_name] = (
+                                    scrape_stats[province_name].get(district_name, 0)
+                                    + new_count
+                                )
+
+                        if stopped:
+                            break
 
                     if stopped:
                         break
-
-                if stopped:
-                    break
 
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = (

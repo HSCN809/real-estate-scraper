@@ -58,3 +58,65 @@ def test_proxy_fetch_skips_retries_on_permanent_404(monkeypatch):
         assert sleeps == []
     finally:
         client.close()
+
+
+def test_proxy_fetch_uses_thread_local_clients_and_closes_all():
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from scrapers.common import proxy_fetch
+
+    client = proxy_fetch.ProxyFetchClient(enabled=True)
+    main_c = client._get_client()
+    assert main_c is client.client
+
+    worker_clients = []
+    lock = threading.Lock()
+
+    def _grab():
+        c = client._get_client()
+        with lock:
+            worker_clients.append(c)
+        return id(c)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda _: _grab(), range(4)))
+
+    assert all(c is not None and c is not main_c for c in worker_clients)
+    client.close()
+    assert client.client is None
+    assert client._clients == []
+
+
+def test_iter_bounded_stops_early_and_caps_workers():
+    import threading
+    from scrapers.common.proxy_fetch import iter_bounded
+
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    processed = []
+
+    def _work(item):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        try:
+            return item * 2
+        finally:
+            with lock:
+                active -= 1
+
+    stop = False
+    for item, result in iter_bounded(
+        range(10),
+        _work,
+        max_workers=2,
+        stop_when=lambda: stop,
+    ):
+        processed.append((item, result))
+        if len(processed) >= 2:
+            stop = True
+
+    assert peak <= 2
+    assert len(processed) < 10

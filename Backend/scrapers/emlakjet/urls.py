@@ -2,6 +2,8 @@ import re
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
+from scrapling.parser import Selector
+
 from scrapers.common.html import as_html
 
 _EXCLUDED_LOCATION_SEGMENTS = {
@@ -102,10 +104,16 @@ def should_scrape_city_level(
     *,
     has_district_filter: bool,
     pagination_limit: int = 1500,
+    page_size: int = 30,
 ) -> bool:
     if has_district_filter:
         return False
-    if max_pages == 1:
+    # City pages can serve up to pagination_limit / page_size pages without district drilldown.
+    if (
+        max_pages is not None
+        and max_pages > 0
+        and max_pages * page_size <= pagination_limit
+    ):
         return True
     return (listing_count or 0) <= pagination_limit
 
@@ -134,19 +142,15 @@ def _is_allowed_location_child(
 def parse_location_options(
     source, current_url: str, location_type: str | None = None
 ) -> list[dict[str, str]]:
-    from bs4 import BeautifulSoup
-
-    soup = BeautifulSoup(as_html(source), "html.parser")
+    selector = source if isinstance(source, Selector) else Selector(as_html(source))
     base_path = urlparse(current_url).path.rstrip("/")
     last_segment = base_path.rsplit("/", 1)[-1]
     kind = location_kind_from_type(location_type)
     options: list[dict[str, str]] = []
     seen_names: set[str] = set()
 
-    for link in soup.select("a[href]"):
-        raw_href = link.get("href") or ""
-        href = raw_href[0] if isinstance(raw_href, list) else raw_href
-        href = str(href).strip()
+    for link in selector.css("a[href]"):
+        href = str(link.attrib.get("href") or "").strip()
         if not href or "sayfa=" in href or "filtreler=" in href:
             continue
         absolute_url = urljoin(current_url, href)
@@ -159,7 +163,8 @@ def parse_location_options(
         if not _is_allowed_location_child(last_segment, child_segment, kind):
             continue
 
-        location_name = extract_location_name(link.get_text(" ", strip=True))
+        link_text = " ".join(str(link.get_all_text(separator=" ")).split())
+        location_name = extract_location_name(link_text)
         normalized_segment = normalize_text(last_segment)
         normalized_name = normalize_text(location_name)
         if normalized_segment and normalized_name.startswith(normalized_segment + "-"):

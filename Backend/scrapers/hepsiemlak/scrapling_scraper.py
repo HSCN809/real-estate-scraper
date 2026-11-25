@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import sys
+import threading
 import time
 from typing import Any
 
@@ -24,7 +25,11 @@ from core.selectors import get_common_selectors, get_selectors
 from utils.logger import TaskLogLayout, get_logger
 
 from scrapers.common.http_status import is_failed_http_response, response_http_status
-from scrapers.common.proxy_fetch import ProxyFetchClient
+from scrapers.common.proxy_fetch import (
+    DEFAULT_PROXY_CONCURRENCY,
+    ProxyFetchClient,
+    iter_bounded,
+)
 
 from .listings import extract_listings_from_html, extract_total_pages
 from .persist import save_listings_to_db
@@ -124,9 +129,10 @@ class HepsiemlakScraplingScraper:
         self.proxy_fetcher = ProxyFetchClient(
             enabled=proxy_enabled,
             proxy_url=proxy_url,
-            max_retries=6,
-            initial_delay=2.0,
+            max_retries=3,
+            initial_delay=1.5,
         )
+        self._metrics_lock = threading.Lock()
 
         self.selectors = get_selectors("hepsiemlak", category)
         self.common_selectors = get_common_selectors("hepsiemlak")
@@ -262,9 +268,11 @@ class HepsiemlakScraplingScraper:
                 start_time = time.time()
                 selector = self.proxy_fetcher.fetch_selector(url, task_log=task_log)
                 if not selector:
-                    self.metrics["failed_requests"] += 1
+                    with self._metrics_lock:
+                        self.metrics["failed_requests"] += 1
                     return None
-                self.metrics["successful_requests"] += 1
+                with self._metrics_lock:
+                    self.metrics["successful_requests"] += 1
                 task_log.line(
                     f"Fetched {url} in {time.time() - start_time:.2f}s via go_proxy_client "
                     f"(method={self.scraping_method})"
@@ -474,6 +482,119 @@ class HepsiemlakScraplingScraper:
         """DB bagliyken ilan dict'lerini RAM'de biriktirme (sayfa bazli persist edilir)."""
         return self.db is None
 
+    def _fetch_location_pages_proxy(
+        self,
+        location_name: str,
+        location_url: str,
+        max_pages: int | None,
+        city: str | None = None,
+        district: str | None = None,
+    ) -> tuple[int, list[tuple[int, str, list[dict[str, Any]]]]]:
+        first_page = self.fetch_page(location_url)
+        if not first_page:
+            return 0, []
+
+        pages_to_scrape = self._resolve_page_limit(
+            self.get_total_pages(first_page), max_pages
+        )
+        first_url = self._build_page_url(location_url, 1)
+        pages_by_num: dict[int, tuple[str, list[dict[str, Any]]]] = {
+            1: (
+                first_url,
+                self.extract_listings_from_page(
+                    first_page,
+                    city=city,
+                    district=district,
+                    page_url=getattr(first_page, "url", first_url),
+                ),
+            )
+        }
+
+        if pages_to_scrape > 1:
+            def _fetch_one(page_num: int) -> tuple[str, list[dict[str, Any]] | None]:
+                page_url = self._build_page_url(location_url, page_num)
+                selector = self.fetch_page(page_url)
+                if not selector:
+                    return page_url, None
+                extracted = self.extract_listings_from_page(
+                    selector,
+                    city=city,
+                    district=district,
+                    page_url=getattr(selector, "url", page_url),
+                )
+                return page_url, extracted
+
+            for page_num, (page_url, extracted) in iter_bounded(
+                range(2, pages_to_scrape + 1),
+                _fetch_one,
+                max_workers=min(DEFAULT_PROXY_CONCURRENCY, pages_to_scrape - 1),
+            ):
+                if extracted is not None:
+                    pages_by_num[page_num] = (page_url, extracted)
+
+        ordered = [
+            (page_num, *pages_by_num[page_num])
+            for page_num in sorted(pages_by_num)
+        ]
+        return pages_to_scrape, ordered
+
+    def _persist_location_pages(
+        self,
+        location_name: str,
+        location_url: str,
+        pages_to_scrape: int,
+        pages_data: list[tuple[int, str, list[dict[str, Any]]]],
+        progress_callback=None,
+    ) -> list[dict[str, Any]]:
+        listings: list[dict[str, Any]] = []
+        self._log_location_start(location_name, location_url)
+        if not pages_to_scrape:
+            task_log.line(f"⚠️ İlk sayfa alınamadı: {location_name}", level="warning")
+            if progress_callback:
+                progress_callback(f"{location_name} atlandı", progress=100)
+            return listings
+
+        self._log_location_plan(location_name, pages_to_scrape)
+        pages_map = {page_num: (page_url, items) for page_num, page_url, items in pages_data}
+        location_count = 0
+
+        for page_num in range(1, pages_to_scrape + 1):
+            task_log.line(
+                f"🔍 [{page_num}/{pages_to_scrape}] {location_name} - Sayfa {page_num} taranıyor..."
+            )
+            entry = pages_map.get(page_num)
+            if entry is None:
+                task_log.line(
+                    f"   ⚠️ Sayfa {page_num} alınamadı, atlanıyor", level="warning"
+                )
+                continue
+            _page_url, page_listings = entry
+            if progress_callback:
+                progress_callback(
+                    f"{location_name} - Sayfa {page_num}/{pages_to_scrape}",
+                    current=page_num,
+                    total=pages_to_scrape,
+                    progress=int((page_num / max(1, pages_to_scrape)) * 100),
+                )
+            location_count += len(page_listings)
+            if self._retain_listings:
+                listings.extend(page_listings)
+            new_count, updated_count, unchanged_count = self._persist_listings(
+                page_listings
+            )
+            self._report_page_persist_result(
+                page_num=page_num,
+                extracted_count=len(page_listings),
+                new_count=new_count,
+                updated_count=updated_count,
+                unchanged_count=unchanged_count,
+                location_name=location_name,
+            )
+            self.metrics["total_pages"] += 1
+
+        task_log.line(f"✅ {location_name} tamamlandı - {location_count} ilan işlendi")
+        return listings
+
     def _scrape_location_with_session(
         self,
         location_name: str,
@@ -483,6 +604,22 @@ class HepsiemlakScraplingScraper:
         district: str | None = None,
         progress_callback=None,
     ) -> list[dict[str, Any]]:
+        if self.proxy_enabled:
+            pages_to_scrape, pages_data = self._fetch_location_pages_proxy(
+                location_name=location_name,
+                location_url=location_url,
+                max_pages=max_pages,
+                city=city,
+                district=district,
+            )
+            return self._persist_location_pages(
+                location_name=location_name,
+                location_url=location_url,
+                pages_to_scrape=pages_to_scrape,
+                pages_data=pages_data,
+                progress_callback=progress_callback,
+            )
+
         listings: list[dict[str, Any]] = []
         location_count = 0
         self._log_location_start(location_name, location_url)
@@ -830,44 +967,99 @@ class HepsiemlakScraplingScraper:
             self._create_session()
 
         try:
-            for city_idx, city in enumerate(self.selected_cities, 1):
-                city_callback = self._make_city_progress_callback(
-                    progress_callback, city_idx, total_cities, city
-                )
+            if self.proxy_enabled:
+                targets: list[tuple[str, str | None, str, str]] = []
+                for city in self.selected_cities:
+                    if self.selected_districts and city in self.selected_districts:
+                        districts = self.selected_districts[city]
+                        for district_idx, district in enumerate(districts, 1):
+                            targets.append(
+                                (
+                                    city,
+                                    district,
+                                    f"{district} ({district_idx}/{len(districts)})",
+                                    self._get_district_url(district),
+                                )
+                            )
+                    else:
+                        targets.append((city, None, city, self._get_city_url(city)))
 
-                if self.selected_districts and city in self.selected_districts:
-                    district_results: dict[str, list[dict[str, Any]]] = {}
-                    districts = self.selected_districts[city]
-                    for district_idx, district in enumerate(districts, 1):
-                        district_listings = self._scrape_location(
-                            location_name=f"{district} ({district_idx}/{len(districts)})",
-                            location_url=self._get_district_url(district),
+                completed_count = 0
+
+                def _fetch_target(target: tuple[str, str | None, str, str]):
+                    t_city, t_district, t_name, t_url = target
+                    return self._fetch_location_pages_proxy(
+                        location_name=t_name,
+                        location_url=t_url,
+                        max_pages=max_pages,
+                        city=t_city,
+                        district=t_district,
+                    )
+
+                for target, (pages_to_scrape, pages_data) in iter_bounded(
+                    targets, _fetch_target, max_workers=DEFAULT_PROXY_CONCURRENCY
+                ):
+                    t_city, t_district, t_name, t_url = target
+                    completed_count += 1
+                    target_callback = self._make_city_progress_callback(
+                        progress_callback,
+                        completed_count,
+                        max(1, len(targets)),
+                        f"{t_city}/{t_district}" if t_district else t_city,
+                    )
+                    target_listings = self._persist_location_pages(
+                        location_name=t_name,
+                        location_url=t_url,
+                        pages_to_scrape=pages_to_scrape,
+                        pages_data=pages_data,
+                        progress_callback=target_callback,
+                    )
+                    if target_listings:
+                        if t_district is not None:
+                            city_bucket = all_results.setdefault(t_city, {})
+                            city_bucket[t_district] = target_listings
+                        else:
+                            all_results[t_city] = target_listings
+                        all_listings.extend(target_listings)
+            else:
+                for city_idx, city in enumerate(self.selected_cities, 1):
+                    city_callback = self._make_city_progress_callback(
+                        progress_callback, city_idx, total_cities, city
+                    )
+
+                    if self.selected_districts and city in self.selected_districts:
+                        district_results: dict[str, list[dict[str, Any]]] = {}
+                        districts = self.selected_districts[city]
+                        for district_idx, district in enumerate(districts, 1):
+                            district_listings = self._scrape_location(
+                                location_name=f"{district} ({district_idx}/{len(districts)})",
+                                location_url=self._get_district_url(district),
+                                max_pages=max_pages,
+                                city=city,
+                                district=district,
+                                progress_callback=city_callback,
+                            )
+                            if district_listings:
+                                district_results[district] = district_listings
+                                all_listings.extend(district_listings)
+                            if district_idx < len(districts):
+                                time.sleep(random.SystemRandom().uniform(1, 3))
+                        if district_results:
+                            all_results[city] = district_results
+                    else:
+                        city_listings = self._scrape_location(
+                            location_name=city,
+                            location_url=self._get_city_url(city),
                             max_pages=max_pages,
                             city=city,
-                            district=district,
                             progress_callback=city_callback,
                         )
-                        if district_listings:
-                            district_results[district] = district_listings
-                            all_listings.extend(district_listings)
-                        if district_idx < len(districts):
-                            time.sleep(random.SystemRandom().uniform(1, 3))
-                    if district_results:
-                        all_results[city] = district_results
-                else:
-                    city_listings = self._scrape_location(
-                        location_name=city,
-                        location_url=self._get_city_url(city),
-                        max_pages=max_pages,
-                        city=city,
-                        progress_callback=city_callback,
-                    )
-                    if city_listings:
-                        all_results[city] = city_listings
-                        all_listings.extend(city_listings)
+                        if city_listings:
+                            all_results[city] = city_listings
+                            all_listings.extend(city_listings)
 
-                if city_idx < total_cities:
-                    time.sleep(random.SystemRandom().uniform(2, 4))
+                    if city_idx < total_cities:
+                        time.sleep(random.SystemRandom().uniform(2, 4))
 
             self.metrics["end_time"] = time.time()
             self.metrics["total_duration"] = (

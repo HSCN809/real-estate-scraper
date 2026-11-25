@@ -111,10 +111,12 @@ def test_emlakjet_keeps_ilan_detail_urls_with_subtype():
 
 def test_emlakjet_stays_at_city_when_page_limit_set():
     assert should_scrape_city_level(1, 22694, has_district_filter=False) is True
-    assert should_scrape_city_level(5, 22694, has_district_filter=False) is False
+    assert should_scrape_city_level(2, 22694, has_district_filter=False) is True
+    assert should_scrape_city_level(50, 22694, has_district_filter=False) is True
+    assert should_scrape_city_level(51, 22694, has_district_filter=False) is False
     assert should_scrape_city_level(None, 22694, has_district_filter=False) is False
     assert should_scrape_city_level(None, 800, has_district_filter=False) is True
-    assert should_scrape_city_level(5, 22694, has_district_filter=True) is False
+    assert should_scrape_city_level(2, 22694, has_district_filter=True) is False
 
 
 def test_ui_log_does_not_treat_thirty_listings_as_zero():

@@ -40,8 +40,8 @@ services:
       - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://real-estate-frontend:3000,http://localhost:8000,http://real-estate-api:8000
 
       # Rate Limiting
-      - RATE_LIMIT=5
-      - RATE_LIMIT_BURST=15
+      - RATE_LIMIT=10
+      - RATE_LIMIT_BURST=25
 
       # Debug mode
       - DEBUG=false

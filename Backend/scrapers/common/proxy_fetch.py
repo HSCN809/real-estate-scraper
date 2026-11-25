@@ -1,10 +1,19 @@
 """Shared proxy-backed fetch helpers for scrapling scrapers."""
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import os
+import threading
 import time
+from typing import Callable, Iterable, Iterator, TypeVar
 
 from python_proxy.go_proxy_client import CloudflareBypassClient
 from scrapling.parser import Selector
+
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+DEFAULT_PROXY_CONCURRENCY = max(
+    1, min(6, int(os.getenv("SCRAPER_PROXY_CONCURRENCY", "3")))
+)
 
 
 def resolve_go_proxy_url(proxy_url: str | None = None) -> str:
@@ -20,6 +29,48 @@ def resolve_go_proxy_url(proxy_url: str | None = None) -> str:
 _NON_RETRYABLE_STATUSES = frozenset({400, 401, 404, 410, 422})
 
 
+def iter_bounded(
+    items: Iterable[_T],
+    fn: Callable[[_T], _R],
+    *,
+    max_workers: int = DEFAULT_PROXY_CONCURRENCY,
+    stop_when: Callable[[], bool] | None = None,
+) -> Iterator[tuple[_T, _R]]:
+    """Run ``fn`` across items with a small worker window and yield on caller thread."""
+    workers = max(1, int(max_workers or 1))
+    item_list = list(items)
+    if not item_list:
+        return
+    if workers == 1 or len(item_list) == 1:
+        for item in item_list:
+            if stop_when and stop_when():
+                break
+            yield item, fn(item)
+        return
+
+    item_iter = iter(item_list)
+    with ThreadPoolExecutor(max_workers=min(workers, len(item_list))) as executor:
+        in_flight: dict[Future[_R], _T] = {}
+
+        def _fill_pool() -> None:
+            while len(in_flight) < workers:
+                if stop_when and stop_when():
+                    break
+                try:
+                    nxt = next(item_iter)
+                except StopIteration:
+                    break
+                in_flight[executor.submit(fn, nxt)] = nxt
+
+        _fill_pool()
+        while in_flight:
+            done, _ = wait(in_flight.keys(), return_when=FIRST_COMPLETED)
+            for fut in done:
+                item = in_flight.pop(fut)
+                yield item, fut.result()
+            _fill_pool()
+
+
 class ProxyFetchClient:
     """Thin adapter that fetches pages via Go proxy and returns scrapling Selectors."""
 
@@ -28,13 +79,20 @@ class ProxyFetchClient:
         enabled: bool = False,
         proxy_url: str | None = None,
         user_agent: str | None = None,
-        max_retries: int = 5,
-        initial_delay: float = 2.0,
+        max_retries: int = 3,
+        initial_delay: float = 1.5,
+        max_delay: float = 6.0,
     ):
         self.enabled = enabled
         self.proxy_url = resolve_go_proxy_url(proxy_url)
+        self.user_agent = user_agent
         self.max_retries = max_retries
         self.initial_delay = initial_delay
+        self.max_delay = max_delay
+        self._owner_thread_id = threading.get_ident()
+        self._thread_local = threading.local()
+        self._clients_lock = threading.Lock()
+        self._clients: list[CloudflareBypassClient] = []
         self.client = (
             CloudflareBypassClient(
                 proxy_url=self.proxy_url,
@@ -44,10 +102,32 @@ class ProxyFetchClient:
             if enabled
             else None
         )
+        if self.client is not None:
+            self._clients.append(self.client)
+
+    def _get_client(self) -> CloudflareBypassClient | None:
+        if not self.enabled:
+            return None
+        if threading.get_ident() == self._owner_thread_id:
+            return self.client
+        client = getattr(self._thread_local, "client", None)
+        if client is None:
+            client = CloudflareBypassClient(
+                proxy_url=self.proxy_url,
+                user_agent=self.user_agent,
+                transport_retries=0,
+            )
+            self._thread_local.client = client
+            with self._clients_lock:
+                self._clients.append(client)
+        return client
 
     def close(self) -> None:
-        if self.client is not None:
-            self.client.close()
+        with self._clients_lock:
+            for client in self._clients:
+                client.close()
+            self._clients.clear()
+        self.client = None
 
     @staticmethod
     def _is_cloudflare_challenge(body_text: str) -> bool:
@@ -73,14 +153,15 @@ class ProxyFetchClient:
         getattr(task_log, level, task_log.info)(message)
 
     def fetch_selector(self, url: str, task_log=None) -> Selector | None:
-        if not self.enabled or self.client is None:
+        client = self._get_client()
+        if not self.enabled or client is None:
             raise RuntimeError("ProxyFetchClient is not enabled")
 
         max_attempts = max(1, self.max_retries)
         last_error = "Proxy fetch failed"
 
         for attempt in range(max_attempts):
-            response = self.client.fetch_with_retry(
+            response = client.fetch_with_retry(
                 url=url,
                 max_retries=1,
                 initial_delay=self.initial_delay,
@@ -107,7 +188,7 @@ class ProxyFetchClient:
                         return Selector(content=body, url=url)
 
             if attempt < max_attempts - 1:
-                delay = self.initial_delay * (2**attempt)
+                delay = min(self.max_delay, self.initial_delay * (2**attempt))
                 self._log(
                     task_log,
                     f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",
