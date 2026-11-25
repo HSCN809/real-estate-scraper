@@ -122,6 +122,20 @@ def get_redis_client() -> redis.Redis:
     return client
 
 
+def _append_log_entry(
+    payload: dict[str, Any], message: str, level: str = "info"
+) -> bool:
+    text = " ".join(str(message or "").split())
+    if not text:
+        return False
+    logs = list(payload.get("logs") or [])
+    if logs and logs[-1].get("text") == text:
+        return False
+    logs.append({"text": text, "level": level})
+    payload["logs"] = logs[-40:]
+    return True
+
+
 class TaskStatusStore:
     def __init__(self, redis_client: redis.Redis | None = None):
         self.redis_client = redis_client or get_redis_client()
@@ -152,6 +166,9 @@ class TaskStatusStore:
         platform: str | None = None,
         unit: str | None = None,
         cancel_requested: bool | None = None,
+        log_message: str | None = None,
+        log_level: str = "info",
+        check_cancel: bool = False,
     ) -> dict[str, Any]:
         existing = self.get_task(task_id)
         if existing is None:
@@ -165,8 +182,14 @@ class TaskStatusStore:
                 message=message or "",
                 platform=platform,
             )
-        elif is_final_task_status(existing.get("status")):
-            return existing
+        else:
+            if check_cancel and (
+                existing.get("cancel_requested")
+                or existing.get("status") == TASK_STATUS_CANCELLED
+            ):
+                raise TaskCancelled("Tarama iptal edildi")
+            if is_final_task_status(existing.get("status")):
+                return existing
 
         if status is not None:
             if status not in TASK_STATUS_VALUES:
@@ -197,6 +220,8 @@ class TaskStatusStore:
         if cancel_requested is not None:
             existing["cancel_requested"] = cancel_requested
         existing.setdefault("logs", [])
+        if log_message is not None:
+            _append_log_entry(existing, log_message, log_level)
 
         existing["updated_at"] = utcnow_iso()
         if is_final_task_status(existing["status"]):
@@ -261,15 +286,15 @@ class TaskStatusStore:
         *,
         message: str = "Tarama iptal edildi.",
     ) -> dict[str, Any]:
-        payload = self.update(
+        return self.update(
             task_id,
             status=TASK_STATUS_CANCELLED,
             message=message,
             details="Kullanıcı tarafından durduruldu",
             cancel_requested=True,
+            log_message=message,
+            log_level="warning",
         )
-        self.append_log(task_id, message, "warning")
-        return payload
 
     def is_cancel_requested(self, task_id: str) -> bool:
         task = self.get_task(task_id)
@@ -289,14 +314,8 @@ class TaskStatusStore:
         existing = self.get_task(task_id)
         if existing is None:
             return None
-        text = " ".join(str(message or "").split())
-        if not text:
+        if not _append_log_entry(existing, message, level):
             return existing
-        logs = list(existing.get("logs") or [])
-        if logs and logs[-1].get("text") == text:
-            return existing
-        logs.append({"text": text, "level": level})
-        existing["logs"] = logs[-40:]
         existing["updated_at"] = utcnow_iso()
         self._write(existing)
         return existing

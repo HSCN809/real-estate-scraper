@@ -130,3 +130,53 @@ def test_batch_leaves_transaction_under_callers_control(db):
     db.rollback()
     assert db.scalar(select(func.count()).select_from(Listing)) == 0
     assert db.scalar(select(func.count()).select_from(Location)) == 0
+
+
+def test_selenium_scrapers_skip_retaining_listings_when_db_attached(db, monkeypatch):
+    import types
+    from unittest.mock import MagicMock
+
+    monkeypatch.setitem(
+        sys.modules,
+        "undetected_chromedriver",
+        types.ModuleType("undetected_chromedriver"),
+    )
+
+    from scrapers.emlakjet.main import EmlakJetScraper
+    import scrapers.hepsiemlak.main as he_main
+
+    fake_driver = MagicMock()
+    fake_driver.current_url = "https://www.emlakjet.com/satilik-konut/istanbul"
+    sample = [
+        {
+            "baslik": "Test",
+            "fiyat": "1.000.000 TL",
+            "ilan_url": "https://www.emlakjet.com/ilan/1",
+            "ilan_linki": "https://www.hepsiemlak.com/ilan/1",
+            "il": "İstanbul",
+            "ilce": "Kadıköy",
+        }
+    ]
+
+    ej = EmlakJetScraper(driver=fake_driver, category="konut", listing_type="satilik")
+    ej.db = db
+    ej.config.wait_between_pages = 0
+    ej.scrape_current_page = lambda: list(sample)
+    ej.scrape_pages("https://www.emlakjet.com/satilik-konut/istanbul", max_pages=2)
+    assert ej.total_scraped_count == 2
+    assert ej.all_listings == []
+
+    he = he_main.HepsiemlakScraper(
+        driver=fake_driver, category="konut", listing_type="satilik"
+    )
+    he.db = db
+    he.select_single_city = lambda city: True
+    he.get_total_pages = lambda: 2
+    he._wait_for_listing_ready = lambda timeout=20: True
+    he.random_medium_wait = lambda: 0
+    he.random_long_wait = lambda: 0
+    he.scrape_current_page = lambda fallback_city=None, fallback_district=None: list(sample)
+    monkeypatch.setattr(he_main, "save_listings_to_db", lambda *a, **kw: (1, 0, 0))
+    res = he.scrape_city("İstanbul", max_pages=2, api_mode=True)
+    assert he.total_scraped_count == 2
+    assert res == []

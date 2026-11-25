@@ -57,6 +57,9 @@ class TaskProgressManager:
         error: str | None = None,
         platform: str | None = None,
         unit: str | None = None,
+        log_message: str | None = None,
+        log_level: str = "info",
+        check_cancel: bool = False,
     ):
         data = self.store.update(
             self.task_id,
@@ -69,6 +72,9 @@ class TaskProgressManager:
             error=error,
             platform=platform,
             unit=unit,
+            log_message=log_message,
+            log_level=log_level,
+            check_cancel=check_cancel,
         )
 
         current_task.update_state(
@@ -134,7 +140,6 @@ def _make_progress_callback(progress_manager: TaskProgressManager):
     def progress_callback(
         message, current=None, total=None, progress=None, details=None, unit=None
     ):
-        progress_manager.raise_if_cancelled()
         progress_manager.update(
             message=message,
             current=current,
@@ -142,9 +147,10 @@ def _make_progress_callback(progress_manager: TaskProgressManager):
             progress=progress,
             details=details,
             unit=_infer_unit(message, unit),
+            log_message=str(message) if message else None,
+            log_level="info",
+            check_cancel=True,
         )
-        if message:
-            progress_manager.log(str(message), "info")
 
     return progress_callback
 

@@ -246,6 +246,15 @@ func BenchmarkRateLimiterAllow(b *testing.B) {
 	}
 }
 
+func BenchmarkIsCloudflareChallengeLargeHTML(b *testing.B) {
+	body := []byte("<html><body>" + strings.Repeat("<div>ilan detayi istanbul kadikoy satilik daire</div>", 10000) + "</body></html>")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = isCloudflareChallenge(http.StatusOK, body)
+	}
+}
+
 func TestIsCloudflareChallenge(t *testing.T) {
 	if !isCloudflareChallenge(http.StatusForbidden, []byte("no")) {
 		t.Fatal("403 should be a challenge")
@@ -253,8 +262,15 @@ func TestIsCloudflareChallenge(t *testing.T) {
 	if !isCloudflareChallenge(http.StatusOK, []byte("<title>Just a moment...</title>")) {
 		t.Fatal("200 interstitial should be a challenge")
 	}
+	if !isCloudflareChallenge(http.StatusOK, []byte("<HTML><TITLE>JUST A MOMENT</TITLE></HTML>")) {
+		t.Fatal("uppercase interstitial should be detected")
+	}
 	if isCloudflareChallenge(http.StatusOK, []byte("<html>ilan listesi</html>")) {
 		t.Fatal("listing html should not be a challenge")
+	}
+	largeListing := append([]byte(strings.Repeat("<div>ilan</div>", 5000)), []byte("just a moment")...)
+	if isCloudflareChallenge(http.StatusOK, largeListing) {
+		t.Fatal("marker past 32KB scan cap in large listing html should be ignored")
 	}
 }
 

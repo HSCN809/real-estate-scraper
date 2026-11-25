@@ -146,3 +146,33 @@ def test_append_log_keeps_recent_events():
         "Şırnak atlandı (0 ilan)",
         "Cizre ilçesi alınamadı",
     ]
+
+
+def test_single_roundtrip_update_logs_and_checks_cancellation():
+    import pytest
+    from core.task_status import TaskCancelled
+
+    client = FakeRedis()
+    store = TaskStatusStore(redis_client=client)
+    store.create_queued_task("task-1", message="Queued", platform="hepsiemlak")
+
+    updated = store.update(
+        "task-1",
+        status=TASK_STATUS_RUNNING,
+        message="İstanbul - Sayfa 1/5",
+        progress=20,
+        log_message="İstanbul - Sayfa 1/5",
+        check_cancel=True,
+    )
+    assert updated["progress"] == 20
+    assert [item["text"] for item in updated["logs"]] == ["İstanbul - Sayfa 1/5"]
+
+    store.mark_cancelled("task-1")
+    with pytest.raises(TaskCancelled):
+        store.update(
+            "task-1",
+            message="İstanbul - Sayfa 2/5",
+            progress=40,
+            log_message="İstanbul - Sayfa 2/5",
+            check_cancel=True,
+        )

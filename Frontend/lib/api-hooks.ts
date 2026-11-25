@@ -120,7 +120,7 @@ export function useActiveTasks(enabled: boolean, poll: boolean) {
         enabled,
         refetchInterval: (query) => {
             if (!poll) return false;
-            return query.state.data?.active_tasks.length ? 3000 : 15000;
+            return query.state.data?.active_tasks.length ? 10000 : 15000;
         },
         staleTime: 1000,
         refetchOnWindowFocus: poll,

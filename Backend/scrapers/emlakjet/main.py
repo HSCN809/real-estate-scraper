@@ -47,6 +47,8 @@ class EmlakJetScraper(BaseScraper):
         self.emlakjet_config = get_emlakjet_config()
         self.listing_type = listing_type
         self.subtype_path = subtype_path
+        self._max_listings = 0
+        self.total_scraped_count = 0
         self.total_new_listings = 0  # Global kümülatif yeni ilan sayacı
         # Uygun parser'ı başlat
         parser_class = self.CATEGORY_PARSERS.get(category, KonutParser)
@@ -493,9 +495,16 @@ class EmlakJetScraper(BaseScraper):
         else:
             return [district]
 
+    @property
+    def _retain_listings(self) -> bool:
+        """DB bağlıyken ilan dict'lerini RAM'de biriktirme (sayfa bazlı persist edilir)."""
+        return getattr(self, "db", None) is None
+
     def _is_listing_limit_reached(self) -> bool:
         """Maksimum ilan limitine ulaşılıp ulaşılmadığını kontrol et"""
-        return self._max_listings > 0 and len(self.all_listings) >= self._max_listings
+        max_listings = getattr(self, "_max_listings", 0)
+        scraped = max(self.total_scraped_count, len(self.all_listings))
+        return max_listings > 0 and scraped >= max_listings
 
     def _make_page_callback(
         self,
@@ -559,11 +568,7 @@ class EmlakJetScraper(BaseScraper):
         first_page_count = 0
 
         for current_page in range(1, max_pages + 1):
-            if (
-                hasattr(self, "_max_listings")
-                and self._max_listings > 0
-                and len(self.all_listings) >= self._max_listings
-            ):
+            if self._is_listing_limit_reached():
                 task_log.line(
                     f"İlan limitine ulaşıldı ({self._max_listings}), sayfa tarama sonlandırılıyor",
                     level="warning",
@@ -632,7 +637,9 @@ class EmlakJetScraper(BaseScraper):
                         )
                     )
                 else:
-                    self.all_listings.extend(listings)
+                    self.total_scraped_count += len(listings)
+                    if self._retain_listings:
+                        self.all_listings.extend(listings)
 
                     # Sadece yeni eklenenleri saymak için
                     result_counts = (0, 0, 0)
@@ -1052,8 +1059,9 @@ class EmlakJetScraper(BaseScraper):
                     break
 
             if self._is_listing_limit_reached():
+                scraped = max(self.total_scraped_count, len(self.all_listings))
                 print(
-                    f"\n🎯 İlan limitine ulaşıldı: {len(self.all_listings)} / {self._max_listings}"
+                    f"\n🎯 İlan limitine ulaşıldı: {scraped} / {self._max_listings}"
                 )
 
             # ── HİYERARŞİK ÖZET RAPOR ──
@@ -1063,7 +1071,7 @@ class EmlakJetScraper(BaseScraper):
                 logger.warning(
                     f"⚠️ Tarama erken durduruldu: {self.total_new_listings} yeni ilan"
                 )
-            elif self.all_listings:
+            elif self.total_scraped_count > 0 or self.all_listings:
                 print("✅ TARAMA BAŞARIYLA TAMAMLANDI")
                 logger.info(
                     f"✅ Tarama tamamlandı: {self.total_new_listings} yeni ilan"
@@ -1142,7 +1150,9 @@ class EmlakJetScraper(BaseScraper):
 
                             if listings:
                                 print(f"   ✅ {len(listings)} ilan bulundu!")
-                                self.all_listings.extend(listings)
+                                self.total_scraped_count += len(listings)
+                                if self._retain_listings:
+                                    self.all_listings.extend(listings)
                                 if self.db:
                                     save_listings_to_db(
                                         self.db,

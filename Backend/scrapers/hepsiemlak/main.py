@@ -93,6 +93,11 @@ class HepsiemlakScraper(BaseScraper):
         self.parser = parser_class()
 
     @property
+    def _retain_listings(self) -> bool:
+        """DB bağlıyken ilan dict'lerini RAM'de biriktirme (sayfa bazlı persist edilir)."""
+        return getattr(self, "db", None) is None
+
+    @property
     def subtype_name(self) -> str | None:
         """Dosya adlandırma için subtype_path'inden alt kategori adını çıkar"""
         if self.subtype_path:
@@ -819,6 +824,7 @@ class HepsiemlakScraper(BaseScraper):
             self._log_location_plan(city, pages_to_scrape)
 
             city_listings = []
+            city_scraped_count = 0
             total_new_listings = 0  # Sadece yeni eklenen ilan sayısı
 
             # Sayfaları tara
@@ -890,7 +896,10 @@ class HepsiemlakScraper(BaseScraper):
                         )
                     )
                 else:
-                    city_listings.extend(page_listings)
+                    city_scraped_count += len(page_listings)
+                    self.total_scraped_count += len(page_listings)
+                    if self._retain_listings:
+                        city_listings.extend(page_listings)
 
                     # Her sayfa sonrası DB'ye anında kaydet
                     new_c = updated_c = unchanged_c = 0
@@ -921,7 +930,7 @@ class HepsiemlakScraper(BaseScraper):
                 if page < pages_to_scrape:
                     self.random_medium_wait()  # Gizli mod: sayfalar arası
 
-            self._log_location_complete(city, len(city_listings))
+            self._log_location_complete(city, city_scraped_count)
             return city_listings
 
         except Exception as e:
@@ -968,8 +977,10 @@ class HepsiemlakScraper(BaseScraper):
             )
 
         # Her ilçeyi ayrı ayrı tara
+        total_listings = 0
         for idx, district in enumerate(districts, 1):
             district_listings = []  # Bu ilçenin ilanları
+            district_scraped_count = 0
 
             try:
                 # Gerçek URL varsa onu kullan, yoksa manuel oluştur
@@ -1114,7 +1125,10 @@ class HepsiemlakScraper(BaseScraper):
                             )
                         )
                     else:
-                        district_listings.extend(page_listings)
+                        district_scraped_count += len(page_listings)
+                        self.total_scraped_count += len(page_listings)
+                        if self._retain_listings:
+                            district_listings.extend(page_listings)
 
                         # Her sayfa sonrası DB'ye anında kaydet
                         new_c = updated_c = unchanged_c = 0
@@ -1147,14 +1161,17 @@ class HepsiemlakScraper(BaseScraper):
                         self.random_medium_wait()
 
                 # İlçe verilerini kaydet
-                if district_listings:
-                    all_results[district] = district_listings
+                if district_scraped_count > 0:
+                    total_listings += district_scraped_count
+                    if self._retain_listings:
+                        all_results[district] = district_listings
                     self._log_location_complete(
-                        f"{city} / {district}", len(district_listings)
+                        f"{city} / {district}", district_scraped_count
                     )
 
                     # Her ilçeyi hemen kaydet (bellek tasarrufu ve güvenlik için)
-                    self._save_district_data(city, district, district_listings)
+                    if district_listings:
+                        self._save_district_data(city, district, district_listings)
                 else:
                     task_log.line(f"⚠️ {district} - İlan bulunamadı", level="warning")
 
@@ -1166,11 +1183,10 @@ class HepsiemlakScraper(BaseScraper):
                 task_log.line(f"❌ {district} tarama hatası: {e}", level="error")
                 continue
 
-        total_listings = sum(len(listings) for listings in all_results.values())
         task_log.section(
             f"✅ {city} - TÜM İLÇELER TAMAMLANDI",
             f"Toplam İlan Sayısı: {total_listings}",
-            f"Taranan İlçe Sayısı: {len(all_results)}",
+            f"Taranan İlçe Sayısı: {len(districts)}",
         )
         return all_results
 
@@ -1273,6 +1289,7 @@ class HepsiemlakScraper(BaseScraper):
 
                     # scrape_city_with_districts artık Dict[district -> listings] döndürüyor
                     # VE her ilçeyi otomatik olarak kaydediyor
+                    before_count = self.total_scraped_count
                     district_results = self.scrape_city_with_districts(
                         city,
                         districts=districts,
@@ -1280,17 +1297,14 @@ class HepsiemlakScraper(BaseScraper):
                         progress_callback=city_callback,
                     )
 
-                    # Sadece istatistik için tutuyoruz (zaten kaydedildi)
-                    if district_results:
+                    city_listing_count = self.total_scraped_count - before_count
+                    total_listings_count += city_listing_count
+                    if district_results and self._retain_listings:
                         all_results[city] = district_results
-                        city_listing_count = sum(
-                            len(listings) for listings in district_results.values()
-                        )
-                        total_listings_count += city_listing_count
-                        self.total_scraped_count += city_listing_count
                 else:
                     # İlçe seçimi yoksa tüm şehri tara ve kaydet
                     task_log.line(f"📍 {city} - Tüm ilçeler taranacak (filtre yok)")
+                    before_count = self.total_scraped_count
                     city_listings = self.scrape_city(
                         city,
                         max_pages=max_pages,
@@ -1298,18 +1312,17 @@ class HepsiemlakScraper(BaseScraper):
                         progress_callback=city_callback,
                     )
 
-                    if city_listings:
+                    city_listing_count = self.total_scraped_count - before_count
+                    total_listings_count += city_listing_count
+                    if city_listings and self._retain_listings:
                         all_results[city] = city_listings
-                        total_listings_count += len(city_listings)
-                        self.total_scraped_count += len(city_listings)
                         # DB kaydetme scrape_city içinde sayfa bazlı yapılıyor
 
                 self.random_medium_wait()  # Gizli mod: şehirler arası
 
             # Özet bilgi (veriler zaten kaydedildi)
-            if all_results:
-                total = total_listings_count
-                self._log_final_summary(len(all_results), total)
+            if total_listings_count > 0 or all_results:
+                self._log_final_summary(len(self.selected_cities), total_listings_count)
             else:
                 self._log_final_summary(0, 0)
 

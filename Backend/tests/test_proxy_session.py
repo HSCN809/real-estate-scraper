@@ -36,3 +36,25 @@ def test_fetch_with_retry_pins_proxy_session(monkeypatch):
     assert response.status == 200
     assert seen["headers"]["X-Proxy-Session"] == client.session_id
     assert client.session_cookies["__cf_bm"] == "token"
+
+
+def test_proxy_fetch_skips_retries_on_permanent_404(monkeypatch):
+    from scrapers.common import proxy_fetch
+
+    client = proxy_fetch.ProxyFetchClient(enabled=True, max_retries=5, initial_delay=2.0)
+    calls = []
+    sleeps = []
+
+    def fake_fetch(url, max_retries=1, initial_delay=2.0):
+        calls.append(url)
+        return ProxyResponse(status=404, headers={}, body=b"Not Found")
+
+    monkeypatch.setattr(client.client, "fetch_with_retry", fake_fetch)
+    monkeypatch.setattr(proxy_fetch.time, "sleep", lambda s: sleeps.append(s))
+
+    try:
+        assert client.fetch_selector("https://www.hepsiemlak.com/missing") is None
+        assert len(calls) == 1
+        assert sleeps == []
+    finally:
+        client.close()

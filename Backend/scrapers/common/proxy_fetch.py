@@ -17,6 +17,9 @@ def resolve_go_proxy_url(proxy_url: str | None = None) -> str:
     return os.getenv("GO_PROXY_URL", default_url)
 
 
+_NON_RETRYABLE_STATUSES = frozenset({400, 401, 404, 410, 422})
+
+
 class ProxyFetchClient:
     """Thin adapter that fetches pages via Go proxy and returns scrapling Selectors."""
 
@@ -87,6 +90,8 @@ class ProxyFetchClient:
                 last_error = f"Proxy fetch failed ({response.status}): {response.error}"
             elif response.status >= 400:
                 last_error = f"Proxy returned status {response.status} for {url}"
+                if response.status in _NON_RETRYABLE_STATUSES:
+                    break
             else:
                 body = response.body or b""
                 if len(body) <= 100:

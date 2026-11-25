@@ -386,7 +386,13 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		if attempt > 0 {
 			log.Debug().Msgf("Retry attempt %d for URL: %s", attempt, req.URL)
 			jitter := time.Duration(rand.Intn(400)) * time.Millisecond
-			time.Sleep(ph.config.RetryDelay + jitter)
+			if !sleepWithContext(ctx, ph.config.RetryDelay+jitter) {
+				if sendHeld() {
+					return
+				}
+				ph.sendErrorResponse(w, ctx.Err().Error(), http.StatusGatewayTimeout)
+				return
+			}
 		}
 
 		// Create HTTP request
@@ -436,7 +442,10 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 			held = &http.Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}
 			heldBody = append([]byte(nil), body...)
 			jitter := time.Duration(rand.Intn(600)) * time.Millisecond
-			time.Sleep(ph.config.RetryDelay*time.Duration(attempt+1) + jitter)
+			if !sleepWithContext(ctx, ph.config.RetryDelay*time.Duration(attempt+1)+jitter) {
+				sendHeld()
+				return
+			}
 			continue
 		}
 
@@ -512,20 +521,21 @@ func (ph *ProxyHandler) createHTTPRequest(req *ProxyRequest, userAgent string) (
 
 // sendSuccessResponse sends a successful response back to the client
 func (ph *ProxyHandler) sendSuccessResponse(w http.ResponseWriter, resp *http.Response, body []byte) {
+	cookies := resp.Cookies()
 	// Create proxy response
 	proxyResp := ProxyResponse{
 		Status:  resp.StatusCode,
 		Body:    body,
-		Cookies: make([]http.Cookie, 0),
+		Cookies: make([]http.Cookie, 0, len(cookies)),
+		Headers: make(map[string]string, len(resp.Header)),
 	}
 
 	// Copy cookies manually
-	for _, cookie := range resp.Cookies() {
+	for _, cookie := range cookies {
 		proxyResp.Cookies = append(proxyResp.Cookies, *cookie)
 	}
 
 	// Copy headers
-	proxyResp.Headers = make(map[string]string)
 	for key, values := range resp.Header {
 		if len(values) > 0 {
 			proxyResp.Headers[key] = values[0]
@@ -561,6 +571,65 @@ func proxySessionID(headers map[string]string) string {
 	return ""
 }
 
+const maxCFChallengeScanBytes = 32 * 1024
+
+var cfChallengeMarkers = []string{
+	"cf-challenge",
+	"challenge-platform",
+	"just a moment",
+	"checking your browser",
+	"attention required",
+	"cf-turnstile",
+	"/cdn-cgi/challenge-platform/",
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func containsFoldASCII(haystack []byte, lowerNeedle string) bool {
+	n := len(lowerNeedle)
+	if n == 0 || len(haystack) < n {
+		return false
+	}
+	first := lowerNeedle[0]
+	limit := len(haystack) - n
+	for i := 0; i <= limit; i++ {
+		c := haystack[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != first {
+			continue
+		}
+		matched := true
+		for j := 1; j < n; j++ {
+			hc := haystack[i+j]
+			if hc >= 'A' && hc <= 'Z' {
+				hc += 'a' - 'A'
+			}
+			if hc != lowerNeedle[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 func isCloudflareChallenge(status int, body []byte) bool {
 	if status == http.StatusForbidden || status == http.StatusServiceUnavailable {
 		return true
@@ -568,18 +637,12 @@ func isCloudflareChallenge(status int, body []byte) bool {
 	if status != http.StatusOK || len(body) == 0 {
 		return false
 	}
-	page := strings.ToLower(string(body))
-	markers := []string{
-		"cf-challenge",
-		"challenge-platform",
-		"just a moment",
-		"checking your browser",
-		"attention required",
-		"cf-turnstile",
-		"/cdn-cgi/challenge-platform/",
+	sample := body
+	if len(sample) > maxCFChallengeScanBytes {
+		sample = sample[:maxCFChallengeScanBytes]
 	}
-	for _, marker := range markers {
-		if strings.Contains(page, marker) {
+	for _, marker := range cfChallengeMarkers {
+		if containsFoldASCII(sample, marker) {
 			return true
 		}
 	}
