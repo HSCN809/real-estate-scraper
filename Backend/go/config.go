@@ -110,7 +110,9 @@ func LoadConfigFromEnv() *Config {
 		}
 	}
 
-	if mobileProxy := os.Getenv("MOBILE_PROXY_URL"); mobileProxy != "" {
+	useMobileProxyEnv := strings.ToLower(strings.TrimSpace(os.Getenv("USE_MOBILE_PROXY")))
+	mobileProxyDisabled := useMobileProxyEnv == "false" || useMobileProxyEnv == "0" || useMobileProxyEnv == "no"
+	if mobileProxy := strings.TrimSpace(os.Getenv("MOBILE_PROXY_URL")); mobileProxy != "" && !mobileProxyDisabled {
 		cfg.MobileProxyURL = mobileProxy
 		cfg.UseMobileProxy = true
 	}

@@ -64,3 +64,12 @@ func TestLoadConfigFromEnvIgnoresInvalidPort(t *testing.T) {
 		t.Fatalf("Port = %d, want default 8080", cfg.Port)
 	}
 }
+
+func TestLoadConfigFromEnvDisableMobileProxy(t *testing.T) {
+	t.Setenv("MOBILE_PROXY_URL", "http://proxy:8000")
+	t.Setenv("USE_MOBILE_PROXY", "false")
+	cfg := LoadConfigFromEnv()
+	if cfg.UseMobileProxy || cfg.MobileProxyURL != "" {
+		t.Fatalf("expected mobile proxy disabled, got enabled=%v url=%q", cfg.UseMobileProxy, cfg.MobileProxyURL)
+	}
+}

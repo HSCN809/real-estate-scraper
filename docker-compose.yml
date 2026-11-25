@@ -14,6 +14,7 @@ services:
       - PROXY_WRITE_TIMEOUT=30
 
       # Residential/upstream proxy configuration (optional)
+      - USE_MOBILE_PROXY=${USE_MOBILE_PROXY:-true}
       - MOBILE_PROXY_URL=${MOBILE_PROXY_URL:-}
       - MOBILE_PROXY_USER=${MOBILE_PROXY_USER:-}
       - MOBILE_PROXY_PASS=${MOBILE_PROXY_PASS:-}

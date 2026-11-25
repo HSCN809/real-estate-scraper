@@ -93,4 +93,4 @@ ENV XDG_CACHE_HOME=/home/appuser/.cache
 ENV BREAKPAD_DUMP_LOCATION=/tmp/crashpad
 
 # Baslat: Xvfb + Celery worker (lock dosyasi temizlenerek)
-CMD ["sh", "-c", "rm -f /tmp/.X99-lock && mkdir -p /tmp/.X11-unix /tmp/crashpad /tmp/scraper-logs && chown root:root /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix /tmp/crashpad && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && exec su -s /bin/sh appuser -c 'HOME=/home/appuser XDG_CACHE_HOME=/home/appuser/.cache DISPLAY=:99 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright BREAKPAD_DUMP_LOCATION=/tmp/crashpad celery -A celery_app worker --loglevel=info --concurrency=1 -Q scraping'"]
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock && mkdir -p /tmp/.X11-unix /tmp/crashpad /tmp/scraper-logs && chown root:root /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix /tmp/crashpad && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && exec su -s /bin/sh appuser -c 'HOME=/home/appuser XDG_CACHE_HOME=/home/appuser/.cache DISPLAY=:99 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright BREAKPAD_DUMP_LOCATION=/tmp/crashpad celery -A celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} -Q scraping'"]
