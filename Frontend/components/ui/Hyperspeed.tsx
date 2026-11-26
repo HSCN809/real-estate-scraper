@@ -874,11 +874,12 @@ const Hyperspeed = ({
       setSize: (width: number, height: number, updateStyles: boolean) => void
     ) {
       const canvas = renderer.domElement;
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
+      const dpr = renderer.getPixelRatio();
+      const width = Math.floor(canvas.clientWidth * dpr);
+      const height = Math.floor(canvas.clientHeight * dpr);
       const needResize = canvas.width !== width || canvas.height !== height;
       if (needResize) {
-        setSize(width, height, false);
+        setSize(canvas.clientWidth, canvas.clientHeight, false);
       }
       return needResize;
     }
@@ -894,6 +895,9 @@ const Hyperspeed = ({
       clock: THREE.Clock;
       assets: Record<string, unknown>;
       disposed: boolean;
+      rafId: number | null;
+      reducedMotion: boolean;
+      lookAtTarget: THREE.Vector3;
       road: Road;
       leftCarLights: CarLights;
       rightCarLights: CarLights;
@@ -914,12 +918,17 @@ const Hyperspeed = ({
           };
         }
         this.container = container;
+        this.rafId = null;
+        this.reducedMotion =
+          typeof window !== 'undefined' &&
+          window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        this.lookAtTarget = new THREE.Vector3();
         this.renderer = new THREE.WebGLRenderer({
           antialias: false,
           alpha: true
         });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
         this.renderer.setSize(container.offsetWidth, container.offsetHeight, false);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.composer = new EffectComposer(this.renderer);
         container.append(this.renderer.domElement);
 
@@ -979,6 +988,8 @@ const Hyperspeed = ({
         this.onWindowResize = this.onWindowResize.bind(this);
 
         window.addEventListener('resize', this.onWindowResize);
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
       }
 
       onWindowResize() {
@@ -1095,19 +1106,30 @@ const Hyperspeed = ({
         if (this.options.distortion.getJS) {
           const distortion = this.options.distortion.getJS(0.025, time);
 
-          this.camera.lookAt(
-            new THREE.Vector3(
-              this.camera.position.x + distortion.x,
-              this.camera.position.y + distortion.y,
-              this.camera.position.z + distortion.z
-            )
+          this.lookAtTarget.set(
+            this.camera.position.x + distortion.x,
+            this.camera.position.y + distortion.y,
+            this.camera.position.z + distortion.z
           );
-          updateCamera = true;
+          this.camera.lookAt(this.lookAtTarget);
         }
         if (updateCamera) {
           this.camera.updateProjectionMatrix();
         }
       }
+
+      onVisibilityChange = () => {
+        if (this.disposed || this.reducedMotion) return;
+        if (document.hidden) {
+          if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+        } else if (this.rafId === null) {
+          this.clock.getDelta();
+          this.rafId = requestAnimationFrame(this.tick);
+        }
+      };
 
       render(delta: number) {
         this.composer.render(delta);
@@ -1115,6 +1137,10 @@ const Hyperspeed = ({
 
       dispose() {
         this.disposed = true;
+        if (this.rafId !== null) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
+        }
 
         if (this.renderer) {
           this.renderer.dispose();
@@ -1127,6 +1153,7 @@ const Hyperspeed = ({
         }
 
         window.removeEventListener('resize', this.onWindowResize);
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
         if (this.container) {
           this.container.removeEventListener('mousedown', this.onMouseDown);
           this.container.removeEventListener('mouseup', this.onMouseUp);
@@ -1145,6 +1172,8 @@ const Hyperspeed = ({
 
       tick() {
         if (this.disposed || !this) return;
+        this.rafId = null;
+        if (document.hidden) return;
         if (resizeRendererToDisplaySize(this.renderer, this.setSize)) {
           const canvas = this.renderer.domElement;
           this.camera.aspect = canvas.clientWidth / canvas.clientHeight;
@@ -1153,7 +1182,9 @@ const Hyperspeed = ({
         const delta = this.clock.getDelta();
         this.render(delta);
         this.update(delta);
-        requestAnimationFrame(this.tick);
+        if (!this.reducedMotion) {
+          this.rafId = requestAnimationFrame(this.tick);
+        }
       }
     }
 

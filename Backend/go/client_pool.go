@@ -225,18 +225,19 @@ func (cp *ClientPool) GetClient() *PooledClient {
 	}
 }
 
-// ReturnClient returns a client back to the pool.
+// ReturnClient returns a client back to the pool, closing idle connections on overflow.
 func (cp *ClientPool) ReturnClient(client *PooledClient) {
+	if client == nil {
+		return
+	}
 	cp.mu.RLock()
 	defer cp.mu.RUnlock()
 
-	if len(cp.clients) < cp.maxSize {
-		select {
-		case cp.clients <- client:
-			return
-		default:
-			closeIdleClient(client)
-		}
+	select {
+	case cp.clients <- client:
+		return
+	default:
+		closeIdleClient(client)
 	}
 }
 
@@ -306,9 +307,9 @@ func (cp *ClientPool) createTransport(clientHelloID string) http.RoundTripper {
 	}
 
 	if cp.tlsManager != nil {
+		h2Dialer := cp.tlsManager.CreateDialTLSContextFuncWithProxy(proxyURL, true, clientHelloID, "h2", "http/1.1")
 		h2Transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-			dialer := cp.tlsManager.CreateDialTLSContextFuncWithProxy(proxyURL, true, clientHelloID, "h2", "http/1.1")
-			return dialer(ctx, network, addr)
+			return h2Dialer(ctx, network, addr)
 		}
 	}
 

@@ -13,7 +13,7 @@ from core.task_status import (
     SCRAPE_SESSION_STATUS_VALUES,
     normalize_scrape_session_status,
 )
-from sqlalchemy import and_, case, func, select, true, tuple_
+from sqlalchemy import and_, case, func, select, true, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from utils.timezone import format_istanbul, latest_datetime, now_utc_naive
@@ -315,9 +315,8 @@ def _update_listing(
     # Hash kullanarak icerik degisikligi kontrolu
     content_changed = existing.content_hash != new_content_hash
 
-    # Degisiklik yoksa guncellemeyi atla
+    # Degisiklik yoksa ORM guncellemesini ve updated_at yazimini atla
     if not price_changed and not content_changed:
-        existing.scrape_session_id = scrape_session_id
         return "unchanged"
 
     # Uygunsa fiyat degisikligini kaydet
@@ -401,6 +400,16 @@ def upsert_listing(
             status = _update_listing(db, existing, data, scrape_session_id)
             if status == "updated":
                 db.flush()
+            elif (
+                scrape_session_id is not None
+                and existing.scrape_session_id != scrape_session_id
+            ):
+                db.execute(
+                    update(Listing)
+                    .where(Listing.id == existing.id)
+                    .values(scrape_session_id=scrape_session_id)
+                )
+                db.expire(existing, ["scrape_session_id"])
             return existing, status
 
     listing, is_new = create_listing(
@@ -477,10 +486,19 @@ def upsert_listings(
             db, list(dict.fromkeys(keys_by_index.values()))
         )
 
+        unchanged_session_updates: list[Listing] = []
         for index, (data, url) in enumerate(zip(batch, urls)):
             listing = existing.get(url) if url else None
             if listing is not None:
-                counts[_update_listing(db, listing, data, scrape_session_id)] += 1
+                status = _update_listing(db, listing, data, scrape_session_id)
+                counts[status] += 1
+                if (
+                    status == "unchanged"
+                    and scrape_session_id is not None
+                    and listing.scrape_session_id != scrape_session_id
+                    and listing.id is not None
+                ):
+                    unchanged_session_updates.append(listing)
                 continue
 
             key = keys_by_index[index]
@@ -504,6 +522,16 @@ def upsert_listings(
             counts["created"] += 1
 
         db.flush()
+        if unchanged_session_updates:
+            # Tek toplu UPDATE ile scrape_session_id guncelle (updated_at bozulmaz)
+            target_ids = list({item.id for item in unchanged_session_updates})
+            db.execute(
+                update(Listing)
+                .where(Listing.id.in_(target_ids))
+                .values(scrape_session_id=scrape_session_id)
+            )
+            for item in unchanged_session_updates:
+                db.expire(item, ["scrape_session_id"])
 
     if counts["created"] or counts["updated"]:
         from .results import invalidate_results_cache

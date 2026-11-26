@@ -1,12 +1,17 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { CitySelectionModal } from '@/components/ui/CitySelectionModal';
 import { ResultsBackground } from '@/components/ui/ResultsBackground';
+
+const CitySelectionModal = dynamic(
+    () => import('@/components/ui/CitySelectionModal').then((m) => m.CitySelectionModal),
+    { ssr: false }
+);
 import { useScraping } from '@/contexts/ScrapingContext';
 import { motion } from 'framer-motion';
 import { Play, Loader2, XCircle, Sparkles, X, MapPin, Info } from 'lucide-react';

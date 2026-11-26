@@ -1,7 +1,9 @@
 """Shared proxy-backed fetch helpers for scrapling scrapers."""
 
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 import os
+import queue
 import threading
 import time
 from typing import Any, Callable, Iterable, Iterator, TypeVar
@@ -90,7 +92,8 @@ class ProxyFetchClient:
         self.initial_delay = initial_delay
         self.max_delay = max_delay
         self._owner_thread_id = threading.get_ident()
-        self._thread_local = threading.local()
+        self._worker_pool: queue.LifoQueue[CloudflareBypassClient] = queue.LifoQueue()
+        self._closed = False
         self._clients_lock = threading.Lock()
         self._cooldown_lock = threading.Lock()
         self._cooldown_until = 0.0
@@ -107,24 +110,48 @@ class ProxyFetchClient:
         if self.client is not None:
             self._clients.append(self.client)
 
-    def _get_client(self) -> CloudflareBypassClient | None:
-        if not self.enabled:
-            return None
-        if threading.get_ident() == self._owner_thread_id:
-            return self.client
-        client = getattr(self._thread_local, "client", None)
-        if client is None:
+    def _borrow_worker_client(self) -> CloudflareBypassClient:
+        try:
+            return self._worker_pool.get_nowait()
+        except queue.Empty:
             client = CloudflareBypassClient(
                 proxy_url=self.proxy_url,
                 user_agent=self.user_agent,
                 transport_retries=0,
             )
-            self._thread_local.client = client
             with self._clients_lock:
                 self._clients.append(client)
-        return client
+            return client
+
+    def _get_client(self) -> CloudflareBypassClient | None:
+        if not self.enabled or self._closed:
+            return None
+        if threading.get_ident() == self._owner_thread_id:
+            return self.client
+        return self._borrow_worker_client()
+
+    @contextmanager
+    def _acquire_client(self) -> Iterator[CloudflareBypassClient | None]:
+        if not self.enabled or self._closed:
+            yield None
+            return
+        if threading.get_ident() == self._owner_thread_id:
+            yield self.client
+            return
+        client = self._borrow_worker_client()
+        try:
+            yield client
+        finally:
+            if not self._closed:
+                self._worker_pool.put(client)
 
     def close(self) -> None:
+        self._closed = True
+        while True:
+            try:
+                self._worker_pool.get_nowait()
+            except queue.Empty:
+                break
         with self._clients_lock:
             for client in self._clients:
                 client.close()
@@ -180,67 +207,67 @@ class ProxyFetchClient:
                 self._cooldown_until = target
 
     def fetch_selector(self, url: str, task_log=None) -> Selector | None:
-        client = self._get_client()
-        if not self.enabled or client is None:
-            raise RuntimeError("ProxyFetchClient is not enabled")
+        with self._acquire_client() as client:
+            if not self.enabled or client is None:
+                raise RuntimeError("ProxyFetchClient is not enabled")
 
-        max_attempts = max(1, self.max_retries)
-        last_error = "Proxy fetch failed"
+            max_attempts = max(1, self.max_retries)
+            last_error = "Proxy fetch failed"
 
-        for attempt in range(max_attempts):
-            self._wait_cooldown()
-            response = client.fetch_with_retry(
-                url=url,
-                max_retries=1,
-                initial_delay=self.initial_delay,
-            )
+            for attempt in range(max_attempts):
+                self._wait_cooldown()
+                response = client.fetch_with_retry(
+                    url=url,
+                    max_retries=1,
+                    initial_delay=self.initial_delay,
+                )
 
-            rate_limited = False
-            retry_after = None
-            if response.error:
-                last_error = f"Proxy fetch failed ({response.status}): {response.error}"
-            elif response.status >= 400:
-                last_error = f"Proxy returned status {response.status} for {url}"
-                if response.status in _NON_RETRYABLE_STATUSES:
-                    break
-                if response.status in (429, 503):
-                    rate_limited = True
-                    retry_after = self._retry_after_seconds(response.headers)
-            else:
-                body = response.body or b""
-                if len(body) <= 100:
-                    last_error = (
-                        f"Proxy response too short ({len(body)} bytes) for {url}"
-                    )
-                else:
-                    # Cloudflare challenge markers appear in document head / early body.
-                    decoded = body[:16384].decode("utf-8", errors="ignore")
-                    if self._is_cloudflare_challenge(decoded):
-                        last_error = f"Cloudflare challenge still detected for {url}"
+                rate_limited = False
+                retry_after = None
+                if response.error:
+                    last_error = f"Proxy fetch failed ({response.status}): {response.error}"
+                elif response.status >= 400:
+                    last_error = f"Proxy returned status {response.status} for {url}"
+                    if response.status in _NON_RETRYABLE_STATUSES:
+                        break
+                    if response.status in (429, 503):
                         rate_limited = True
+                        retry_after = self._retry_after_seconds(response.headers)
+                else:
+                    body = response.body or b""
+                    if len(body) <= 100:
+                        last_error = (
+                            f"Proxy response too short ({len(body)} bytes) for {url}"
+                        )
                     else:
-                        return Selector(content=body, url=url)
+                        # Cloudflare challenge markers appear in document head / early body.
+                        decoded = body[:16384].decode("utf-8", errors="ignore")
+                        if self._is_cloudflare_challenge(decoded):
+                            last_error = f"Cloudflare challenge still detected for {url}"
+                            rate_limited = True
+                        else:
+                            return Selector(content=body, url=url)
 
-            delay = (
-                retry_after
-                if retry_after is not None
-                else (
-                    min(20.0, 5.0 * (2**attempt))
-                    if rate_limited
-                    else min(self.max_delay, self.initial_delay * (2**attempt))
+                delay = (
+                    retry_after
+                    if retry_after is not None
+                    else (
+                        min(20.0, 5.0 * (2**attempt))
+                        if rate_limited
+                        else min(self.max_delay, self.initial_delay * (2**attempt))
+                    )
                 )
-            )
-            if rate_limited:
-                self._set_cooldown(delay)
+                if rate_limited:
+                    self._set_cooldown(delay)
 
-            if attempt < max_attempts - 1:
-                self._log(
-                    task_log,
-                    f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",
-                    level="warning",
-                )
-                if not rate_limited:
-                    time.sleep(delay)
+                if attempt < max_attempts - 1:
+                    self._log(
+                        task_log,
+                        f"{last_error}; retrying in {delay:.1f}s (attempt {attempt + 1}/{max_attempts})",
+                        level="warning",
+                    )
+                    if not rate_limited:
+                        time.sleep(delay)
 
-        self._log(task_log, last_error, level="warning")
-        return None
+            self._log(task_log, last_error, level="warning")
+            return None

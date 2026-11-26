@@ -183,3 +183,34 @@ func TestAdaptiveTransportProxyTunnel(t *testing.T) {
 		t.Fatal("expected request to go through CONNECT proxy, but proxy was never called!")
 	}
 }
+
+type trackingRoundTripper struct {
+	closed atomic.Int32
+}
+
+func (tr *trackingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+func (tr *trackingRoundTripper) CloseIdleConnections() {
+	tr.closed.Add(1)
+}
+
+func TestReturnClientClosesOverflow(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxIdleConns = 2
+	cfg.MaxIdleConnsPerHost = 2
+	pool := NewClientPool(cfg, NewTLSFingerprintManager(cfg))
+	defer pool.Close()
+
+	// Pool is already full (2/2). Returning 50 overflow clients must close all 50.
+	tracker := &trackingRoundTripper{}
+	for i := 0; i < 50; i++ {
+		pool.ReturnClient(&PooledClient{
+			Client: &http.Client{Transport: tracker},
+		})
+	}
+	if got := tracker.closed.Load(); got != 50 {
+		t.Fatalf("expected 50 overflow clients closed, got %d", got)
+	}
+}

@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import declarative_base, relationship
 from utils.timezone import to_iso
@@ -39,6 +40,12 @@ class Location(Base):
     __table_args__ = (
         UniqueConstraint("il", "ilce", "mahalle", name="uq_location"),
         Index("idx_locations_il_ilce", "il", "ilce"),
+        Index(
+            "idx_locations_coalesce_key",
+            "il",
+            func.coalesce(ilce, ""),
+            func.coalesce(mahalle, ""),
+        ),
     )
 
     def __repr__(self):
@@ -62,12 +69,10 @@ class Listing(Base):
     fiyat = Column(Float)  # Hesaplamalar için sayısal fiyat
     fiyat_text = Column(String(50))  # Orijinal fiyat metni (ör. "1.500.000 TL")
 
-    # Platform ve Kategori
-    platform = Column(
-        String(20), nullable=False, index=True
-    )  # 'emlakjet' / 'hepsiemlak'
-    kategori = Column(String(50), nullable=False, index=True)  # 'konut', 'arsa', etc.
-    ilan_tipi = Column(String(20), nullable=False, index=True)  # 'satilik' / 'kiralik'
+    # Platform ve Kategori (idx_listings_filter bileşik indeksi bu sütunları kapsar)
+    platform = Column(String(20), nullable=False)  # 'emlakjet' / 'hepsiemlak'
+    kategori = Column(String(50), nullable=False)  # 'konut', 'arsa', etc.
+    ilan_tipi = Column(String(20), nullable=False)  # 'satilik' / 'kiralik'
     alt_kategori = Column(String(50))  # 'daire', 'villa', 'tarla', etc.
 
     # Lokasyon (FK)
@@ -84,10 +89,10 @@ class Listing(Base):
     details = Column(JSON)
 
     # Değişiklik tespiti için içerik hash'i (fiyat hariç)
-    content_hash = Column(String(32), index=True)  # MD5 hash
+    content_hash = Column(String(32))  # MD5 hash (yalnızca Python'da karşılaştırılır)
 
     # Meta veriler
-    scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"))
+    scrape_session_id = Column(Integer, ForeignKey("scrape_sessions.id"), index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -211,7 +216,7 @@ class PriceHistory(Base):
     __tablename__ = "price_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False, index=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
 
     old_price = Column(Float, nullable=False)
     new_price = Column(Float, nullable=False)
@@ -287,11 +292,6 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
-
-    __table_args__ = (
-        Index("idx_users_username", "username"),
-        Index("idx_users_email", "email"),
-    )
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}')>"

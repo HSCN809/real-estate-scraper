@@ -1,6 +1,6 @@
 'use client';
 
-import React, { startTransition, useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import React, { startTransition, useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import TurkeyMap from 'turkey-map-react';
@@ -83,8 +83,8 @@ export function CitySelectionModal({
     const [loadingDistricts, setLoadingDistricts] = useState(false);
     const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
     const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-    const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
-    const [cityMousePosition, setCityMousePosition] = useState<{ x: number; y: number } | null>(null);
+    const cityTooltipRef = useRef<HTMLDivElement | null>(null);
+    const districtTooltipRef = useRef<HTMLDivElement | null>(null);
     const [zoomLevel, setZoomLevel] = useState(1);
     const [isExitingDistricts, setIsExitingDistricts] = useState(false);
     const [loadKey, setLoadKey] = useState(0); // Force reload trigger
@@ -131,19 +131,6 @@ export function CitySelectionModal({
         };
         loadDistrictIndex();
     }, [isOpen, districtIndex]);
-
-    // Preload - Hover edilen şehrin verisini arka planda yükle (backend API)
-    const preloadDistrictData = async (provinceName: string) => {
-        if (!districtIndex || geoJsonCache[provinceName]) return;
-        if (!districtIndex[provinceName]) return;
-
-        try {
-            const data = await getDistrictGeoJSON(provinceName);
-            geoJsonCache[provinceName] = data as FeatureCollection<Geometry, DistrictProperties>;
-        } catch {
-            // Sessizce başarısız ol, kullanıcıyı rahatsız etme
-        }
-    };
 
     // Load district GeoJSON when province selected (with cache, from backend API)
     useEffect(() => {
@@ -287,9 +274,9 @@ export function CitySelectionModal({
         return cityComponent;
     };
 
-    // District map projection
-    const { pathGenerator, bounds } = useMemo(() => {
-        if (!districtGeoData?.features.length) return { pathGenerator: null, bounds: null };
+    // District map projection + memoized SVG paths
+    const { districtPaths, bounds } = useMemo(() => {
+        if (!districtGeoData?.features.length) return { districtPaths: [], bounds: null };
         const width = 491, height = 351, padding = 58;
         let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
 
@@ -304,7 +291,12 @@ export function CitySelectionModal({
 
         const scale = Math.min((width - padding * 2) / (maxLon - minLon), (height - padding * 2) / (maxLat - minLat)) * 58.5;
         const projection = geoMercator().center([(minLon + maxLon) / 2, (minLat + maxLat) / 2]).scale(scale).translate([width / 2, height / 2]);
-        return { pathGenerator: geoPath().projection(projection), bounds: { width, height } };
+        const generator = geoPath().projection(projection);
+        const paths = districtGeoData.features.map((feature, idx) => ({
+            name: feature.properties.feature_name || `d-${idx}`,
+            d: generator(feature as Feature<Geometry>) || '',
+        }));
+        return { districtPaths: paths, bounds: { width, height } };
     }, [districtGeoData]);
 
     const districtList = useMemo(() => {
@@ -313,7 +305,14 @@ export function CitySelectionModal({
     }, [districtGeoData]);
 
     const totalDistrictsSelected = Object.values(tempSelectedDistricts).reduce((sum, d) => sum + d.length, 0);
-    const currentProvinceDistricts = activeProvince ? (tempSelectedDistricts[activeProvince] || []) : [];
+    const currentProvinceDistricts = useMemo(
+        () => (activeProvince ? (tempSelectedDistricts[activeProvince] || []) : []),
+        [activeProvince, tempSelectedDistricts]
+    );
+    const currentProvinceDistrictSet = useMemo(
+        () => new Set(currentProvinceDistricts),
+        [currentProvinceDistricts]
+    );
 
     if (!mounted) return null;
 
@@ -375,11 +374,16 @@ export function CitySelectionModal({
                                             transition={{ duration: 0.4 }}
                                             className="absolute inset-0 flex items-center justify-center p-4"
                                             onMouseMove={(e) => {
-                                                setCityMousePosition({ x: e.clientX, y: e.clientY });
+                                                if (cityTooltipRef.current) {
+                                                    cityTooltipRef.current.style.transform = `translate3d(${e.clientX + 10}px, ${e.clientY + 10}px, 0)`;
+                                                    cityTooltipRef.current.style.opacity = '1';
+                                                }
                                             }}
                                             onMouseLeave={() => {
                                                 setHoveredCity(null);
-                                                setCityMousePosition(null);
+                                                if (cityTooltipRef.current) {
+                                                    cityTooltipRef.current.style.opacity = '0';
+                                                }
                                             }}
                                         >
                                              <div className="w-full max-w-4xl cursor-pointer">
@@ -391,27 +395,21 @@ export function CitySelectionModal({
                                                     onHover={(cityData: { name: string }) => {
                                                         const turkishName = CITY_NAMES[cityData.name] || cityData.name;
                                                         setHoveredCity(turkishName);
-                                                        // Arka planda ilçe verisini yükle
-                                                        preloadDistrictData(turkishName);
                                                     }}
                                                     cityWrapper={cityWrapper}
                                                 />
                                             </div>
 
                                             {/* City Tooltip */}
-                                            {hoveredCity && cityMousePosition && (
-                                                <div
-                                                    className="fixed pointer-events-none z-50 px-2 py-1 rounded bg-slate-900/95 border border-sky-500/50 shadow-lg"
-                                                    style={{
-                                                        left: `${cityMousePosition.x + 10}px`,
-                                                        top: `${cityMousePosition.y + 10}px`
-                                                    }}
-                                                >
-                                                    <span className="text-xs text-sky-300 font-semibold whitespace-nowrap">
-                                                        {hoveredCity}
-                                                    </span>
-                                                </div>
-                                            )}
+                                            <div
+                                                ref={cityTooltipRef}
+                                                className="fixed top-0 left-0 pointer-events-none z-50 px-2 py-1 rounded bg-slate-900/95 border border-sky-500/50 shadow-lg transition-opacity duration-75"
+                                                style={{ opacity: hoveredCity ? 1 : 0, willChange: 'transform' }}
+                                            >
+                                                <span className="text-xs text-sky-300 font-semibold whitespace-nowrap">
+                                                    {hoveredCity}
+                                                </span>
+                                            </div>
                                         </motion.div>
                                     ) : (
                                         // İLÇE HARITASI
@@ -500,36 +498,37 @@ export function CitySelectionModal({
                                                             ))}
                                                         </div>
                                                     </motion.div>
-                                                ) : districtGeoData && pathGenerator && bounds ? (
+                                                ) : districtPaths.length > 0 && bounds ? (
                                                     <div className="relative w-full h-full flex items-center justify-center">
                                                         <svg
                                                             viewBox={`0 0 ${bounds.width} ${bounds.height}`}
                                                             className="w-full h-full max-h-[60vh]"
                                                             preserveAspectRatio="xMidYMid meet"
                                                             onMouseMove={(e) => {
-                                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                                setMousePosition({
-                                                                    x: e.clientX - rect.left,
-                                                                    y: e.clientY - rect.top
-                                                                });
+                                                                if (districtTooltipRef.current) {
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    districtTooltipRef.current.style.transform = `translate3d(${e.clientX - rect.left + 10}px, ${e.clientY - rect.top + 10}px, 0)`;
+                                                                    districtTooltipRef.current.style.opacity = '1';
+                                                                }
                                                             }}
                                                             onMouseLeave={() => {
                                                                 setHoveredDistrict(null);
-                                                                setMousePosition(null);
+                                                                if (districtTooltipRef.current) {
+                                                                    districtTooltipRef.current.style.opacity = '0';
+                                                                }
                                                             }}
                                                         >
                                                             <g transform={`scale(${zoomLevel})`} style={{ transformOrigin: 'center' }}>
-                                                                {districtGeoData.features.map((feature, idx) => {
-                                                                    const name = feature.properties.feature_name || `d-${idx}`;
-                                                                    const isSelected = currentProvinceDistricts.includes(name);
+                                                                {districtPaths.map(({ name, d }, idx) => {
+                                                                    const isSelected = currentProvinceDistrictSet.has(name);
                                                                     const isHovered = hoveredDistrict === name;
-                                                                    const totalFeatures = districtGeoData.features.length;
+                                                                    const totalFeatures = districtPaths.length;
                                                                     // Çıkışta ters sırada kaybolsun (sondan başa)
                                                                     const exitDelay = (totalFeatures - idx - 1) * 0.015;
                                                                     return (
                                                                         <motion.path
                                                                             key={name}
-                                                                            d={pathGenerator(feature as Feature<Geometry>) || ''}
+                                                                            d={d}
                                                                             initial={{ opacity: 0, scale: 0.8 }}
                                                                             animate={isExitingDistricts
                                                                                 ? { opacity: 0, scale: 0.5, y: -20 }
@@ -552,19 +551,15 @@ export function CitySelectionModal({
                                                         </svg>
 
                                                         {/* Tooltip - İmleç bitişik */}
-                                                        {hoveredDistrict && mousePosition && (
-                                                            <div
-                                                                className="absolute pointer-events-none z-50 px-2 py-1 rounded bg-slate-900/95 border border-sky-500/50 shadow-lg"
-                                                                style={{
-                                                                    left: `${mousePosition.x + 10}px`,
-                                                                    top: `${mousePosition.y + 10}px`
-                                                                }}
-                                                            >
-                                                                <span className="text-xs text-sky-300 font-semibold whitespace-nowrap">
-                                                                    {hoveredDistrict}
-                                                                </span>
-                                                            </div>
-                                                        )}
+                                                        <div
+                                                            ref={districtTooltipRef}
+                                                            className="absolute top-0 left-0 pointer-events-none z-50 px-2 py-1 rounded bg-slate-900/95 border border-sky-500/50 shadow-lg transition-opacity duration-75"
+                                                            style={{ opacity: hoveredDistrict ? 1 : 0, willChange: 'transform' }}
+                                                        >
+                                                            <span className="text-xs text-sky-300 font-semibold whitespace-nowrap">
+                                                                {hoveredDistrict}
+                                                            </span>
+                                                        </div>
 
                                                         {/* Zoom Controls */}
                                                         <div className="absolute top-4 right-4 flex flex-row gap-2 bg-slate-800/90 rounded-lg p-2 border border-slate-600">

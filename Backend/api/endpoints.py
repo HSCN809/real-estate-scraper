@@ -1,3 +1,7 @@
+from collections import OrderedDict
+from dataclasses import dataclass
+import gzip
+import hashlib
 import io
 import json
 import logging
@@ -16,7 +20,7 @@ from core.task_status import get_task_status_store, is_final_task_status
 from database import crud, results
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -33,9 +37,18 @@ from api.schemas import (
 
 # İlçe verileri dizini
 DISTRICTS_DIR = Path(__file__).parent.parent / "data" / "districts"
+_DISTRICTS_CACHE_MAX_ENTRIES = 16
 
-# İlçe GeoJSON verileri için bellek içi önbellek
-_districts_cache: dict[str, Any] = {}
+
+@dataclass(frozen=True, slots=True)
+class _DistrictGeoJSONEntry:
+    raw_bytes: bytes
+    gzip_bytes: bytes
+    etag: str
+
+
+# İlçe GeoJSON verileri için sınırlı LRU byte önbelleği (dict/json.dumps + event-loop gzip yok)
+_districts_cache: OrderedDict[str, _DistrictGeoJSONEntry] = OrderedDict()
 _districts_index: dict[str, Any] | None = None
 _districts_lock = ThreadLock()
 
@@ -795,11 +808,12 @@ def _load_districts_index() -> dict[str, Any]:
     return _districts_index
 
 
-def _load_district_geojson(province_name: str) -> dict[str, Any]:
-    """Il GeoJSON verisini yukle ve onbellege al."""
-    # Once onbellekte kontrol et
-    if province_name in _districts_cache:
-        return _districts_cache[province_name]
+def _load_district_geojson(province_name: str) -> _DistrictGeoJSONEntry:
+    """Il GeoJSON ham/sikistirilmis byte verisini yukle ve LRU onbellege al."""
+    cached = _districts_cache.get(province_name)
+    if cached is not None:
+        _districts_cache.move_to_end(province_name)
+        return cached
 
     # Index'ten dosya adını al
     index = _load_districts_index()
@@ -822,13 +836,18 @@ def _load_district_geojson(province_name: str) -> dict[str, Any]:
             status_code=404, detail=f"GeoJSON file not found: {filename}"
         )
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        geojson_data = json.load(f)
+    raw_bytes = filepath.read_bytes()
+    gzip_bytes = gzip.compress(raw_bytes, compresslevel=6)
+    etag = f'"{hashlib.sha256(raw_bytes).hexdigest()[:16]}"'
+    entry = _DistrictGeoJSONEntry(
+        raw_bytes=raw_bytes, gzip_bytes=gzip_bytes, etag=etag
+    )
 
-    # Onbellege al
-    _districts_cache[province_name] = geojson_data
+    _districts_cache[province_name] = entry
+    while len(_districts_cache) > _DISTRICTS_CACHE_MAX_ENTRIES:
+        _districts_cache.popitem(last=False)
 
-    return geojson_data
+    return entry
 
 
 @router.get("/districts/index")
@@ -840,12 +859,31 @@ def get_districts_index(response: Response):
 
 
 @router.get("/districts/{province_name}")
-def get_district_geojson(province_name: str):
+def get_district_geojson(province_name: str, request: Request):
     """Belirli bir ilin ilçe GeoJSON verisini getir"""
     with _districts_lock:
-        geojson = _load_district_geojson(province_name)
-    return JSONResponse(
-        geojson, headers={"Cache-Control": "public, max-age=86400"}
+        entry = _load_district_geojson(province_name)
+
+    headers = {
+        "Cache-Control": "public, max-age=86400",
+        "ETag": entry.etag,
+        "Vary": "Accept-Encoding",
+    }
+    if request.headers.get("if-none-match") == entry.etag:
+        return Response(status_code=304, headers=headers)
+
+    if "gzip" in request.headers.get("accept-encoding", "").lower():
+        headers["Content-Encoding"] = "gzip"
+        return Response(
+            content=entry.gzip_bytes,
+            media_type="application/json",
+            headers=headers,
+        )
+
+    return Response(
+        content=entry.raw_bytes,
+        media_type="application/json",
+        headers=headers,
     )
 
 
@@ -873,10 +911,10 @@ def get_district_info(province_name: str, response: Response):
 @router.post("/districts/cache/clear")
 def clear_districts_cache():
     """Bellek ici ilce onbelleğini temizle."""
-    global _districts_cache, _districts_index
+    global _districts_index
     with _districts_lock:
         cache_size = len(_districts_cache)
-        _districts_cache = {}
+        _districts_cache.clear()
         _districts_index = None
     return {
         "status": "success",
