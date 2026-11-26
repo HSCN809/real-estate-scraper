@@ -151,33 +151,49 @@ export default function ResultsMapInner({
 
     // Şehir seçildiğinde o şehrin tüm ilçe verilerini aggregated olarak yükle
     useEffect(() => {
-        if (selectedCityName) {
-            startTransition(() => {
-                setStatsLoading(true);
-                setCityStats(null);
+        if (!selectedCityName) return;
+
+        const controller = new AbortController();
+        startTransition(() => {
+            setStatsLoading(true);
+            setCityStats(null);
+        });
+
+        const cityNameNormalized = normalizeTurkish(selectedCityName);
+        const params = new URLSearchParams();
+        if (platformFilter !== 'all') params.set('platform', platformFilter);
+        if (categoryFilter !== 'all') params.set('category', categoryFilter);
+        if (listingTypeFilter !== 'all') params.set('listing_type', listingTypeFilter);
+        if (subtypeFilter !== 'all') params.set('subtype', subtypeFilter);
+        const query = params.toString();
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+        fetch(`${apiBase}/analytics/city/${encodeURIComponent(cityNameNormalized)}${query ? `?${query}` : ''}`, {
+            credentials: 'include',
+            signal: controller.signal,
+        })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (!controller.signal.aborted) {
+                    setCityStats(data);
+                }
+            })
+            .catch(err => {
+                if (err instanceof DOMException && err.name === 'AbortError') return;
+                console.error('City stats yüklenemedi:', err);
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setStatsLoading(false);
+                }
             });
 
-            const cityNameNormalized = normalizeTurkish(selectedCityName);
-            const params = new URLSearchParams();
-            if (platformFilter !== 'all') params.set('platform', platformFilter);
-            if (categoryFilter !== 'all') params.set('category', categoryFilter);
-            if (listingTypeFilter !== 'all') params.set('listing_type', listingTypeFilter);
-            if (subtypeFilter !== 'all') params.set('subtype', subtypeFilter);
-            const query = params.toString();
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-            fetch(`${apiBase}/analytics/city/${encodeURIComponent(cityNameNormalized)}${query ? `?${query}` : ''}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.stats) {
-                        setCityStats(data);
-                    } else {
-                        setCityStats(data);
-                    }
-                })
-                .catch(err => console.error('City stats yüklenemedi:', err))
-                .finally(() => setStatsLoading(false));
-        }
+        return () => controller.abort();
     }, [selectedCityName, platformFilter, categoryFilter, listingTypeFilter, subtypeFilter]);
 
     // Türkçe karakterleri normalize et
