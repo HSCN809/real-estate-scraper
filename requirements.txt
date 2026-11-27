@@ -19,7 +19,7 @@ undetected-chromedriver>=3.5.0  # Cloudflare, Turnstile bypass
 
 # Database
 sqlalchemy>=2.0.0
-aiosqlite>=0.19.0
+aiosqlite>=0.22.1
 
 # Security & Utilities
 python-dotenv>=1.2.2,<2
