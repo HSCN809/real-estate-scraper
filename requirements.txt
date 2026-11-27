@@ -24,7 +24,7 @@ aiosqlite>=0.19.0
 # Security & Utilities
 python-dotenv>=1.2.2,<2
 cryptography>=50.0.0,<51
-certifi>=2024.2.2
+certifi>=2026.11.20
 packaging==23.2
 setuptools>=83.0.0,<84
 
