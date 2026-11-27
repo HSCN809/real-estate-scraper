@@ -12,12 +12,18 @@ anyio==4.15.1
     # via
     #   starlette
     #   watchfiles
-bcrypt==4.0.1
-    # via -r requirements-api.txt
+argon2-cffi==25.1.0
+    # via pwdlib
+argon2-cffi-bindings==26.2.0
+    # via argon2-cffi
+bcrypt==5.0.0
+    # via pwdlib
 billiard==4.3.1
     # via celery
 celery==5.6.3
     # via -r requirements-api.txt
+cffi==2.1.1
+    # via argon2-cffi-bindings
 click==8.5.0
     # via
     #   celery
@@ -61,12 +67,14 @@ packaging==26.3
     # via kombu
 pandas==2.3.3
     # via -r requirements-api.txt
-passlib==1.7.4
-    # via -r requirements-api.txt
 prompt-toolkit==3.0.53
     # via click-repl
 psycopg2-binary==2.9.13
     # via -r requirements-api.txt
+pwdlib==0.4.2
+    # via -r requirements-api.txt
+pycparser==3.12
+    # via cffi
 pydantic==2.14.1
     # via fastapi
 pydantic-core==2.50.1

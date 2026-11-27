@@ -1,6 +1,6 @@
 # Celery Worker Dockerfile - Selenium + Chrome for scraping tasks
 # syntax=docker/dockerfile:1.4
-FROM python:3.11-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 ARG APP_UID=10001
 ARG APP_GID=10001
@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Chrome for Testing + ChromeDriver kurulumu (uyumlu sürümler)
 # https://googlechromelabs.github.io/chrome-for-testing/
-ARG CHROME_VERSION=145.0.7632.46
+ARG CHROME_VERSION=158.0.8127.88
 RUN wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
     && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
     && unzip /tmp/chrome.zip -d /opt/ \

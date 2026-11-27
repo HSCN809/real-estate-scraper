@@ -2,6 +2,9 @@
   "name": "real-estate-scraper",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,8 +15,6 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
-    "@types/d3-geo": "^3.1.0",
-    "@types/three": "^0.182.0",
     "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",
@@ -32,11 +33,13 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/d3-geo": "^3.1.0",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.0.10",
+    "@types/three": "^0.182.0",
+    "eslint": "^10",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"

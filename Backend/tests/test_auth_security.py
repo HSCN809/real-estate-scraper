@@ -95,3 +95,19 @@ def test_get_current_user_caches_and_invalidates_on_password_change():
         assert exc.value.status_code == 401
 
     engine.dispose()
+
+
+def test_password_hash_argon2_and_legacy_bcrypt_verification():
+    from pwdlib.hashers.bcrypt import BcryptHasher
+
+    from auth.security import get_password_hash, verify_password
+
+    argon_hash = get_password_hash("StrongPass123!")
+    assert argon_hash.startswith("$argon2id$")
+    assert verify_password("StrongPass123!", argon_hash) is True
+    assert verify_password("WrongPass", argon_hash) is False
+
+    legacy_hash = BcryptHasher().hash("LegacyPass123!")
+    assert legacy_hash.startswith("$2b$")
+    assert verify_password("LegacyPass123!", legacy_hash) is True
+    assert verify_password("WrongPass", legacy_hash) is False

@@ -7,10 +7,12 @@ from typing import Any
 
 import jwt
 from jwt import InvalidTokenError
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
 
 # Şifre hashleme konfigürasyonu
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = PasswordHash((Argon2Hasher(), BcryptHasher()))
 
 _INSECURE_SECRETS = {
     "",
@@ -42,7 +44,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """bcrypt ile şifre hash'i oluştur"""
+    """Argon2id ile şifre hash'i oluştur"""
     return pwd_context.hash(password)
 
 

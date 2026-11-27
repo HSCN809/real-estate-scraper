@@ -186,7 +186,7 @@ services:
 
   # Flower - Celery Monitoring UI
   real-estate-flower:
-    image: mher/flower:2.0
+    image: mher/flower:2.2.0
     container_name: real-estate-flower
     ports:
       - "5555:5555"

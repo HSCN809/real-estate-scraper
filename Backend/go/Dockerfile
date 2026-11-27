@@ -15,7 +15,7 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o invisible-proxy .
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -a -installsuffix cgo -o invisible-proxy .
 
 # Final stage
 FROM alpine:3.24
