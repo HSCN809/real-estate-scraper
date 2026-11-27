@@ -33,7 +33,7 @@ setuptools>=83.0.0,<84
 scrapling>=0.4.1,<0.5
 
 # Scrapling core dependencies (already included in scrapling but listed for clarity)
-cssselect>=1.4.0
+cssselect>=1.6.0
 orjson>=3.11.7
 tld>=0.13.1
 w3lib>=2.4.0
