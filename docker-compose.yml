@@ -104,16 +104,16 @@ services:
     networks:
       - real-estate-network
 
-  # Redis - Message Broker for Celery
+  # Valkey (Redis-compatible) - Message Broker for Celery
   real-estate-redis:
-    image: redis:7.4.11-alpine
+    image: valkey/valkey:8.1-alpine
     container_name: real-estate-redis
     ports:
       - "6379:6379"
     volumes:
       - real-estate-redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

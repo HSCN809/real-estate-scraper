@@ -55,7 +55,7 @@ pycparser>=2.21
 pyOpenSSL>=26.0.0,<27
 
 # PostgreSQL
-psycopg2-binary>=2.9.0
+psycopg[binary,pool]>=3.2.0,<4
 
 # Authentication
 pwdlib[argon2,bcrypt]>=0.3.0

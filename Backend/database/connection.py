@@ -5,15 +5,22 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+def normalize_database_url(url: str) -> str:
+    """Normalize PostgreSQL URLs to use the psycopg v3 SQLAlchemy dialect."""
+    if url.startswith("postgresql+psycopg2://"):
+        return "postgresql+psycopg://" + url[len("postgresql+psycopg2://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    return url
+
+
 # Veritabanı URL - PostgreSQL veya SQLite
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
-    # SQLAlchemy 2 postgresql:// varsayılanı psycopg v3. Paket psycopg2.
-    if DATABASE_URL.startswith("postgresql://"):
-        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgresql://") :]
-    elif DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgres://") :]
+    DATABASE_URL = normalize_database_url(DATABASE_URL)
     # PostgreSQL (Docker)
     engine = create_engine(
         DATABASE_URL,
