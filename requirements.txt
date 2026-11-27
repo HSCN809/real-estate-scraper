@@ -2,7 +2,7 @@
 pandas>=2.2.3,<3
 openpyxl>=3.1.2
 lxml>=6.0.2
-beautifulsoup4==4.12.2
+beautifulsoup4==4.15.0
 
 # HTTP & Networking
 requests>=2.32.4,<3
@@ -43,8 +43,8 @@ protego>=0.4.0  # scrapling robotstxt import'u için gerekli (scrapling metadata
 # Scrapling fetchers (optional but needed for HTTP requests)
 click>=8.3.0
 curl_cffi>=0.14.0
-playwright==1.56.0
-patchright==1.56.0
+playwright==1.65.2
+patchright==1.64.4
 browserforge>=1.2.4
 msgspec>=0.20.0
 anyio>=4.12.1
