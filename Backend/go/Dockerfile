@@ -20,12 +20,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -a -installsuffix cgo -o inv
 # Final stage
 FROM alpine:3.24
 
-RUN apk --no-cache add ca-certificates tzdata
+ARG APP_UID=10001
+ARG APP_GID=10001
 
-WORKDIR /root/
+RUN apk --no-cache add ca-certificates tzdata \
+    && addgroup -S -g ${APP_GID} appuser \
+    && adduser -S -u ${APP_UID} -G appuser appuser \
+    && mkdir -p /app/logs \
+    && chown -R appuser:appuser /app
+
+WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/invisible-proxy .
+COPY --from=builder --chown=appuser:appuser /app/invisible-proxy /app/invisible-proxy
+
+USER appuser
 
 # Expose port
 EXPOSE 8080

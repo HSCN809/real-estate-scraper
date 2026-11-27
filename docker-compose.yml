@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Invisible Go Proxy - Cloudflare Bypass
   invisible-proxy:
@@ -52,17 +58,23 @@ services:
     networks:
       - real-estate-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+          pids: 128
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s
       timeout: 15s
       retries: 5
       start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default-logging
 
   # PostgreSQL Database
   real-estate-db:
@@ -82,6 +94,13 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 256
+    logging: *default-logging
     networks:
       - real-estate-network
 
@@ -99,6 +118,13 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+          pids: 128
+    logging: *default-logging
     networks:
       - real-estate-network
 
@@ -141,6 +167,17 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 256
+    logging: *default-logging
     networks:
       - real-estate-network
 
@@ -181,6 +218,13 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+          pids: 512
+    logging: *default-logging
     networks:
       - real-estate-network
 
@@ -205,11 +249,21 @@ services:
       real-estate-worker:
         condition: service_healthy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+          pids: 128
+    logging: *default-logging
     networks:
       - real-estate-network
 
   # Frontend - Next.js (Development Mode with Hot Reload)
   real-estate-frontend:
+    profiles: ["dev"]
     image: node:22-alpine
     container_name: real-estate-frontend
     working_dir: /app
@@ -233,6 +287,13 @@ services:
       real-estate-api:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+          pids: 256
+    logging: *default-logging
     networks:
       - real-estate-network
 
@@ -252,6 +313,17 @@ services:
       real-estate-api:
         condition: service_healthy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 128
+    logging: *default-logging
     networks:
       - real-estate-network
 
