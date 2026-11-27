@@ -2,7 +2,7 @@
 
 import CountUp from '@/components/ui/CountUp';
 import { ResultsBackground } from '@/components/ui/ResultsBackground';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   Search, Database, TrendingUp, Clock, Zap,
   Activity, BarChart3, Rocket, Eye

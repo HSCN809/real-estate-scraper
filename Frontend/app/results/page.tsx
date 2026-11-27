@@ -4,7 +4,7 @@ import { ArtCard } from '@/components/ui/ArtCard';
 import { ResultsMap } from '@/components/ui/ResultsMap';
 import { ResultsCharts } from '@/components/ui/ResultsCharts';
 import CountUp from '@/components/ui/CountUp';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { ResultsBackground } from '@/components/ui/ResultsBackground';
 import {
     FileText,

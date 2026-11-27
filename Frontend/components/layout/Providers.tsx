@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
+import { MotionConfig } from 'motion/react';
 import { ReactNode } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ScrapingProvider } from '@/contexts/ScrapingContext';
@@ -14,15 +15,17 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
     return (
         <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
-            <QueryProvider>
-                <ToastProvider>
-                    <AuthProvider>
-                        <ScrapingProvider>
-                            {children}
-                        </ScrapingProvider>
-                    </AuthProvider>
-                </ToastProvider>
-            </QueryProvider>
+            <MotionConfig reducedMotion="user">
+                <QueryProvider>
+                    <ToastProvider>
+                        <AuthProvider>
+                            <ScrapingProvider>
+                                {children}
+                            </ScrapingProvider>
+                        </AuthProvider>
+                    </ToastProvider>
+                </QueryProvider>
+            </MotionConfig>
         </NextThemesProvider>
     );
 }

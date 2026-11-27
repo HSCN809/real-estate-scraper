@@ -2,7 +2,7 @@
 
 import React, { startTransition, useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import TurkeyMap from 'turkey-map-react';
 import { geoMercator, geoPath } from 'd3-geo';
 import { X, MapPin, Check, Trash2 } from 'lucide-react';

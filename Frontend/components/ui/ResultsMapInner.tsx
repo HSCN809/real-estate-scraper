@@ -6,7 +6,7 @@ import type { ResultsOverview } from '@/types';
 import { geoMercator, geoPath } from 'd3-geo';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 // GeoJSON adresi
 const GEOJSON_URL = 'https://raw.githubusercontent.com/alpers/Turkey-Maps-GeoJSON/master/tr-cities.json';

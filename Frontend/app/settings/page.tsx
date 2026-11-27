@@ -1,7 +1,7 @@
 'use client';
 
 import { ArtCard } from '@/components/ui/ArtCard';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Settings, Server, Database, Save, RotateCcw, Volume2 } from 'lucide-react';
 import { useState, useEffect, useId } from 'react';
 import { healthCheck } from '@/lib/api';

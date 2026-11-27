@@ -1,11 +1,30 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Home, Database, Map, FileSpreadsheet, Zap } from 'lucide-react';
 
 const Hyperspeed = dynamic(() => import('@/components/ui/Hyperspeed'), { ssr: false });
+const animationQuery = '(min-width: 48rem) and (pointer: fine) and (prefers-reduced-motion: no-preference)';
+const staticBackground = {
+    background: 'radial-gradient(ellipse at 20% 25%, rgba(14,165,233,0.22), transparent 55%), radial-gradient(ellipse at 80% 75%, rgba(16,185,129,0.2), transparent 55%), #000000',
+};
+
+function subscribe(onChange: () => void) {
+    const media = window.matchMedia(animationQuery);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+}
+
+function getSnapshot() {
+    return window.matchMedia(animationQuery).matches;
+}
+
+function getServerSnapshot() {
+    return false;
+}
 
 const features = [
     {
@@ -31,49 +50,66 @@ const features = [
 ];
 
 export default function LandingPage() {
+    const canAnimate = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    const [showWebGL, setShowWebGL] = useState(false);
+
+    useEffect(() => {
+        if (!canAnimate) {
+            return;
+        }
+        if (typeof window.requestIdleCallback === 'function') {
+            const idleId = window.requestIdleCallback(() => setShowWebGL(true), { timeout: 500 });
+            return () => window.cancelIdleCallback(idleId);
+        }
+        const timerId = window.setTimeout(() => setShowWebGL(true), 150);
+        return () => window.clearTimeout(timerId);
+    }, [canAnimate]);
+
     return (
         <div className="relative min-h-screen overflow-hidden bg-black">
             {/* Arka Plan Efekti */}
-            <div className="absolute inset-0 z-0">
-                <Hyperspeed
-                    effectOptions={{
-                        onSpeedUp: () => {},
-                        onSlowDown: () => {},
-                        distortion: 'turbulentDistortion',
-                        length: 400,
-                        roadWidth: 10,
-                        islandWidth: 2,
-                        lanesPerRoad: 3,
-                        fov: 90,
-                        fovSpeedUp: 150,
-                        speedUp: 2,
-                        carLightsFade: 0.4,
-                        totalSideLightSticks: 50,
-                        lightPairsPerRoadWay: 70,
-                        shoulderLinesWidthPercentage: 0.05,
-                        brokenLinesWidthPercentage: 0.1,
-                        brokenLinesLengthPercentage: 0.5,
-                        lightStickWidth: [0.12, 0.5],
-                        lightStickHeight: [1.3, 1.7],
-                        movingAwaySpeed: [60, 80],
-                        movingCloserSpeed: [-120, -160],
-                        carLightsLength: [400 * 0.05, 400 * 0.15],
-                        carLightsRadius: [0.05, 0.14],
-                        carWidthPercentage: [0.3, 0.5],
-                        carShiftX: [-0.2, 0.2],
-                        carFloorSeparation: [0.05, 1],
-                        colors: {
-                            roadColor: 0x080808,
-                            islandColor: 0x0a0a0a,
-                            background: 0x000000,
-                            shoulderLines: 0x131318,
-                            brokenLines: 0x131318,
-                            leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Gök mavisi
-                            rightCars: [0x34d399, 0x10b981, 0x059669], // Zümrüt yeşili
-                            sticks: 0x38bdf8,
-                        }
-                    }}
-                />
+            <div className="absolute inset-0 z-0" style={canAnimate && showWebGL ? undefined : staticBackground}>
+                {canAnimate && showWebGL && (
+                    <Hyperspeed
+                        effectOptions={{
+                            onSpeedUp: () => {},
+                            onSlowDown: () => {},
+                            distortion: 'turbulentDistortion',
+                            length: 400,
+                            roadWidth: 10,
+                            islandWidth: 2,
+                            lanesPerRoad: 3,
+                            fov: 90,
+                            fovSpeedUp: 150,
+                            speedUp: 2,
+                            carLightsFade: 0.4,
+                            totalSideLightSticks: 50,
+                            lightPairsPerRoadWay: 70,
+                            shoulderLinesWidthPercentage: 0.05,
+                            brokenLinesWidthPercentage: 0.1,
+                            brokenLinesLengthPercentage: 0.5,
+                            lightStickWidth: [0.12, 0.5],
+                            lightStickHeight: [1.3, 1.7],
+                            movingAwaySpeed: [60, 80],
+                            movingCloserSpeed: [-120, -160],
+                            carLightsLength: [400 * 0.05, 400 * 0.15],
+                            carLightsRadius: [0.05, 0.14],
+                            carWidthPercentage: [0.3, 0.5],
+                            carShiftX: [-0.2, 0.2],
+                            carFloorSeparation: [0.05, 1],
+                            colors: {
+                                roadColor: 0x080808,
+                                islandColor: 0x0a0a0a,
+                                background: 0x000000,
+                                shoulderLines: 0x131318,
+                                brokenLines: 0x131318,
+                                leftCars: [0x38bdf8, 0x0ea5e9, 0x0284c7],  // Gök mavisi
+                                rightCars: [0x34d399, 0x10b981, 0x059669], // Zümrüt yeşili
+                                sticks: 0x38bdf8,
+                            }
+                        }}
+                    />
+                )}
             </div>
 
             {/* Gradyan Kaplama */}

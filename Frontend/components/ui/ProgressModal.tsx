@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { Loader2, CheckCircle2, Minus, XCircle, Ban, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useScraping } from '@/contexts/ScrapingContext';

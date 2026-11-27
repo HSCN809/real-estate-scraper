@@ -1,11 +1,9 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Sparkles, Zap } from 'lucide-react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-
-const FloatingLines = dynamic(() => import('@/components/ui/FloatingLines'), { ssr: false });
+import { ResultsBackground } from '@/components/ui/ResultsBackground';
 
 const container = {
     hidden: { opacity: 0 },
@@ -46,19 +44,7 @@ const platforms = [
 export default function ScraperPage() {
     return (
         <div className="relative min-h-screen bg-black">
-            {/* Floating Lines Background */}
-            <div className="fixed inset-0 z-0">
-                <FloatingLines
-                    linesGradient={['#38bdf8', '#0ea5e9', '#34d399', '#818cf8']}
-                    enabledWaves={['top', 'middle', 'bottom']}
-                    lineCount={5}
-                    lineDistance={5}
-                    bendRadius={5}
-                    bendStrength={-0.5}
-                    interactive
-                    parallax
-                />
-            </div>
+            <ResultsBackground />
 
             {/* Dark Gradient Overlay */}
             <div className="fixed inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/50 to-black/85 pointer-events-none" />

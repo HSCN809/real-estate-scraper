@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
 
   // Bundle optimization for tree-shaking
   experimental: {
-    optimizePackageImports: ['lucide-react', 'framer-motion'],
+    optimizePackageImports: ['lucide-react', 'motion'],
     // Chunk splitting optimization
     optimizeCss: true,
   },
