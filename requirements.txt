@@ -38,7 +38,7 @@ orjson>=3.11.7
 tld>=0.13.1
 w3lib>=2.4.0
 typing_extensions>=4.0.0
-protego>=0.4.0  # scrapling robotstxt import'u için gerekli (scrapling metadata'sında eksik)
+protego>=0.7.0  # scrapling robotstxt import'u için gerekli (scrapling metadata'sında eksik)
 
 # Scrapling fetchers (optional but needed for HTTP requests)
 click>=8.3.0
