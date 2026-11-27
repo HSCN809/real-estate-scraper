@@ -57,7 +57,7 @@ def should_forward_ui_log(message: str, level: str) -> bool:
     return any(marker in compact for marker in _UI_LOG_MARKERS)
 
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
-from core.config import get_config
+from core.config import get_config  # noqa: E402
 
 
 def resolve_writable_log_file(log_file: str) -> str | None:

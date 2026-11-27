@@ -1,0 +1,138 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    groups:
+      all-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci(actions)"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 3
+    groups:
+      pip-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(python)"
+    labels:
+      - "dependencies"
+      - "python"
+
+  - package-ecosystem: "npm"
+    directory: "/Frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 3
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(npm)"
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  - package-ecosystem: "gomod"
+    directory: "/Backend/go"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 3
+    groups:
+      go-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(go)"
+    labels:
+      - "dependencies"
+      - "go"
+
+  - package-ecosystem: "docker"
+    directory: "/Backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/Backend/go"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/Frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(docker-compose)"
+    labels:
+      - "dependencies"
+      - "docker"

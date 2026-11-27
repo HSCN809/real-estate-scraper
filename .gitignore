@@ -84,6 +84,7 @@ CLAUDE.md
 # ===========================================
 # Test / scan artifacts (do not push)
 # ===========================================
+.benchmarks/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

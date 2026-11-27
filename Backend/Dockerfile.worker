@@ -64,7 +64,7 @@ WORKDIR /app
 # Python bağımlılıkları (cache ile)
 COPY requirements.lock .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.lock
+    pip install --no-cache-dir --require-hashes -r requirements.lock
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN mkdir -p /ms-playwright \

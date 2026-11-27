@@ -21,7 +21,6 @@ from database import crud, results
 from database.connection import get_db
 from database.models import FailedPage, Listing, Location, PriceHistory, ScrapeSession
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool

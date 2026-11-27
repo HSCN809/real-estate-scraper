@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: "requirements-api.lock"
+
+      - name: Create venv and install hashed API dependencies
+        run: |
+          uv venv --python 3.13
+          uv pip install --require-hashes -r requirements-api.lock
+          uv pip install pytest pytest-cov httpx beautifulsoup4 lxml requests ruff mypy bandit pip-audit
+
+      - name: Lint (ruff)
+        run: .venv/bin/ruff check Backend
+
+      - name: Unit & API tests (pytest)
+        env:
+          PYTHONPATH: Backend
+        run: .venv/bin/pytest Backend/tests --ignore=Backend/tests/test_normalize_price_bench.py -q --tb=short --cov=Backend --cov-report=term-missing
+
+      - name: SAST (bandit)
+        run: .venv/bin/bandit -c bandit.yaml -r Backend -ll -q
+
+      - name: Typecheck (mypy - advisory)
+        continue-on-error: true
+        run: .venv/bin/mypy Backend
+
+      - name: Dependency audit (pip-audit - advisory)
+        continue-on-error: true
+        run: .venv/bin/pip-audit -r requirements-api.lock
+
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "Frontend/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run build
+
+      - name: Dependency audit (npm audit)
+        run: npm audit --audit-level=high
+
+  go-proxy:
+    name: Go Proxy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend/go
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: "Backend/go/go.mod"
+          cache-dependency-path: "Backend/go/go.sum"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test -short -race -count=1 -cover ./...
+
+      - name: Build binary
+        run: go build -mod=readonly -o /tmp/invisible-proxy .
+
+      - name: Vulnerability check (govulncheck - advisory)
+        continue-on-error: true
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  compose-validate:
+    name: Docker Compose Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate compose profiles
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose --profile dev config --quiet
+          docker compose --profile prod config --quiet
