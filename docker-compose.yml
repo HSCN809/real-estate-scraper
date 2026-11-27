@@ -106,7 +106,7 @@ services:
 
   # Redis - Message Broker for Celery
   real-estate-redis:
-    image: redis:7.4.11-alpine
+    image: redis:8.12.0-alpine
     container_name: real-estate-redis
     ports:
       - "6379:6379"
