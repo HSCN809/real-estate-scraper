@@ -24,13 +24,13 @@ jobs:
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
-          cache-dependency-glob: "requirements-api.lock"
+          cache-dependency-glob: "requirements.lock"
 
-      - name: Create venv and install hashed API dependencies
+      - name: Create venv and install hashed Python dependencies
         run: |
           uv venv --python 3.13
-          uv pip install --require-hashes -r requirements-api.lock
-          uv pip install pytest pytest-cov httpx beautifulsoup4 lxml requests ruff mypy bandit pip-audit
+          uv pip install --require-hashes -r requirements.lock
+          uv pip install pytest pytest-cov httpx ruff mypy bandit pip-audit
 
       - name: Lint (ruff)
         run: .venv/bin/ruff check Backend
@@ -49,7 +49,7 @@ jobs:
 
       - name: Dependency audit (pip-audit - advisory)
         continue-on-error: true
-        run: .venv/bin/pip-audit -r requirements-api.lock
+        run: .venv/bin/pip-audit -r requirements.lock
 
   frontend:
     name: Frontend (Node 22)
