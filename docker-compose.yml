@@ -190,7 +190,7 @@ services:
     init: true  # Zombie process'leri temizler
     shm_size: '2gb'  # Chrome için shared memory
     security_opt:
-      - seccomp:unconfined
+      - seccomp:./Backend/seccomp-chrome.json
     volumes:
       # Source code mount (hot reload)
       - ./Backend:/app
