@@ -78,7 +78,7 @@ services:
 
   # PostgreSQL Database
   real-estate-db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
     container_name: real-estate-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -106,7 +106,7 @@ services:
 
   # Valkey (Redis-compatible) - Message Broker for Celery
   real-estate-redis:
-    image: valkey/valkey:8.1-alpine
+    image: valkey/valkey:8.1-alpine@sha256:9971099af41c36e887aabdfe22b80c0fe45df949163dfc9cb434febc57cfc3fc
     container_name: real-estate-redis
     ports:
       - "127.0.0.1:6379:6379"
@@ -161,7 +161,7 @@ services:
       invisible-proxy:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -230,7 +230,7 @@ services:
 
   # Flower - Celery Monitoring UI
   real-estate-flower:
-    image: mher/flower:2.2.0
+    image: mher/flower:2.2.0@sha256:c74195a78297f1634fbd7fb6497cf329e39614a262371a058d5d5b13656ca40e
     container_name: real-estate-flower
     ports:
       - "127.0.0.1:5555:5555"
@@ -264,7 +264,7 @@ services:
   # Frontend - Next.js (Development Mode with Hot Reload)
   real-estate-frontend:
     profiles: ["dev"]
-    image: node:22-alpine
+    image: node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
     container_name: real-estate-frontend
     working_dir: /app
     ports:

@@ -14,6 +14,7 @@ from uuid import uuid4
 from anyio import Lock
 from anyio.to_process import run_sync as run_in_process
 from auth.dependencies import get_current_active_admin, get_current_user
+from auth.router import _enforce_rate_limit
 from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
 from core.task_status import get_task_status_store, is_final_task_status
@@ -53,6 +54,8 @@ _districts_lock = ThreadLock()
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("api")
+
+SCRAPE_RATE_LIMIT = (10, 600)  # (başlatma, saniye) kullanıcı başına, iki platform ortak
 
 # Görüntüleme için kategori adı eşlemeleri
 CATEGORY_NAMES = {
@@ -105,6 +108,7 @@ def _enqueue_scrape_task(
     platform: str,
     user_id: int,
 ) -> TaskStatusResponse:
+    _enforce_rate_limit(f"rate:scrape:{user_id}", SCRAPE_RATE_LIMIT)
     store = _require_task_status_store()
     task_id = uuid4().hex
     # Kayıt kuyruktan önce yazılır; aksi halde worker'ın ilk güncellemesi ezilebilir.

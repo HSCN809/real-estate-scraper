@@ -11,14 +11,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from api.endpoints import router as api_router
 from auth.router import router as auth_router
+from core.task_status import get_redis_client
 from database import crud
 
 # Veritabani baslatma
 from database.connection import DATABASE_URL, SessionLocal, engine
 from database.models import Base
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from sqlalchemy import text
 
 # Loglama ayarla
 logging.basicConfig(level=logging.INFO)
@@ -91,3 +93,26 @@ app.include_router(auth_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {"message": "Real Estate Scraper API is running"}
+
+
+@app.get("/health")
+def health(response: Response):
+    """Docker healthcheck: DB ve Redis erişilebilir mi (hata detayı dışarı verilmez)."""
+    checks = {}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:
+        logger.warning("Health check: database unavailable: %s", exc)
+        checks["database"] = "error"
+    try:
+        get_redis_client().ping()
+        checks["redis"] = "ok"
+    except Exception as exc:
+        logger.warning("Health check: redis unavailable: %s", exc)
+        checks["redis"] = "error"
+    healthy = all(value == "ok" for value in checks.values())
+    if not healthy:
+        response.status_code = 503
+    return {"status": "ok" if healthy else "error", **checks}

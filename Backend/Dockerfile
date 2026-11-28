@@ -1,6 +1,6 @@
 # Backend Dockerfile - FastAPI only (scraping runs in the worker)
 # syntax=docker/dockerfile:1.4
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:168d3a5d10f2152f8e8d77b6843ac82c22a846cfefeef7afdf9aa630404e82a7
 
 ARG APP_UID=10001
 ARG APP_GID=10001

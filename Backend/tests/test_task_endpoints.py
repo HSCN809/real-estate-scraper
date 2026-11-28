@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import endpoints
+from auth import router as auth_router
 from auth.dependencies import get_current_user
 from core.task_status import TaskStatusStore
 
@@ -41,7 +42,19 @@ def create_test_client(monkeypatch, authenticated=True, user=USER):
         app.dependency_overrides[get_current_user] = lambda: user
     store = TaskStatusStore(redis_client=FakeRedis())
     monkeypatch.setattr(endpoints, "get_task_status_store", lambda: store)
+    monkeypatch.setattr(auth_router, "get_redis_client", lambda: store.redis_client)
     return TestClient(app), store
+
+
+def test_scrape_start_is_rate_limited_per_user(monkeypatch):
+    client, _store = create_test_client(monkeypatch)
+    monkeypatch.setattr(endpoints, "scrape_emlakjet_task", DummyTaskCallable())
+    monkeypatch.setattr(endpoints, "SCRAPE_RATE_LIMIT", (2, 600))
+    body = {"listing_type": "satilik", "category": "konut", "scraping_method": "selenium"}
+
+    statuses = [client.post("/api/v1/scrape/emlakjet", json=body).status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 429]
 
 
 def test_scrape_requires_auth(monkeypatch):

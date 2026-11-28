@@ -1,6 +1,6 @@
 module invisible-proxy
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/refraction-networking/utls v1.8.2
