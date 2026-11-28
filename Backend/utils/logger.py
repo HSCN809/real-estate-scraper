@@ -231,13 +231,25 @@ def setup_logger(
 
     # Yapılandırılmış JSON log dosyası (normal loglardan ayrı)
     if log_to_file:
-        json_log_path = resolved_log_file.replace(".log", "_structured.jsonl")
-        json_handler = RotatingFileHandler(
-            json_log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        json_log_path = resolve_writable_log_file(
+            resolved_log_file.replace(".log", "_structured.jsonl")
         )
-        json_handler.setLevel(logging.INFO)
-        json_handler.setFormatter(StructuredFormatter())
-        logger.addHandler(json_handler)
+        if json_log_path:
+            try:
+                json_handler = RotatingFileHandler(
+                    json_log_path,
+                    maxBytes=10 * 1024 * 1024,
+                    backupCount=5,
+                    encoding="utf-8",
+                )
+                json_handler.setLevel(logging.INFO)
+                json_handler.setFormatter(StructuredFormatter())
+                logger.addHandler(json_handler)
+            except OSError as exc:
+                print(
+                    f"Structured JSON log output disabled: {exc}",
+                    file=sys.stderr,
+                )
 
     return logger
 

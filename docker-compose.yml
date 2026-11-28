@@ -200,7 +200,7 @@ services:
       - CHROME_HEADLESS=${CHROME_HEADLESS}
       - LOG_LEVEL=${LOG_LEVEL}
       - GO_PROXY_URL=http://invisible-proxy:8080
-      - USE_GO_PROXY=true
+      - USE_GO_PROXY=${USE_GO_PROXY:-false}
       - PROXY_API_KEY=${PROXY_API_KEY:-}
       - LOG_FILE=/tmp/scraper-logs/scraper.log
       - LOG_FALLBACK_DIR=/tmp/scraper-logs
