@@ -28,7 +28,15 @@ type ProxyHandler struct {
 
 	// Allowed origins for CORS
 	allowedOrigins []string
+
+	// Bounds concurrent upstream requests, and with them pooled client creation.
+	inflight chan struct{}
 }
+
+const (
+	maxProxyRequestBytes = 10 << 20
+	maxUpstreamBodyBytes = 50 << 20
+)
 
 // RateLimiter implements token bucket rate limiting
 type RateLimiter struct {
@@ -117,6 +125,7 @@ func NewProxyHandler(cfg *Config, pool *ClientPool, tlsManager *TLSFingerprintMa
 		clientPool:  pool,
 		tlsManager:  tlsManager,
 		rateLimiter: NewRateLimiter(cfg.RateLimit, cfg.RateLimitBurst),
+		inflight:    make(chan struct{}, max(cfg.MaxIdleConns, 1)),
 		allowedOrigins: []string{
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
@@ -197,6 +206,21 @@ func (ph *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	select {
+	case ph.inflight <- struct{}{}:
+		defer func() { <-ph.inflight }()
+	default:
+		ph.sendErrorResponse(w, "Proxy busy. Please try again later.", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Retries must end before WriteTimeout, or the server cuts the response mid-write.
+	if budget := ph.config.WriteTimeout - time.Second; budget > 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), budget)
+		defer cancel()
+		r = r.WithContext(ctx)
+	}
+
 	// Route based on method
 	switch r.Method {
 	case "GET":
@@ -239,25 +263,12 @@ func (ph *ProxyHandler) authenticateRequest(r *http.Request) bool {
 	return false
 }
 
-// getClientIP extracts the client IP from the request
+// getClientIP returns the direct peer address. No reverse proxy sits in front
+// of this service, so X-Forwarded-For / X-Real-IP are client-controlled and
+// trusting them would let callers bypass rate limiting.
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header
-	xff := r.Header.Get("X-Forwarded-For")
-	if xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-
-	// Check X-Real-IP header
-	xri := r.Header.Get("X-Real-IP")
-	if xri != "" {
-		return xri
-	}
-
-	// Fall back to RemoteAddr
-	parts := strings.Split(r.RemoteAddr, ":")
-	if len(parts) > 1 {
-		return strings.Join(parts[:len(parts)-1], ":")
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
 }
@@ -337,6 +348,7 @@ func (ph *ProxyHandler) handleGetProxy(w http.ResponseWriter, r *http.Request) {
 // handlePostProxy handles POST requests with JSON body
 func (ph *ProxyHandler) handlePostProxy(w http.ResponseWriter, r *http.Request) {
 	var req ProxyRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxProxyRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
 		return
@@ -421,8 +433,11 @@ func (ph *ProxyHandler) executeProxyRequest(w http.ResponseWriter, ctx context.C
 		}
 
 		// Read response body
-		body, err := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxUpstreamBodyBytes+1))
 		resp.Body.Close()
+		if err == nil && len(body) > maxUpstreamBodyBytes {
+			err = fmt.Errorf("upstream body exceeds %d bytes", maxUpstreamBodyBytes)
+		}
 
 		if err != nil {
 			lastError = err

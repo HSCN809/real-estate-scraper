@@ -41,6 +41,7 @@ type ClientPool struct {
 	lastSweep  time.Time
 	mu         sync.RWMutex
 	maxSize    int
+	closed     bool // guarded by mu; ReturnClient must not send after Close
 }
 
 // NewClientPool creates a new client pool.
@@ -217,12 +218,14 @@ func (cp *ClientPool) recycle(client *PooledClient) {
 // GetClient retrieves a client from the pool.
 func (cp *ClientPool) GetClient() *PooledClient {
 	select {
-	case client := <-cp.clients:
-		return client
+	case client, ok := <-cp.clients:
+		if ok {
+			return client
+		}
 	default:
-		// Pool is empty, create a new client.
-		return cp.createClient(int(time.Now().UnixNano()))
 	}
+	// Pool is empty (or closed during shutdown), create a new client.
+	return cp.createClient(int(time.Now().UnixNano()))
 }
 
 // ReturnClient returns a client back to the pool, closing idle connections on overflow.
@@ -232,6 +235,10 @@ func (cp *ClientPool) ReturnClient(client *PooledClient) {
 	}
 	cp.mu.RLock()
 	defer cp.mu.RUnlock()
+	if cp.closed {
+		closeIdleClient(client)
+		return
+	}
 
 	select {
 	case cp.clients <- client:
@@ -327,12 +334,13 @@ func (cp *ClientPool) Close() {
 		leased = append(leased, lease.client)
 	}
 	cp.sessions = map[string]*sessionLease{}
+	cp.closed = true
+	// Closed under the write lock so no ReturnClient (holding RLock) can send on it.
+	close(cp.clients)
 	cp.mu.Unlock()
 	for _, client := range leased {
 		closeIdleClient(client)
 	}
-
-	close(cp.clients)
 
 	for client := range cp.clients {
 		closeIdleClient(client)

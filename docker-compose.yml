@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile
     container_name: invisible-proxy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - PROXY_HOST=0.0.0.0
       - PROXY_PORT=8080
@@ -87,7 +87,7 @@ services:
     volumes:
       - real-estate-postgres-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -109,7 +109,7 @@ services:
     image: valkey/valkey:8.1-alpine
     container_name: real-estate-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - real-estate-redis-data:/data
     healthcheck:
@@ -135,7 +135,7 @@ services:
       dockerfile: Backend/Dockerfile
     container_name: real-estate-api
     ports:
-      - "${FASTAPI_PORT:-8000}:8000"
+      - "127.0.0.1:${FASTAPI_PORT:-8000}:8000"
     volumes:
       # Source code mount (hot reload)
       - ./Backend:/app
@@ -233,7 +233,7 @@ services:
     image: mher/flower:2.2.0
     container_name: real-estate-flower
     ports:
-      - "5555:5555"
+      - "127.0.0.1:5555:5555"
     volumes:
       - real-estate-flower-data:/app/flower_data
       # Avoid anonymous volume created by image-level VOLUME /data
@@ -268,7 +268,7 @@ services:
     container_name: real-estate-frontend
     working_dir: /app
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       # Source code mount for hot reload
       - ./Frontend:/app
@@ -308,7 +308,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     container_name: real-estate-frontend-prod
     ports:
-      - "${FRONTEND_PROD_PORT:-3001}:3000"
+      - "127.0.0.1:${FRONTEND_PROD_PORT:-3001}:3000"
     depends_on:
       real-estate-api:
         condition: service_healthy

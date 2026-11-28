@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import datetime
 from threading import get_ident
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -61,7 +62,9 @@ def client():
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_db] = get_test_db
-    app.dependency_overrides[get_current_user] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=1, is_admin=True
+    )
     app.state.sql_queries = []
 
     @app.middleware("http")
@@ -272,6 +275,17 @@ def test_results_read_cache_hits_and_invalidates_on_delete(client):
     assert deleted.status_code == 200
     refreshed = client.get("/api/v1/results?limit=2").json()
     assert refreshed["total"] == 3
+
+
+def test_delete_endpoints_require_admin(client):
+    client.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=2, is_admin=False
+    )
+
+    assert client.delete("/api/v1/clear-results").status_code == 403
+    assert client.delete("/api/v1/listings/group", params={"city": "Bursa"}).status_code == 403
+    assert client.delete("/api/v1/listings/1").status_code == 403
+    assert client.get("/api/v1/results?limit=2").json()["total"] == 4
 
 
 def test_filtered_city_locations_cache_reuses_distinct_lookup(client):

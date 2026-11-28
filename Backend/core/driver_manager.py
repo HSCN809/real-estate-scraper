@@ -30,14 +30,37 @@ USER_AGENTS = [
 ]
 
 
+def _own_process_tree() -> list[str]:
+    """Bu process ve tüm alt process'lerinin PID listesi."""
+    tree = [str(os.getpid())]
+    pending = list(tree)
+    while pending:
+        children = subprocess.run(  # nosec
+            ["pgrep", "-P", pending.pop()],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout.split()
+        tree.extend(children)
+        pending.extend(children)
+    return tree
+
+
 def _kill_zombie_chrome():
-    """Önceki Chrome/chromedriver process'lerini temizle"""
+    """Bu process'in başlattığı Chrome/chromedriver process'lerini temizle.
+
+    Aynı container'daki diğer Celery worker'larının tarayıcılarına dokunmaz.
+    shortcut: chromedriver'ı ölüp PID 1'e devredilmiş Chrome'lar yakalanmaz;
+    sızıntı görülürse process group (start_new_session) ile izlemeye geç.
+    """
     try:
+        # "chrome" deseni chromedriver'ı da kapsar; -P yalnızca kendi ağacımızı hedefler.
         subprocess.run(  # nosec
-            ["pkill", "-f", "chrome"], capture_output=True, timeout=5, check=False
-        )
-        subprocess.run(  # nosec
-            ["pkill", "-f", "chromedriver"], capture_output=True, timeout=5, check=False
+            ["pkill", "-f", "chrome", "-P", ",".join(_own_process_tree())],
+            capture_output=True,
+            timeout=5,
+            check=False,
         )
         time.sleep(1)
     except Exception:  # nosec

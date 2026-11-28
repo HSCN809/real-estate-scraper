@@ -22,6 +22,37 @@ func testHandler(apiKey string) *ProxyHandler {
 		},
 		rateLimiter:    NewRateLimiter(1000, 1000),
 		allowedOrigins: []string{"http://localhost:3000"},
+		inflight:       make(chan struct{}, 4),
+	}
+}
+
+func TestServeHTTPProxyBusyReturns503(t *testing.T) {
+	ph := testHandler("secret")
+	ph.inflight = make(chan struct{}, 1)
+	ph.inflight <- struct{}{} // simulate one in-flight request filling capacity
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/proxy", strings.NewReader("{}"))
+	req.Header.Set("X-API-Key", "secret")
+	ph.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("busy status = %d", rec.Code)
+	}
+}
+
+func TestServeHTTPRejectsOversizedBody(t *testing.T) {
+	ph := testHandler("secret")
+
+	body := `{"url":"https://www.hepsiemlak.com/","body":"` + strings.Repeat("A", maxProxyRequestBytes) + `"}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/proxy", strings.NewReader(body))
+	req.Header.Set("X-API-Key", "secret")
+	ph.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("oversized body status = %d", rec.Code)
+	}
+	if len(ph.inflight) != 0 {
+		t.Fatal("inflight slot not released")
 	}
 }
 
@@ -153,16 +184,18 @@ func TestCreateHTTPRequestAndShouldRetry(t *testing.T) {
 }
 
 func TestGetClientIPAndExtractHeaders(t *testing.T) {
+	// Spoofable headers are ignored; only the direct peer counts.
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.5:4321"
 	req.Header.Set("X-Forwarded-For", "1.1.1.1, 2.2.2.2")
-	if got := getClientIP(req); got != "1.1.1.1" {
-		t.Fatalf("xff ip = %q", got)
+	req.Header.Set("X-Real-IP", "3.3.3.3")
+	if got := getClientIP(req); got != "10.0.0.5" {
+		t.Fatalf("client ip = %q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Real-IP", "3.3.3.3")
-	if got := getClientIP(req); got != "3.3.3.3" {
-		t.Fatalf("xri ip = %q", got)
+	req.RemoteAddr = "[::1]:4321"
+	if got := getClientIP(req); got != "::1" {
+		t.Fatalf("ipv6 client ip = %q", got)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)

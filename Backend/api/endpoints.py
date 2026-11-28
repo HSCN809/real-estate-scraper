@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from anyio import Lock
 from anyio.to_process import run_sync as run_in_process
-from auth.dependencies import get_current_user
+from auth.dependencies import get_current_active_admin, get_current_user
 from celery_app import celery_app
 from core.config import get_emlakjet_config, get_hepsiemlak_config
 from core.task_status import get_task_status_store, is_final_task_status
@@ -98,13 +98,45 @@ def _require_task_status_store():
 
 
 def _enqueue_scrape_task(
-    task_callable, *, kwargs: dict[str, Any], message: str, platform: str
+    task_callable,
+    *,
+    kwargs: dict[str, Any],
+    message: str,
+    platform: str,
+    user_id: int,
 ) -> TaskStatusResponse:
     store = _require_task_status_store()
     task_id = uuid4().hex
-    task_callable.apply_async(kwargs=kwargs, queue="scraping", task_id=task_id)
-    payload = store.create_queued_task(task_id, message=message, platform=platform)
+    # Kayıt kuyruktan önce yazılır; aksi halde worker'ın ilk güncellemesi ezilebilir.
+    payload = store.create_queued_task(
+        task_id, message=message, platform=platform, user_id=user_id
+    )
+    try:
+        task_callable.apply_async(kwargs=kwargs, queue="scraping", task_id=task_id)
+    except Exception as exc:
+        logger.error("Scrape task enqueue failed for %s: %s", task_id, exc)
+        try:
+            store.mark_failed(
+                task_id, message="Görev kuyruğa alınamadı.", error=str(exc)
+            )
+        except Exception as store_exc:
+            logger.error("Task status cleanup failed for %s: %s", task_id, store_exc)
+        raise HTTPException(
+            status_code=503, detail="Görev kuyruğa alınamadı"
+        ) from exc
     return TaskStatusResponse(**payload)
+
+
+def _owns_task(task: dict[str, Any], user: Any) -> bool:
+    return bool(user.is_admin) or task.get("user_id") == user.id
+
+
+def _get_owned_task_or_404(store, task_id: str, user: Any) -> dict[str, Any]:
+    task = store.get_task(task_id)
+    # Başkasının görevi için de 404: task_id'nin varlığı sızdırılmaz.
+    if task is None or not _owns_task(task, user):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 @router.get("/config/categories")
@@ -158,7 +190,9 @@ def get_subtypes(listing_type: str, category: str, platform: str = "hepsiemlak")
 
 
 @router.post("/scrape/emlakjet", response_model=ScrapeStartResponse)
-def scrape_emlakjet(request: ScrapeRequest):
+def scrape_emlakjet(
+    request: ScrapeRequest, current_user: Any = Depends(get_current_user)
+):
     """Celery ile EmlakJet tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
 
@@ -177,6 +211,7 @@ def scrape_emlakjet(request: ScrapeRequest):
         },
         message="EmlakJet taraması sıraya alındı.",
         platform="emlakjet",
+        user_id=current_user.id,
     )
 
     return ScrapeStartResponse(
@@ -187,7 +222,9 @@ def scrape_emlakjet(request: ScrapeRequest):
 
 
 @router.post("/scrape/hepsiemlak", response_model=ScrapeStartResponse)
-def scrape_hepsiemlak(request: ScrapeRequest):
+def scrape_hepsiemlak(
+    request: ScrapeRequest, current_user: Any = Depends(get_current_user)
+):
     """Celery ile HepsiEmlak tarama görevi başlat."""
     _validate_scraping_method_or_raise(request.scraping_method)
     if not request.cities:
@@ -215,6 +252,7 @@ def scrape_hepsiemlak(request: ScrapeRequest):
         },
         message="HepsiEmlak taraması sıraya alındı.",
         platform="hepsiemlak",
+        user_id=current_user.id,
     )
 
     return ScrapeStartResponse(
@@ -225,29 +263,29 @@ def scrape_hepsiemlak(request: ScrapeRequest):
 
 
 @router.get("/tasks/active", response_model=ActiveTasksResponse)
-def get_active_tasks():
-    """Tüm aktif görevleri al."""
+def get_active_tasks(current_user: Any = Depends(get_current_user)):
+    """Kullanıcının aktif görevlerini al (yönetici tümünü görür)."""
     store = _require_task_status_store()
-    tasks = [TaskStatusResponse(**item) for item in store.get_active_tasks()]
+    tasks = [
+        TaskStatusResponse(**item)
+        for item in store.get_active_tasks()
+        if _owns_task(item, current_user)
+    ]
     return ActiveTasksResponse(active_tasks=tasks, count=len(tasks))
 
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
-def get_task_status(task_id: str):
+def get_task_status(task_id: str, current_user: Any = Depends(get_current_user)):
     """Belirli bir scraping görevinin kanonik durumunu al."""
     store = _require_task_status_store()
-    task = store.get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _get_owned_task_or_404(store, task_id, current_user)
     return TaskStatusResponse(**task)
 
 
 @router.post("/tasks/{task_id}/cancel", response_model=TaskStatusResponse)
-def cancel_task(task_id: str):
+def cancel_task(task_id: str, current_user: Any = Depends(get_current_user)):
     store = _require_task_status_store()
-    task = store.get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _get_owned_task_or_404(store, task_id, current_user)
     if is_final_task_status(task.get("status")):
         raise HTTPException(status_code=409, detail="Görev zaten sonlandı")
 
@@ -392,7 +430,7 @@ def get_listing_statistics(
     )
 
 
-@router.delete("/clear-results")
+@router.delete("/clear-results", dependencies=[Depends(get_current_active_admin)])
 def clear_results(db: Session = Depends(get_db)):
     """Veritabanindaki tum ilanlari ve outputs klasorundeki dosyalari sil"""
     import shutil
@@ -700,7 +738,7 @@ async def export_to_excel(
     )
 
 
-@router.delete("/listings/group")
+@router.delete("/listings/group", dependencies=[Depends(get_current_active_admin)])
 def delete_listing_group(
     platform: str = Query(default=None),
     kategori: str = Query(default=None),
@@ -774,7 +812,9 @@ def delete_listing_group(
     }
 
 
-@router.delete("/listings/{listing_id}")
+@router.delete(
+    "/listings/{listing_id}", dependencies=[Depends(get_current_active_admin)]
+)
 def delete_listing(listing_id: int, db: Session = Depends(get_db)):
     """Bir ilanı sil"""
     listing = crud.get_listing_by_id(db, listing_id)

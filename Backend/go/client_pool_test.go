@@ -196,6 +196,26 @@ func (tr *trackingRoundTripper) CloseIdleConnections() {
 	tr.closed.Add(1)
 }
 
+func TestReturnAndGetAfterCloseDoNotPanic(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxIdleConns = 2
+	cfg.MaxIdleConnsPerHost = 1
+	pool := NewClientPool(cfg, NewTLSFingerprintManager(cfg))
+	leased := pool.Acquire("")
+	pool.Close()
+
+	// In-flight handler finishing after shutdown: must close, not send on a closed channel.
+	tracker := &trackingRoundTripper{}
+	pool.Release("", &PooledClient{Client: &http.Client{Transport: tracker}})
+	if got := tracker.closed.Load(); got != 1 {
+		t.Fatalf("expected released client closed after Close, got %d", got)
+	}
+	pool.ReturnClient(leased)
+	if pool.GetClient() == nil {
+		t.Fatal("GetClient after Close returned nil")
+	}
+}
+
 func TestReturnClientClosesOverflow(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.MaxIdleConns = 2

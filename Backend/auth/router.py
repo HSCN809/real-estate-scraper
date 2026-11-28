@@ -1,11 +1,13 @@
 """Kimlik doğrulama API endpoint'leri"""
 
+import logging
 import os
 from datetime import datetime
 
+from core.task_status import get_redis_client
 from database.connection import get_db
 from database.models import User
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,10 @@ from .security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+logger = logging.getLogger(__name__)
+
+LOGIN_RATE_LIMIT = (10, 300)  # (deneme, saniye) IP + kullanıcı adı başına
+REGISTER_RATE_LIMIT = (10, 3600)  # (deneme, saniye) IP başına
 
 COOKIE_NAME = "session_token"
 COOKIE_MAX_AGE = ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # seconds
@@ -45,6 +51,32 @@ def _set_auth_cookie(response: Response, token: str):
     )
 
 
+def _enforce_rate_limit(key: str, limit: tuple[int, int]) -> None:
+    """Sabit pencereli sayaç; limit aşılırsa 429 döndürür."""
+    max_attempts, window_seconds = limit
+    try:
+        client = get_redis_client()
+        pipe = client.pipeline()
+        pipe.incr(key)
+        # nx: TTL yalnızca ilk denemede kurulur, pencere her istekte uzamaz.
+        pipe.expire(key, window_seconds, nx=True)
+        attempts, _ = pipe.execute()
+    except Exception as exc:
+        # Fail-open: Redis kesintisi tüm girişleri kilitlemesin.
+        logger.warning("Rate limit check skipped for %s: %s", key, exc)
+        return
+    if attempts > max_attempts:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.",
+            headers={"Retry-After": str(window_seconds)},
+        )
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 def _clear_auth_cookie(response: Response):
     """Auth cookie'yi temizle"""
     response.delete_cookie(
@@ -58,8 +90,14 @@ def _clear_auth_cookie(response: Response):
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-def register(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
+def register(
+    user_data: UserCreate,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """Yeni kullanıcı kaydı"""
+    _enforce_rate_limit(f"rate:register:{_client_ip(request)}", REGISTER_RATE_LIMIT)
     # Kullanıcı adı var mı kontrol et
     existing = (
         db.query(User)
@@ -103,8 +141,17 @@ def register(user_data: UserCreate, response: Response, db: Session = Depends(ge
 
 
 @router.post("/login", response_model=UserResponse)
-def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
+def login(
+    credentials: UserLogin,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """Kullanıcı doğrulama ve cookie ile token döndür"""
+    _enforce_rate_limit(
+        f"rate:login:{_client_ip(request)}:{credentials.username.lower()}",
+        LOGIN_RATE_LIMIT,
+    )
     # Kullanıcı adı veya e-posta ile kullanıcıyı bul
     user = (
         db.query(User)

@@ -29,6 +29,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { API_BASE_URL, exportToExcel } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePriceSummary, useResults, useResultsFilters, useResultsOverview } from '@/lib/api-hooks';
 import { ScrapeResult } from '@/types';
 import { SearchableDropdown } from '@/components/ui/SearchableDropdown';
@@ -75,6 +76,8 @@ export default function ResultsPage() {
 
     const viewMode = viewParam === 'table' || viewParam === 'charts' ? viewParam : 'map';
     const queryClient = useQueryClient();
+    // Silme endpoint'leri yalnızca yöneticiye açık; butonlar da buna göre gizlenir.
+    const isAdmin = Boolean(useAuth().user?.is_admin);
     const [clearing, setClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -416,7 +419,7 @@ export default function ResultsPage() {
                         <span className="text-sm font-medium text-green-400">Excel</span>
                     </button>
 
-                    {totalFiles > 0 && (
+                    {isAdmin && totalFiles > 0 && (
                         <button
                             onClick={() => setShowClearConfirm(true)}
                             className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all flex items-center gap-2"
@@ -894,13 +897,15 @@ export default function ResultsPage() {
                                                 >
                                                     <Download className="w-4 h-4 text-emerald-400" />
                                                 </button>
-                                                <button
-                                                    onClick={() => deleteResult(result)}
-                                                    className="p-2 rounded-lg hover:bg-red-600/20 transition-colors"
-                                                    title="Sil"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-400" />
-                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => deleteResult(result)}
+                                                        className="p-2 rounded-lg hover:bg-red-600/20 transition-colors"
+                                                        title="Sil"
+                                                    >
+                                                        <Trash2 className="w-4 h-4 text-red-400" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

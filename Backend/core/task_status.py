@@ -143,7 +143,12 @@ class TaskStatusStore:
         self.redis_client = redis_client or get_redis_client()
 
     def create_queued_task(
-        self, task_id: str, *, message: str, platform: str | None = None
+        self,
+        task_id: str,
+        *,
+        message: str,
+        platform: str | None = None,
+        user_id: int | None = None,
     ) -> dict[str, Any]:
         payload = create_task_status_payload(
             task_id,
@@ -151,6 +156,8 @@ class TaskStatusStore:
             message=message,
             platform=platform,
         )
+        # Sahiplik kontrolü için; update() mevcut anahtarları koruduğu için worker yazımlarında kalır.
+        payload["user_id"] = user_id
         self._write(payload)
         return payload
 

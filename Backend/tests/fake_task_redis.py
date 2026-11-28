@@ -36,6 +36,13 @@ class FakeRedis:
     def mget(self, keys):
         return [self.data.get(key) for key in keys]
 
+    def incr(self, key):
+        self.data[key] = int(self.data.get(key, 0)) + 1
+        return self.data[key]
+
+    def expire(self, key, ttl, nx=False):
+        return True
+
     def pipeline(self):
         return FakePipeline(self)
 
@@ -68,6 +75,12 @@ class FakePipeline:
 
     def srem(self, key, value):
         self.commands.append((self.client.srem, (key, value)))
+
+    def incr(self, key):
+        self.commands.append((self.client.incr, (key,)))
+
+    def expire(self, key, ttl, nx=False):
+        self.commands.append((self.client.expire, (key, ttl, nx)))
 
     def execute(self):
         return [command(*args) for command, args in self.commands]
